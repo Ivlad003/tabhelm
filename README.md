@@ -4,7 +4,12 @@
 
 <p align="center">
   A Chrome side panel that lets terminal coding agents drive the tab you are looking at.<br>
-  <b>English</b> · <a href="README.uk.md">Українська</a> · <a href="https://ivlad003.github.io/tabhelm/">Website</a>
+  <b>English</b> · <a href="README.uk.md">Українська</a> · <a href="https://ivlad003.github.io/tabhelm/">Website</a> · <a href="CHANGELOG.md">Changelog</a>
+</p>
+<p align="center">
+  <a href="https://github.com/Ivlad003/tabhelm/releases/latest"><img src="https://img.shields.io/github/v/release/Ivlad003/tabhelm?label=latest%20release" alt="Latest release"></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/changelog-CHANGELOG.md-blue" alt="Changelog"></a>
+  <a href="https://ivlad003.github.io/tabhelm/"><img src="https://img.shields.io/badge/website-ivlad003.github.io%2Ftabhelm-2f6fde" alt="Website"></a>
 </p>
 
 Pick **Claude Code, Codex, Cursor Agent CLI, Google Antigravity, OpenCode, Qoder CLI or Grok** in the side panel, choose a model, and describe a task. The agent runs on your machine with its own login and reads, clicks and types on the current tab of your normal, logged-in Chrome — no headless browser.
@@ -51,6 +56,7 @@ To update, run the install command again.
 | **Send / Stop** | Sends a message; while the agent works, the button cancels the turn. |
 | **New chat** | Clears the chat and starts a fresh session with the same agent and model. |
 | **Export** | Downloads the chat with the agent's action log as Markdown, or the full event log as JSON. |
+| **Settings** | Skills from links, versions and **Check for updates**. |
 | **Record video** | Records the tab while the agent works on each message (see below). |
 
 ### Approvals
@@ -88,9 +94,17 @@ sequenceDiagram
 
 Turn on **Record video** and every message you send is recorded until the agent finishes: the tab's frames (CDP screencast) are encoded in the panel with MediaRecorder (MP4/H.264, WebM fallback). An *agent cursor* with a click ripple is drawn on the page so the video shows where the agent pointed and clicked. Each video appears in the chat with a player and a **Download** button and is saved automatically to `~/Videos/TabHelm/` (or `~/.tabhelm/recordings/` if there is no `~/Videos`). Only the visible tab renders frames, so tabs the agent opens in the background are not captured.
 
+### Skills
+
+Skills are `SKILL.md` files — a name, a description and instructions that make an agent better at a kind of task (for example [Anthropic's skills](https://github.com/anthropics/skills)). In **Settings → Skills** paste a link to a `SKILL.md` file or a skill folder on GitHub (also raw links and gists) and press **Add**. Nothing is installed: TabHelm loads the skill from the link (cached for an hour, the cached copy is used offline), and every agent — CLIs and the built-in one — gets the list of enabled skills with its first message. When a task matches, the agent reads the skill with `skill_read` (and other files of the skill with `skill_read_file`) and follows it. Toggle or remove skills at any time; the running agent is told from its next message.
+
+Only add skills you trust: their text becomes instructions for the agent.
+
 ### Updates and news
 
-The panel checks `https://ivlad003.github.io/tabhelm/news.json` (at most every 6 hours). When a newer release exists it shows **"TabHelm X is available"** with an **Update** button (the install command to copy, then ↻ on `chrome://extensions`) and a link to the release notes. Project news appears as a separate banner. Dismissed banners do not come back; the panel works normally when offline.
+The panel checks `https://ivlad003.github.io/tabhelm/news.json` (at most once an hour; **Settings → Check for updates** checks right away). When a newer release exists it shows **"TabHelm X is available"** with an **Update** button (the install command to copy, then ↻ on `chrome://extensions`) and a link to the release notes. Project news appears as a separate banner. Dismissed banners do not come back; the panel works normally when offline.
+
+The update banner appears only when the release is **newer than the extension Chrome has loaded**. If you run TabHelm from a git checkout (`Load unpacked` on the repository's `extension/` folder), you already have the newest code — pull, then press ↻ for TabHelm on `chrome://extensions`. **Settings** shows the extension and host versions and warns when they differ.
 
 ### Signing in
 
@@ -275,6 +289,7 @@ extension/                     Chrome extension (Manifest V3, no build step)
   page-scripts.js              functions injected into frames: snapshot, find, element geometry
   sidepanel.html|css|js        chat UI, model picker, approvals, action log, new chat, agent hand-over, video recorder
   news.js                      update / news banner from the site's news.json
+  settings.js                  Settings view: skills from links, versions, update check
 host/                          native host (Node 20+)
   src/native-host.js           entry point launched by Chrome; routes messages, saves recordings
   src/native-messaging.js      4-byte length-prefixed framing, 1 MB guard
@@ -282,6 +297,7 @@ host/                          native host (Node 20+)
   src/agents.js                agent registry, PATH detection, install hints
   src/builtin-agent.js         TabHelm's own ACP agent for OpenRouter / Ollama / OpenAI-compatible APIs
   src/env.js                   ~/.tabhelm/env (API keys) loading and saving
+  src/skills.js                skills from links: URL resolution, SKILL.md parsing, cache, skill_* tools
   src/tool-server.js           loopback HTTP endpoint with token
   src/mcp-bridge.js            stdio MCP server spawned by agents (24 tool definitions)
   scripts/install.js           registers the native host (Chrome, Chromium, Brave, Edge)
@@ -290,6 +306,7 @@ host/                          native host (Node 20+)
   scripts/smoke.js | e2e.js | tools-test.js | icons.js
 scripts/build.js               release build → dist/
 scripts/news.js                builds news.json (site/news.json + latest release) for Pages
+scripts/release-notes.js       release notes from CHANGELOG.md
 site/                          GitHub Pages: landing page, install.sh, news.json source, logo
 .github/workflows/             release on tag, Pages deploy
 docs/research.md               research notes (Ukrainian)
@@ -314,12 +331,13 @@ Load `extension/` unpacked in Chrome. After editing extension files press ↻ on
 | `E2E_RECORD=1 E2E_SWITCH=opencode npm run e2e -- claude` | same, plus video recording, agent hand-over and New chat |
 | `E2E_FAILOVER=opencode npm run e2e -- claude` | kills the agent mid-task, continues with OpenCode, checks the Markdown export |
 | `E2E_NEWS=1 npm run e2e` | update and news banners against a local feed |
+| `E2E_SKILLS=1 npm run e2e -- claude` | adds a skill in Settings and checks the agent reads and follows it |
 | `npm run test:builtin` | built-in agent against a mock OpenAI-compatible API (streaming, tool calls, 429 retry, missing key) |
 | `TABHELM_RELEASE=../dist/tabhelm-x.y.z npm run e2e -- claude` | the built release |
 
 **Build:** `npm run build` (repo root) writes `dist/`: the unpacked release, `tabhelm-extension[-x.y.z].zip` and `tabhelm[-x.y.z].tar.gz` (without `node_modules`; the Claude/Codex adapters bundle agent binaries, ~750 MB installed).
 
-**Release:** bump `version` in `extension/manifest.json`, `host/package.json` and `package.json`, then push a tag `vX.Y.Z`. The *Release* workflow builds and publishes the assets and re-runs *Pages*, so the update banner appears in everyone's panel. *Pages* also publishes `site/` on pushes to `main`.
+**Release:** add a section to `CHANGELOG.md`, bump `version` in `extension/manifest.json`, `host/package.json` and `package.json`, then push a tag `vX.Y.Z`. The release notes are taken from the changelog. The *Release* workflow builds and publishes the assets and re-runs *Pages*, so the update banner appears in everyone's panel. *Pages* also publishes `site/` on pushes to `main`.
 
 **News:** add an item to `site/news.json` (`id`, `title`/`text` with `en` and `uk`, optional `url`, `minVersion`, `maxVersion`) and push to `main`. The Pages workflow merges it with the latest release (`scripts/news.js`) into the published `news.json`. To test a feed locally, set `newsUrl` in the extension's `chrome.storage.local` (see `E2E_NEWS=1 npm run e2e`).
 

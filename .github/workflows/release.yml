@@ -18,10 +18,11 @@ jobs:
         with:
           node-version: 22
 
-      - name: Check tag matches manifest version
+      - name: Check tag matches manifest version and changelog
         run: |
           VERSION="$(node -p "require('./extension/manifest.json').version")"
           [ "v$VERSION" = "$GITHUB_REF_NAME" ] || { echo "Tag $GITHUB_REF_NAME != manifest $VERSION"; exit 1; }
+          node scripts/release-notes.js "$VERSION" > /dev/null
 
       - name: Build
         run: npm run build
@@ -31,13 +32,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
+          node scripts/release-notes.js "$VERSION" > release-notes.md
           gh release create "$GITHUB_REF_NAME" \
             "dist/tabhelm-extension-$VERSION.zip" \
             "dist/tabhelm-$VERSION.tar.gz" \
             dist/tabhelm-extension.zip \
             dist/tabhelm.tar.gz \
             --title "TabHelm $VERSION" \
-            --notes "Install: \`curl -fsSL https://ivlad003.github.io/tabhelm/install.sh | bash\` — or download \`tabhelm-extension.zip\` and load it unpacked. See the README for details."
+            --notes-file release-notes.md
 
       - name: Refresh the site so the panel's news feed announces this version
         env:

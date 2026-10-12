@@ -1,10 +1,10 @@
 // Update and news banner for the side panel. Reads news.json from the project
 // site (generated from the latest GitHub release + site/news.json), caches it
-// for a few hours and shows at most one banner: a newer version first, then
+// for an hour and shows at most one banner: a newer version first, then
 // unread news. Dismissed items are remembered.
 
 const FEED_URL = 'https://ivlad003.github.io/tabhelm/news.json';
-const CACHE_MS = 6 * 60 * 60 * 1000;
+const CACHE_MS = 60 * 60 * 1000;
 
 const lang = /^(uk|ru)/i.test(navigator.language) ? 'uk' : 'en';
 const tr = (value) => (typeof value === 'string' ? value : value?.[lang] || value?.en || '');
@@ -41,10 +41,10 @@ export function newerThan(a, b) {
   return false;
 }
 
-async function loadFeed() {
+async function loadFeed(force = false) {
   const { newsCache, newsUrl } = await chrome.storage.local.get(['newsCache', 'newsUrl']);
   const url = newsUrl || FEED_URL; // newsUrl lets tests point at a local feed
-  if (newsCache?.url === url && Date.now() - newsCache.fetched < CACHE_MS) return newsCache.feed;
+  if (!force && newsCache?.url === url && Date.now() - newsCache.fetched < CACHE_MS) return newsCache.feed;
   try {
     const res = await fetch(url, { cache: 'no-cache' });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -56,18 +56,21 @@ async function loadFeed() {
   }
 }
 
-export async function showNews(container) {
-  const feed = await loadFeed();
-  if (!feed) return;
+// Returns { latest, mine, newer } so Settings can report the result.
+export async function showNews(container, { force = false } = {}) {
+  const feed = await loadFeed(force);
   const mine = chrome.runtime.getManifest().version;
+  if (!feed) return { latest: null, mine, newer: false };
   const { dismissedNews = [] } = await chrome.storage.local.get('dismissedNews');
   const dismissed = new Set(dismissedNews);
   const dismiss = (id) => chrome.storage.local.set({ dismissedNews: [...dismissed, id].slice(-100) });
 
   const latest = feed.latest;
-  if (latest?.version && newerThan(latest.version, mine) && !dismissed.has(`update:${latest.version}`)) {
+  const newer = Boolean(latest?.version && newerThan(latest.version, mine));
+  // A manual check shows the update banner even if it was dismissed before.
+  if (newer && (force || !dismissed.has(`update:${latest.version}`))) {
     renderUpdate(container, latest, mine, () => dismiss(`update:${latest.version}`));
-    return;
+    return { latest: latest.version, mine, newer };
   }
 
   const item = (feed.news || []).find(
@@ -78,6 +81,7 @@ export async function showNews(container) {
       (!n.maxVersion || !newerThan(mine, n.maxVersion)),
   );
   if (item) renderItem(container, item, () => dismiss(item.id));
+  return { latest: latest?.version || null, mine, newer };
 }
 
 function banner(container, kind, onDismiss) {

@@ -1,4 +1,5 @@
 import { showNews } from './news.js';
+import { initSettings, enabledSkillUrls, handleSettingsMessage, hostVersionMismatch } from './settings.js';
 
 const tabId = Number(new URLSearchParams(location.search).get('tabId'));
 const $ = (id) => document.getElementById(id);
@@ -64,10 +65,18 @@ chrome.tabs.onRemoved.addListener((id) => {
 
 // ---------- Messages from host ----------
 
+let versionWarned = false;
+
 function onMessage(msg) {
+  if (handleSettingsMessage(msg)) return;
   switch (msg.type) {
     case 'agents':
       fillAgents(msg.agents);
+      if (!versionWarned && hostVersionMismatch()) {
+        versionWarned = true;
+        const m = hostVersionMismatch();
+        notice(`The TabHelm host (${m.host}) and extension (${m.extension}) are different versions. Run the installer again, then press ↻ for TabHelm on chrome://extensions.`, true);
+      }
       break;
     case 'status':
       onStatus(msg);
@@ -401,6 +410,12 @@ function describeAction(tool, a = {}, detail) {
       return 'Read network log';
     case 'browser_evaluate':
       return `Run JS: ${truncate(a.expression, 50)}`;
+    case 'skill_list':
+      return 'List skills';
+    case 'skill_read':
+      return `Read skill “${a.name}”`;
+    case 'skill_read_file':
+      return `Read skill file ${a.name}/${a.path}`;
     default:
       return tool;
   }
@@ -482,7 +497,7 @@ async function startAgent(agentId, continueText = null) {
   connected = false;
   els.config.hidden = true;
   syncControls();
-  port.postMessage({ type: 'start', agentId, autoApprove: els.auto.checked });
+  port.postMessage({ type: 'start', agentId, autoApprove: els.auto.checked, skills: enabledSkillUrls() });
 }
 
 els.agent.onchange = () => {
@@ -536,7 +551,7 @@ els.newChat.onclick = () => {
   if (connected) {
     connected = false;
     els.config.hidden = true;
-    port.postMessage({ type: 'start', agentId: els.agent.value, autoApprove: els.auto.checked });
+    port.postMessage({ type: 'start', agentId: els.agent.value, autoApprove: els.auto.checked, skills: enabledSkillUrls() });
   }
   syncControls();
 };
@@ -898,3 +913,4 @@ function renderMarkdown(src) {
 syncControls();
 
 showNews($('news'));
+initSettings(port);

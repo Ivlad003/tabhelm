@@ -117,6 +117,14 @@
       .feature h3 { margin: 0 0 4px; font-size: 17px; }
       .feature p { margin: 0; color: var(--muted); font-size: 15px; }
 
+      .latest { margin: -6px 0 0; font-size: 14px; color: var(--muted); }
+      .latest b { color: var(--text); }
+      .news-list { display: grid; gap: 12px; }
+      .news-item { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+      .news-item h3 { margin: 0 0 4px; font-size: 17px; }
+      .news-item time { font-size: 13px; color: var(--muted); }
+      .news-item p { margin: 6px 0 0; color: var(--muted); font-size: 15px; }
+
       footer { padding: 30px 0 50px; color: var(--muted); font-size: 14px; border-top: 1px solid var(--border); }
 
       [data-lang] { display: none; }
@@ -151,12 +159,14 @@
         </p>
         <div class="cta">
           <a class="btn primary" href="https://github.com/Ivlad003/tabhelm/releases/latest/download/tabhelm-extension.zip">
-            <span data-lang="en">Download extension</span><span data-lang="uk">Завантажити розширення</span> <small>.zip</small>
+            <span data-lang="en">Download extension</span><span data-lang="uk">Завантажити розширення</span> <small class="dl-version">.zip</small>
           </a>
           <a class="btn" href="https://github.com/Ivlad003/tabhelm/releases/latest">
             <span data-lang="en">All releases</span><span data-lang="uk">Усі релізи</span>
           </a>
         </div>
+
+        <p class="latest" id="latest" hidden></p>
 
         <div class="install">
           <h2><span data-lang="en">Install in one command</span><span data-lang="uk">Встановлення однією командою</span></h2>
@@ -276,6 +286,11 @@
         </div>
       </section>
 
+      <section id="news-section" hidden>
+        <h2><span data-lang="en">News</span><span data-lang="uk">Новини</span></h2>
+        <div id="news-list" class="news-list"></div>
+      </section>
+
       <footer>
         <span data-lang="en">TabHelm is an independent open project and is not affiliated with Google, Anthropic, OpenAI, Cursor, Qoder or xAI.</span>
         <span data-lang="uk">TabHelm — незалежний відкритий проєкт, не пов'язаний із Google, Anthropic, OpenAI, Cursor, Qoder чи xAI.</span>
@@ -284,8 +299,51 @@
     </div>
 
     <script>
+      // Latest version and news from news.json (the same feed the panel reads).
+      let feed = null;
+      const renderFeed = () => {
+        if (!feed) return;
+        const uk = document.documentElement.lang === 'uk';
+        const t = (v) => (typeof v === 'string' ? v : (uk ? v?.uk : v?.en) || v?.en || '');
+        const latest = feed.latest;
+        if (latest?.version) {
+          const el = document.getElementById('latest');
+          el.hidden = false;
+          el.innerHTML = '';
+          const b = document.createElement('b');
+          b.textContent = `v${latest.version}`;
+          const notes = Object.assign(document.createElement('a'), { href: latest.url, textContent: uk ? 'Що нового' : "What's new" });
+          const log = Object.assign(document.createElement('a'), { href: 'https://github.com/Ivlad003/tabhelm/blob/main/CHANGELOG.md', textContent: 'Changelog' });
+          el.append(uk ? 'Остання версія: ' : 'Latest version: ', b, ` · ${latest.date} · `, notes, ' · ', log);
+          document.querySelector('.dl-version').textContent = `v${latest.version} · .zip`;
+        }
+        const list = document.getElementById('news-list');
+        list.replaceChildren(
+          ...(feed.news || []).map((n) => {
+            const item = document.createElement('article');
+            item.className = 'news-item';
+            const h = document.createElement('h3');
+            h.textContent = t(n.title);
+            const time = Object.assign(document.createElement('time'), { textContent: n.date || '' });
+            const p = Object.assign(document.createElement('p'), { textContent: t(n.text) });
+            item.append(h, time, p);
+            if (n.url) p.append(' ', Object.assign(document.createElement('a'), { href: n.url, textContent: uk ? 'Докладніше' : 'Learn more' }));
+            return item;
+          }),
+        );
+        document.getElementById('news-section').hidden = !(feed.news || []).length;
+      };
+      fetch('news.json', { cache: 'no-cache' })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((f) => {
+          feed = f;
+          renderFeed();
+        })
+        .catch(() => {});
+
       const setLang = (lang) => {
         document.documentElement.lang = lang;
+        renderFeed();
         for (const b of document.querySelectorAll('[data-set-lang]')) b.setAttribute('aria-pressed', String(b.dataset.setLang === lang));
         try { localStorage.setItem('lang', lang); } catch {}
       };

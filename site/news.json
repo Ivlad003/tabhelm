@@ -1,6 +1,20 @@
 {
   "news": [
     {
+      "id": "2026-10-skills",
+      "date": "2026-10-12",
+      "minVersion": "0.9.0",
+      "title": {
+        "en": "Skills from links",
+        "uk": "Скіли за посиланням"
+      },
+      "text": {
+        "en": "Open Settings in the panel and paste a link to a SKILL.md or a skill folder on GitHub. Every agent can use it right away, nothing to install.",
+        "uk": "Відкрийте Settings у панелі та вставте посилання на SKILL.md або папку скіла на GitHub. Будь-який агент одразу зможе ним користуватися, нічого не треба встановлювати."
+      },
+      "url": "https://github.com/Ivlad003/tabhelm#skills"
+    },
+    {
       "id": "2026-10-openrouter-builtin",
       "date": "2026-10-12",
       "minVersion": "0.8.0",

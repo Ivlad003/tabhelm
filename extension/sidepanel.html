@@ -12,6 +12,7 @@
         <span class="brand">TabHelm</span>
         <span id="rec-indicator" class="rec" hidden><span class="rec-dot"></span>REC</span>
         <span id="status" class="status" data-state="idle">Not connected</span>
+        <button id="settings-open" class="btn small" aria-pressed="false" title="Skills and updates">Settings</button>
         <details class="menu" id="export-menu">
           <summary class="btn small" title="Download this chat and the agent's action log">Export</summary>
           <div class="menu-list">
@@ -30,6 +31,33 @@
     </header>
 
     <div id="news" class="news" hidden></div>
+
+    <section id="settings" class="settings" hidden aria-label="Settings">
+      <div class="settings-head">
+        <h2>Settings</h2>
+        <button id="settings-close" class="btn small" type="button">Done</button>
+      </div>
+
+      <h3>Skills</h3>
+      <p class="hint">
+        Paste a link to a <code>SKILL.md</code> file or a skill folder on GitHub. TabHelm loads it from the link (cached for an hour) —
+        nothing is installed. The agent sees each skill's description and reads the full instructions when a task matches.
+        Only add skills you trust: they become instructions for the agent.
+      </p>
+      <form id="skill-form" class="skill-form">
+        <input id="skill-url" type="url" placeholder="https://github.com/…/skills/…" aria-label="Skill link" />
+        <button class="btn primary" type="submit">Add</button>
+      </form>
+      <div id="skill-error" class="notice error" hidden></div>
+      <p id="skills-empty" class="hint">No skills yet. Try: <span id="skill-examples"></span></p>
+      <ul id="skill-list" class="skill-list"></ul>
+
+      <h3>Version</h3>
+      <div id="version-info" class="hint"></div>
+      <div id="version-warning" class="notice error" hidden></div>
+      <button id="check-updates" class="btn small" type="button">Check for updates</button>
+      <div id="update-result" class="hint"></div>
+    </section>
 
     <main id="log" class="log" aria-live="polite">
       <div class="empty" id="empty">

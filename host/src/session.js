@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import { Readable, Writable } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 import * as acp from '@agentclientprotocol/sdk';
+import { skillsPreamble } from './skills.js';
 
 const bridgePath = fileURLToPath(new URL('./mcp-bridge.js', import.meta.url));
 
@@ -30,6 +31,13 @@ export class AgentSession {
     this.nextPermissionId = 1;
     this.firstPrompt = true;
     this.busy = false;
+    this.skills = [];
+    this.skillsChanged = false;
+  }
+
+  setSkills(skills) {
+    this.skills = skills;
+    this.skillsChanged = !this.firstPrompt;
   }
 
   emit(message) {
@@ -64,7 +72,7 @@ export class AgentSession {
       this.connection.initialize({
         protocolVersion: acp.PROTOCOL_VERSION,
         clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false },
-        clientInfo: { name: 'tabhelm', version: '0.8.1' },
+        clientInfo: { name: 'tabhelm', version: '0.9.0' },
       }),
       this.exited.then(() => {
         throw new Error(`${agent.name} exited during startup. Check that it is installed and logged in.`);
@@ -163,7 +171,11 @@ export class AgentSession {
     if (this.busy) throw new Error('Agent is still working on the previous message');
     this.busy = true;
     const history = context ? `Earlier in this chat (with another agent), for context:\n${context}\n\n` : '';
-    const fullText = this.firstPrompt ? BROWSER_PREAMBLE.replace('User request:\n', `${history}User request:\n`) + text : history + text;
+    let skills = '';
+    if (this.firstPrompt) skills = skillsPreamble(this.skills);
+    else if (this.skillsChanged) skills = `[TabHelm] The user changed the enabled skills. ${skillsPreamble(this.skills) || 'No skills are enabled now.\n\n'}`;
+    this.skillsChanged = false;
+    const fullText = this.firstPrompt ? BROWSER_PREAMBLE.replace('User request:\n', `${skills}${history}User request:\n`) + text : skills + history + text;
     this.firstPrompt = false;
     try {
       const result = await this.connection.prompt({

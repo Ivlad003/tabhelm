@@ -10,7 +10,7 @@ import { z } from 'zod';
 const { TABHELM_URL, TABHELM_TOKEN, TABHELM_TAB } = process.env;
 const tabId = Number(TABHELM_TAB);
 
-const server = new McpServer({ name: 'tabhelm-browser', version: '0.8.1' });
+const server = new McpServer({ name: 'tabhelm-browser', version: '0.9.0' });
 
 async function call(tool, args = {}) {
   try {
@@ -145,6 +145,18 @@ const tools = {
   browser_network: {
     description: 'List network requests of the current tab: method, status, type, URL (captured since the agent first touched it).',
     inputSchema: { filter: z.string().optional().describe('Substring of the URL'), failedOnly: z.boolean().optional(), clear: z.boolean().optional() },
+  },
+  skill_list: {
+    description: 'List the skills the user enabled in TabHelm (name and description).',
+    inputSchema: {},
+  },
+  skill_read: {
+    description: 'Read the full instructions of an enabled skill. Do this before a task the skill covers, then follow it.',
+    inputSchema: { name: z.string().describe('Skill name from the list') },
+  },
+  skill_read_file: {
+    description: "Read another file of a skill (e.g. references/forms.md) by its path relative to the skill's folder.",
+    inputSchema: { name: z.string(), path: z.string() },
   },
   browser_evaluate: {
     description: 'Run a JavaScript expression in the page and return its JSON result (awaits promises). The user must approve every call.',

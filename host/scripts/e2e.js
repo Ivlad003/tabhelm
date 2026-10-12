@@ -9,7 +9,8 @@
 // then presses New chat;
 // E2E_FAILOVER=<agentId> kills the first agent mid-task, continues with <agentId>
 // via the panel's "Continue with" card, then checks the Markdown export;
-// E2E_NEWS=1 only checks the update/news banner against a local feed)
+// E2E_NEWS=1 only checks the update/news banner against a local feed;
+// E2E_SKILLS=1 adds a skill in Settings and checks the agent reads and follows it)
 import puppeteer from 'puppeteer-core';
 import http from 'node:http';
 import { existsSync, mkdtempSync, readdirSync, readFileSync, statSync } from 'node:fs';
@@ -37,8 +38,21 @@ const NEWS = {
   latest: { version: '9.9.9', url: 'https://example.com/release', install: 'curl -fsSL https://example.com/install.sh | bash' },
   news: [{ id: 'test-news', title: { en: 'Test news title', uk: 'Тестова новина' }, text: { en: 'Body', uk: 'Текст' } }],
 };
+const SKILL = `---
+name: signup-secret
+description: Use when the user asks for the secret code of the newsletter signup page.
+---
+# Signup secret
+
+The secret code of the newsletter signup page is PURPLE-42. Reply with exactly that code.
+`;
 const server = http
-  .createServer((q, r) => (q.url === '/news.json' ? r.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(NEWS)) : r.writeHead(200, { 'content-type': 'text/html' }).end(PAGE)))
+  .createServer((q, r) => {
+    if (q.url === '/news.json') return r.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(NEWS));
+    if (q.url === '/skills/signup-secret/SKILL.md') return r.writeHead(200, { 'content-type': 'text/markdown' }).end(SKILL);
+    if (q.url.startsWith('/skills/')) return r.writeHead(404).end('not found');
+    r.writeHead(200, { 'content-type': 'text/html' }).end(PAGE);
+  })
   .listen(0, '127.0.0.1');
 await new Promise((r) => server.once('listening', r));
 const url = `http://127.0.0.1:${server.address().port}/`;
@@ -52,6 +66,7 @@ const browser = await puppeteer.launch({
   args: ['--no-first-run'],
   // Inherited by the native host: keep test videos out of ~/Videos.
   env: { ...process.env, TABHELM_RECORDINGS_DIR: join(profile, 'videos') },
+  protocolTimeout: 300_000,
 });
 const page = await browser.newPage();
 await page.goto(url);
@@ -71,6 +86,37 @@ await sw.evaluate((url) => chrome.windows.create({ url, type: 'popup', width: 42
 const panel = await (await browser.waitForTarget((t) => t.url() === panelUrl)).page();
 panel.on('console', (m) => console.log('[panel]', m.text()));
 await panel.waitForSelector('#agent');
+
+if (process.env.E2E_SKILLS) {
+  await panel.click('#settings-open');
+  await panel.type('#skill-url', `${url}skills/signup-secret`);
+  await panel.click('#skill-form button');
+  await panel.waitForFunction(() => /signup-secret/.test(document.querySelector('#skill-list')?.innerText || ''), { timeout: 30000 });
+  const listed = await panel.$eval('#skill-list', (e) => e.innerText.replace(/\s+/g, ' '));
+  const button = await panel.$eval('#settings-open', (e) => e.textContent);
+  await panel.screenshot({ path: join(profile, 'settings.png') });
+  console.log('settings screenshot:', join(profile, 'settings.png'));
+  await panel.click('#settings-close');
+  await panel.waitForFunction(() => document.querySelector('#agent option:checked')?.value, { timeout: 15000 });
+  await panel.select('#agent', agent);
+  await panel.click('#auto');
+  await panel.click('#connect');
+  await panel.waitForFunction(() => document.querySelector('#status').dataset.state === 'ready', { timeout: 60000 });
+  await panel.type('#input', 'What is the secret code of this signup page? Answer with the code only.');
+  await panel.click('#send');
+  await panel.waitForFunction(() => document.querySelector('#send').textContent === 'Send' && document.querySelector('#status').dataset.state !== 'working', { timeout: 240000, polling: 1000 });
+  const answer = await panel.$$eval('.msg.agent', (m) => m.map((x) => x.innerText).join(' '));
+  const readSkill = await panel.$$eval('.action', (a) => a.some((x) => /Read skill/.test(x.innerText)));
+  console.log('skill listed:', listed);
+  console.log('settings button:', button);
+  console.log('agent read the skill:', readSkill);
+  console.log('answer:', answer.replace(/\s+/g, ' ').slice(0, 200));
+  const ok = /signup-secret/.test(listed) && readSkill && /PURPLE-42/.test(answer);
+  console.log(ok ? 'E2E PASS' : 'E2E FAIL');
+  await browser.close();
+  server.close();
+  process.exit(ok ? 0 : 1);
+}
 
 if (process.env.E2E_NEWS) {
   const bannerText = () => panel.$eval('#news', (e) => (e.hidden ? '' : e.innerText.replace(/\s+/g, ' ')));

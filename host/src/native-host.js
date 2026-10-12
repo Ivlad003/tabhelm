@@ -6,17 +6,20 @@
 //                set_auto_approve {tabId, value} | set_config {tabId, configId, value} | authenticate {tabId, methodId}
 //                tool_result {id, ok, content|error}
 //                save_recording {tabId, id, filename, seq, last, data(base64)}
+//                set_skills {tabId, skills} | skill_preview {tabId, requestId, url}
 //   host -> ext: agents {agents} | status {tabId, state} | update {tabId, update} | config {tabId, options}
 //                auth {tabId, agent, methods} | recording_saved {tabId, id, path}
+//                skill_info {tabId, requestId, name, description | error}
 //                permission {tabId, id, ...} | done {tabId} | error {tabId, message}
 //                tool_call {id, tabId, tool, args}
 
-import { appendFileSync, existsSync, mkdirSync, renameSync, rmSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { createNativeChannel } from './native-messaging.js';
 import { listAgents, getAgent } from './agents.js';
 import { loadEnvFile } from './env.js';
+import { loadSkill, runSkillTool } from './skills.js';
 import { startToolServer } from './tool-server.js';
 import { AgentSession } from './session.js';
 
@@ -51,22 +54,36 @@ const send = (message) => channel.send(message);
 
 const toolServer = await startToolServer({
   log,
-  runTool: (tabId, tool, args) =>
-    new Promise((resolve) => {
+  runTool: async (tabId, tool, args) => {
+    // skill_* tools are answered here; everything else runs in the extension.
+    if (tool.startsWith('skill_')) {
+      const skills = sessions.get(tabId)?.skills || [];
+      let result;
+      try {
+        result = { ok: true, content: await runSkillTool(skills, tool, args) };
+      } catch (err) {
+        result = { ok: false, error: err.message };
+      }
+      send({ type: 'tool_activity', tabId, tool, args, label: args.name, ok: result.ok, error: result.error });
+      return result;
+    }
+    return new Promise((resolve) => {
       const id = nextToolId++;
       pendingTools.set(id, resolve);
       send({ type: 'tool_call', id, tabId, tool, args });
-    }),
+    });
+  },
 });
 log(`host started, tool server ${toolServer.url}`);
-send({ type: 'agents', agents: listAgents() });
+const hostVersion = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
+send({ type: 'agents', agents: listAgents(), hostVersion });
 
 async function handleMessage(msg) {
   const { tabId } = msg;
   try {
     switch (msg.type) {
       case 'list_agents':
-        send({ type: 'agents', agents: listAgents() });
+        send({ type: 'agents', agents: listAgents(), hostVersion });
         break;
 
       case 'start': {
@@ -76,6 +93,7 @@ async function handleMessage(msg) {
         send({ type: 'status', tabId, state: 'starting', agent: { id: agent.id, name: agent.name } });
         const session = new AgentSession({ tabId, agent, toolServer, workspace, send, log });
         session.autoApprove = Boolean(msg.autoApprove);
+        session.skills = await loadSkills(tabId, msg.skills);
         sessions.set(tabId, session);
         try {
           await session.start();
@@ -105,6 +123,23 @@ async function handleMessage(msg) {
       case 'permission_response':
         sessions.get(tabId)?.resolvePermission(msg.id, msg.optionId);
         break;
+
+      case 'set_skills': {
+        const session = sessions.get(tabId);
+        if (session) session.setSkills(await loadSkills(tabId, msg.skills));
+        break;
+      }
+
+      // Settings panel: fetch a skill to show its name/description before saving it.
+      case 'skill_preview': {
+        try {
+          const s = await loadSkill(msg.url, { force: true });
+          send({ type: 'skill_info', tabId, requestId: msg.requestId, url: msg.url, name: s.name, title: s.title, description: s.description });
+        } catch (err) {
+          send({ type: 'skill_info', tabId, requestId: msg.requestId, url: msg.url, error: err.message });
+        }
+        break;
+      }
 
       case 'set_auto_approve': {
         const session = sessions.get(tabId);
@@ -153,6 +188,19 @@ function saveRecordingChunk({ tabId, id, filename, seq, last, data }) {
   renameSync(partial, path);
   log(`recording saved: ${path}`);
   send({ type: 'recording_saved', tabId, id, path });
+}
+
+// Loads the enabled skills; failures are reported in the chat, not fatal.
+async function loadSkills(tabId, urls = []) {
+  const loaded = await Promise.all(
+    urls.map((url) =>
+      loadSkill(url).catch((err) => {
+        send({ type: 'error', tabId, message: err.message });
+        return null;
+      }),
+    ),
+  );
+  return loaded.filter(Boolean);
 }
 
 function requireSession(tabId) {

@@ -4,7 +4,12 @@
 
 <p align="center">
   Бічна панель Chrome, через яку терміналні агенти керують вкладкою, що у вас перед очима.<br>
-  <a href="README.md">English</a> · <b>Українська</b> · <a href="https://ivlad003.github.io/tabhelm/">Сайт</a>
+  <a href="README.md">English</a> · <b>Українська</b> · <a href="https://ivlad003.github.io/tabhelm/">Сайт</a> · <a href="CHANGELOG.md">Changelog</a>
+</p>
+<p align="center">
+  <a href="https://github.com/Ivlad003/tabhelm/releases/latest"><img src="https://img.shields.io/github/v/release/Ivlad003/tabhelm?label=latest%20release" alt="Latest release"></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/changelog-CHANGELOG.md-blue" alt="Changelog"></a>
+  <a href="https://ivlad003.github.io/tabhelm/"><img src="https://img.shields.io/badge/website-ivlad003.github.io%2Ftabhelm-2f6fde" alt="Website"></a>
 </p>
 
 Оберіть у бічній панелі **Claude Code, Codex, Cursor Agent CLI, Google Antigravity, OpenCode, Qoder CLI або Grok**, виберіть модель і опишіть завдання. Агент працює на вашому комп'ютері зі своїм логіном і читає, клікає та вводить текст на поточній вкладці вашого звичайного Chrome, де ви вже залогінені. Headless-браузер не потрібен.
@@ -51,6 +56,7 @@ curl -fsSL https://ivlad003.github.io/tabhelm/install.sh | bash
 | **Send / Stop** | Надсилає повідомлення; поки агент працює, кнопка зупиняє його. |
 | **New chat** | Очищає чат і запускає нову сесію з тим самим агентом і моделлю. |
 | **Export** | Завантажує чат із журналом дій агента в Markdown або повний журнал подій у JSON. |
+| **Settings** | Скіли за посиланням, версії та **Check for updates**. |
 | **Record video** | Записує вкладку, поки агент виконує кожне повідомлення (див. нижче). |
 
 ### Підтвердження
@@ -88,9 +94,17 @@ sequenceDiagram
 
 Увімкніть **Record video**, і кожне надіслане повідомлення записуватиметься, доки агент не закінчить. Кадри вкладки (CDP screencast) кодуються прямо в панелі через MediaRecorder (MP4/H.264, запасний варіант — WebM). На сторінці малюється *курсор агента* з анімацією кліку, тож на відео видно, куди агент наводив і клікав. Кожне відео з'являється в чаті з плеєром і кнопкою **Download** та автоматично зберігається в `~/Videos/TabHelm/` (або `~/.tabhelm/recordings/`, якщо `~/Videos` немає). Кадри рендерить лише видима вкладка, тому вкладки, які агент відкриває у фоні, не записуються.
 
+### Скіли
+
+Скіли — це файли `SKILL.md`: назва, опис та інструкції, з якими агент краще виконує певний тип завдань (наприклад, [скіли Anthropic](https://github.com/anthropics/skills)). У **Settings → Skills** вставте посилання на файл `SKILL.md` або папку скіла на GitHub (також raw-посилання й gist) і натисніть **Add**. Нічого не встановлюється: TabHelm завантажує скіл за посиланням (кеш на годину, без інтернету використовується збережена копія), а кожен агент — і CLI, і вбудований — отримує список увімкнених скілів із першим повідомленням. Коли завдання підходить, агент читає скіл через `skill_read` (а інші файли скіла — через `skill_read_file`) і діє за ним. Скіли можна вмикати, вимикати й видаляти будь-коли; запущений агент дізнається про зміни з наступного повідомлення.
+
+Додавайте лише скіли, яким довіряєте: їхній текст стає інструкціями для агента.
+
 ### Оновлення й новини
 
-Панель перевіряє `https://ivlad003.github.io/tabhelm/news.json` (не частіше ніж раз на 6 годин). Якщо вийшла новіша версія, з'являється банер **«Доступна нова версія TabHelm X»** з кнопкою **Оновити** (команда встановлення, яку треба скопіювати, і далі ↻ на `chrome://extensions`) та посиланням на нотатки до релізу. Новини проєкту показуються окремим банером. Закриті банери більше не з'являються; без інтернету панель працює як звичайно.
+Панель перевіряє `https://ivlad003.github.io/tabhelm/news.json` (не частіше ніж раз на годину; **Settings → Check for updates** перевіряє одразу). Якщо вийшла новіша версія, з'являється банер **«Доступна нова версія TabHelm X»** з кнопкою **Оновити** (команда встановлення, яку треба скопіювати, і далі ↻ на `chrome://extensions`) та посиланням на нотатки до релізу. Новини проєкту показуються окремим банером. Закриті банери більше не з'являються; без інтернету панель працює як звичайно.
+
+Банер оновлення з'являється лише тоді, коли реліз **новіший за розширення, завантажене в Chrome**. Якщо ви запускаєте TabHelm з git-копії (`Load unpacked` на папку `extension/` репозиторію), у вас уже найновіший код — зробіть pull і натисніть ↻ біля TabHelm на `chrome://extensions`. **Settings** показує версії розширення й хоста та попереджає, якщо вони різні.
 
 ### Вхід в акаунт
 
@@ -275,6 +289,7 @@ extension/                     розширення Chrome (Manifest V3, без 
   page-scripts.js              функції, що виконуються у фреймах: конспект, пошук, геометрія елементів
   sidepanel.html|css|js        чат, вибір моделі, підтвердження, журнал дій, New chat, передача розмови, запис відео
   news.js                      банер оновлень і новин із news.json сайту
+  settings.js                  екран Settings: скіли за посиланням, версії, перевірка оновлень
 host/                          native host (Node 20+)
   src/native-host.js           точка входу, яку запускає Chrome; маршрутизація повідомлень, збереження відео
   src/native-messaging.js      фрейми з 4-байтовою довжиною, захист від ліміту 1 MB
@@ -282,6 +297,7 @@ host/                          native host (Node 20+)
   src/agents.js                реєстр агентів, пошук у PATH, підказки для встановлення
   src/builtin-agent.js         власний ACP-агент TabHelm для OpenRouter / Ollama / OpenAI-сумісних API
   src/env.js                   читання й запис ~/.tabhelm/env (API-ключі)
+  src/skills.js                скіли за посиланням: розбір URL і SKILL.md, кеш, інструменти skill_*
   src/tool-server.js           локальний HTTP-ендпоінт із токеном
   src/mcp-bridge.js            stdio MCP-сервер, який запускають агенти (24 інструменти)
   scripts/install.js           реєстрація native host (Chrome, Chromium, Brave, Edge)
@@ -290,6 +306,7 @@ host/                          native host (Node 20+)
   scripts/smoke.js | e2e.js | tools-test.js | icons.js
 scripts/build.js               збірка релізу → dist/
 scripts/news.js                збирає news.json (site/news.json + останній реліз) для Pages
+scripts/release-notes.js       нотатки до релізу з CHANGELOG.md
 site/                          GitHub Pages: лендинг, install.sh, джерело news.json, логотип
 .github/workflows/             реліз за тегом, публікація Pages
 docs/research.md               нотатки дослідження
@@ -314,12 +331,13 @@ npm run install-host           # зареєструвати хост для ці
 | `E2E_RECORD=1 E2E_SWITCH=opencode npm run e2e -- claude` | те саме, плюс запис відео, передача розмови іншому агенту і New chat |
 | `E2E_FAILOVER=opencode npm run e2e -- claude` | «вбиває» агента посеред завдання, продовжує з OpenCode, перевіряє Markdown-експорт |
 | `E2E_NEWS=1 npm run e2e` | банери оновлення й новин на локальному фіді |
+| `E2E_SKILLS=1 npm run e2e -- claude` | додає скіл у Settings і перевіряє, що агент його читає й виконує |
 | `npm run test:builtin` | вбудований агент проти тестового OpenAI-сумісного API (стрімінг, виклики інструментів, повтор при 429, відсутній ключ) |
 | `TABHELM_RELEASE=../dist/tabhelm-x.y.z npm run e2e -- claude` | зібраний реліз |
 
 **Збірка:** `npm run build` (у корені репозиторію) створює `dist/`: розпакований реліз, `tabhelm-extension[-x.y.z].zip` і `tabhelm[-x.y.z].tar.gz` (без `node_modules`; адаптери Claude і Codex містять бінарники агентів, після встановлення це ~750 MB).
 
-**Реліз:** підніміть `version` в `extension/manifest.json`, `host/package.json` і `package.json`, потім запуште тег `vX.Y.Z`. Workflow *Release* збере й опублікує файли та перезапустить *Pages*, тож банер оновлення з'явиться в панелі в усіх користувачів. *Pages* також публікує `site/` при пуші в `main`.
+**Реліз:** додайте розділ у `CHANGELOG.md`, підніміть `version` в `extension/manifest.json`, `host/package.json` і `package.json`, потім запуште тег `vX.Y.Z`. Нотатки до релізу беруться з changelog. Workflow *Release* збере й опублікує файли та перезапустить *Pages*, тож банер оновлення з'явиться в панелі в усіх користувачів. *Pages* також публікує `site/` при пуші в `main`.
 
 **Новини:** додайте запис у `site/news.json` (`id`, `title`/`text` з `en` і `uk`, необов'язкові `url`, `minVersion`, `maxVersion`) і запуште в `main`. Workflow Pages об'єднує його з даними останнього релізу (`scripts/news.js`) в опублікований `news.json`. Для локальної перевірки задайте `newsUrl` у `chrome.storage.local` розширення (див. `E2E_NEWS=1 npm run e2e`).
 

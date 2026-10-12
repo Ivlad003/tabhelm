@@ -21,6 +21,7 @@ const KEEP_FULL_RESULTS = 2; // older tool results are shortened to save tokens
 const READ_ONLY = new Set([
   'browser_snapshot', 'browser_find', 'browser_get_text', 'browser_screenshot',
   'browser_wait', 'browser_console', 'browser_network', 'browser_tabs',
+  'skill_list', 'skill_read', 'skill_read_file',
 ]);
 
 const SYSTEM_PROMPT = `You are TabHelm's built-in browser agent. You operate the user's real Chrome tab through the browser_* tools.
@@ -110,7 +111,7 @@ class BuiltinAgent {
     return {
       protocolVersion: acp.PROTOCOL_VERSION,
       agentCapabilities: { mcpCapabilities: { http: false, sse: false }, promptCapabilities: { image: false } },
-      agentInfo: { name: 'tabhelm-builtin', title: `TabHelm ${provider.name}`, version: '0.8.0' },
+      agentInfo: { name: 'tabhelm-builtin', title: `TabHelm ${provider.name}`, version: '0.9.0' },
       authMethods: provider.keyEnv ? [{ id: 'api-key', name: `Use ${provider.keyEnv}`, description: keyHelp(provider) }] : [],
     };
   }
@@ -141,7 +142,7 @@ class BuiltinAgent {
     const toolOwner = new Map();
     for (const server of params.mcpServers || []) {
       if (!('command' in server)) continue;
-      const client = new Client({ name: 'tabhelm-builtin', version: '0.8.0' });
+      const client = new Client({ name: 'tabhelm-builtin', version: '0.9.0' });
       const env = { ...process.env, ...Object.fromEntries((server.env || []).map((e) => [e.name, e.value])) };
       await client.connect(new StdioClientTransport({ command: server.command, args: server.args, env, stderr: 'ignore' }));
       mcpClients.push(client);
