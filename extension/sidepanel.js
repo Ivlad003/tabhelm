@@ -1,5 +1,6 @@
 import { showNews } from './news.js';
 import { initSettings, enabledSkillUrls, handleSettingsMessage, hostVersionMismatch } from './settings.js';
+import { initAttachments, takeAttachments, hasAttachments, chip } from './attachments.js';
 
 const tabId = Number(new URLSearchParams(location.search).get('tabId'));
 const $ = (id) => document.getElementById(id);
@@ -575,19 +576,33 @@ els.input.addEventListener('keydown', (e) => {
 });
 
 function send() {
-  const text = els.input.value.trim();
-  if (!text || !connected) return;
+  let text = els.input.value.trim();
+  if ((!text && !hasAttachments()) || !connected) return;
+  const attachments = takeAttachments();
+  if (!text) text = 'Please look at the attached file(s).';
   els.input.value = '';
-  add('div', 'msg user').textContent = text;
+  const bubble = add('div', 'msg user');
+  bubble.textContent = text;
+  if (attachments.length) {
+    const list = document.createElement('div');
+    list.className = 'attachments';
+    list.append(...attachments.map((a) => chip(a)));
+    bubble.append(list);
+  }
   agentBubble = null;
   thoughtEl = null;
   planEl = null;
   busy = true;
   turn = { text: '', thought: '', actions: [] };
-  record('user', { text });
+  record('user', { text, attachments: attachments.map((a) => ({ name: a.name, kind: a.kind, size: a.size })) });
   setStatus('working', 'Working…');
   if (els.record.checked) startRecording();
-  port.postMessage({ type: 'prompt', text, context: pendingContext });
+  port.postMessage({
+    type: 'prompt',
+    text,
+    context: pendingContext,
+    attachments: attachments.map(({ kind, name, mimeType, data, text: body }) => ({ kind, name, mimeType, data, text: body })),
+  });
   pendingContext = null;
   syncControls();
   scrollDown();
@@ -624,7 +639,7 @@ async function buildContext() {
     actions = [];
   };
   for (const e of journal) {
-    if (e.type === 'user') blocks.push(`User: ${e.text}`);
+    if (e.type === 'user') blocks.push(`User: ${e.text}${e.attachments?.length ? ` (attached: ${e.attachments.map((a) => a.name).join(', ')})` : ''}`);
     else if (e.type === 'action') actions.push(`${e.ok ? '' : 'FAILED '}${e.desc}${e.error ? ` (${e.error})` : ''}`);
     else if (e.type === 'agent') {
       flush(e.agent);
@@ -649,6 +664,7 @@ function syncControls() {
   els.connect.disabled = !connected && !els.agent.value;
   els.agent.disabled = busy;
   els.input.disabled = !connected;
+  $('attach').disabled = !connected;
   els.send.disabled = !connected;
   els.send.textContent = busy ? 'Stop' : 'Send';
   for (const select of els.config.querySelectorAll('select')) select.disabled = busy;
@@ -695,6 +711,7 @@ function exportMarkdown(tab) {
       case 'user':
         section(`${t} · You`);
         out.push(e.text);
+        if (e.attachments?.length) out.push('', ...e.attachments.map((a) => `- 📎 ${a.name} (${a.kind}, ${Math.round(a.size / 1024)} KB)`));
         break;
       case 'action':
       case 'agent_tool':
@@ -914,3 +931,11 @@ syncControls();
 
 showNews($('news'));
 initSettings(port);
+initAttachments({
+  list: $('attachments'),
+  button: $('attach'),
+  input: $('file-input'),
+  dropTarget: document.body,
+  pasteTarget: els.input,
+  onError: (text) => notice(text, true),
+});

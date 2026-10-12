@@ -710,3 +710,78 @@ select:focus,
   text-align: left;
   margin: 6px 0;
 }
+
+.attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.attachments[hidden] {
+  display: none;
+}
+
+.attachment {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 3px 6px 3px 3px;
+  background: var(--bg);
+  font-size: 12px;
+}
+
+.attachment img {
+  width: 32px;
+  height: 32px;
+  object-fit: cover;
+  border-radius: 4px;
+}
+
+.attachment .file-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 4px;
+  background: var(--tool-bg);
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.attachment .name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 160px;
+}
+
+.attachment .remove {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+}
+
+.msg.user .attachments {
+  margin-top: 6px;
+}
+
+.msg.user .attachment {
+  background: var(--panel);
+}
+
+.msg.user .attachment.image img {
+  width: 96px;
+  height: 72px;
+}
+
+body.dropping .composer {
+  outline: 2px dashed var(--accent);
+  outline-offset: -4px;
+}

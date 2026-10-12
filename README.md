@@ -54,6 +54,7 @@ To update, run the install command again.
 | Chat | Agent replies, collapsible *Thinking*, plans, and an action log (`↳ Click "Save"`, `↳ Type "…" into "Email"`). |
 | **Auto-approve actions** | Lets the agent use tools without asking. Uploads, JavaScript and other tabs still ask (see below). |
 | **Send / Stop** | Sends a message; while the agent works, the button cancels the turn. |
+| **Attach** | Adds images and text files (txt, md, csv, tsv, json, log) to the message. You can also drop files on the panel or paste an image. |
 | **New chat** | Clears the chat and starts a fresh session with the same agent and model. |
 | **Export** | Downloads the chat with the agent's action log as Markdown, or the full event log as JSON. |
 | **Settings** | Skills from links, versions and **Check for updates**. |
@@ -93,6 +94,10 @@ sequenceDiagram
 ### Recording videos
 
 Turn on **Record video** and every message you send is recorded until the agent finishes: the tab's frames (CDP screencast) are encoded in the panel with MediaRecorder (MP4/H.264, WebM fallback). An *agent cursor* with a click ripple is drawn on the page so the video shows where the agent pointed and clicked. Each video appears in the chat with a player and a **Download** button and is saved automatically to `~/Videos/TabHelm/` (or `~/.tabhelm/recordings/` if there is no `~/Videos`). Only the visible tab renders frames, so tabs the agent opens in the background are not captured.
+
+### Attachments
+
+Attach up to 10 files per message with **Attach**, by dropping them on the panel, or by pasting an image into the message box. Images are downscaled to 1600 px; text files can be up to 300 KB. Each agent gets them in the form it supports: images and embedded files over ACP where possible; otherwise TabHelm saves the image into the agent's workspace (`~/.tabhelm/workspace/attachments`) and tells the agent the path, and puts text files inline in the message. The built-in agent passes images to models marked *vision*. Checked with Claude Code, Codex, OpenCode, Cursor, Grok and the built-in agent.
 
 ### Skills
 
@@ -313,6 +318,7 @@ extension/                     Chrome extension (Manifest V3, no build step)
   sidepanel.html|css|js        chat UI, model picker, approvals, action log, new chat, agent hand-over, video recorder
   news.js                      update / news banner from the site's news.json
   settings.js                  Settings view: skills from links, versions, update check
+  attachments.js               image / text attachments: picking, drop, paste, downscaling
 host/                          native host (Node 20+)
   src/native-host.js           entry point launched by Chrome; routes messages, saves recordings
   src/native-messaging.js      4-byte length-prefixed framing, 1 MB guard
@@ -354,6 +360,7 @@ Load `extension/` unpacked in Chrome. After editing extension files press ↻ on
 | `E2E_RECORD=1 E2E_SWITCH=opencode npm run e2e -- claude` | same, plus video recording, agent hand-over and New chat |
 | `E2E_FAILOVER=opencode npm run e2e -- claude` | kills the agent mid-task, continues with OpenCode, checks the Markdown export |
 | `E2E_NEWS=1 npm run e2e` | update and news banners against a local feed |
+| `E2E_ATTACH=1 npm run e2e -- claude` | attaches an image and a CSV and checks the agent reads both |
 | `E2E_SKILLS=1 npm run e2e -- claude` | adds a skill in Settings and checks the agent reads and follows it |
 | `npm run test:builtin` | built-in agent against a mock OpenAI-compatible API (streaming, tool calls, 429 retry, missing key) |
 | `TABHELM_RELEASE=../dist/tabhelm-x.y.z npm run e2e -- claude` | the built release |

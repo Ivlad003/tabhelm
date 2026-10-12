@@ -10,10 +10,11 @@
 // E2E_FAILOVER=<agentId> kills the first agent mid-task, continues with <agentId>
 // via the panel's "Continue with" card, then checks the Markdown export;
 // E2E_NEWS=1 only checks the update/news banner against a local feed;
-// E2E_SKILLS=1 adds a skill in Settings and checks the agent reads and follows it)
+// E2E_SKILLS=1 adds a skill in Settings and checks the agent reads and follows it;
+// E2E_ATTACH=1 attaches an image and a CSV and checks the agent reads both)
 import puppeteer from 'puppeteer-core';
 import http from 'node:http';
-import { existsSync, mkdtempSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -86,6 +87,54 @@ await sw.evaluate((url) => chrome.windows.create({ url, type: 'popup', width: 42
 const panel = await (await browser.waitForTarget((t) => t.url() === panelUrl)).page();
 panel.on('console', (m) => console.log('[panel]', m.text()));
 await panel.waitForSelector('#agent');
+
+if (process.env.E2E_ATTACH) {
+  // An image with a word only readable from the picture, and a CSV to sum.
+  const art = await browser.newPage();
+  await art.setViewport({ width: 420, height: 160 });
+  await art.setContent('<body style="margin:0;background:#fff"><div style="font:bold 72px sans-serif;padding:36px 30px;color:#c2185b">ZEBRA</div></body>');
+  const imagePath = join(profile, 'word.png');
+  await art.screenshot({ path: imagePath });
+  await art.close();
+  const csvPath = join(profile, 'data.csv');
+  writeFileSync(csvPath, 'item,amount\napples,120\npears,345\nplums,678\n');
+
+  await panel.waitForFunction((id) => [...document.querySelectorAll('#agent option')].some((o) => o.value === id && !o.disabled), { timeout: 20000 }, agent);
+  await panel.select('#agent', agent);
+  await panel.click('#auto');
+  await panel.click('#connect');
+  try {
+    await panel.waitForFunction(() => document.querySelector('#status').dataset.state === 'ready', { timeout: 90000 });
+  } catch (err) {
+    console.log('not ready; panel says:', await panel.$eval('body', (b) => b.innerText.replace(/\s+/g, ' ').slice(0, 800)));
+    throw err;
+  }
+  if (process.env.E2E_MODEL) {
+    await panel.waitForSelector('#config select.model', { timeout: 30000 });
+    await panel.select('#config select.model', process.env.E2E_MODEL);
+    await panel.waitForFunction((m) => document.querySelector('#config select.model')?.value === m && !document.querySelector('#config select.model').disabled, { timeout: 30000 }, process.env.E2E_MODEL);
+  }
+  const input = await panel.$('#file-input');
+  await input.uploadFile(imagePath, csvPath);
+  await panel.waitForFunction(() => document.querySelectorAll('#attachments .attachment').length === 2, { timeout: 10000 });
+  await panel.type('#input', 'Do not use any browser tools. Using only the attached files: what is the sum of the amount column in data.csv, and what word is written in the image? Reply exactly as: SUM=<number>; WORD=<word>');
+  await panel.click('#send');
+  await panel.waitForFunction(() => document.querySelector('#send').textContent === 'Send' && document.querySelector('#status').dataset.state !== 'working', { timeout: 240000, polling: 1000 });
+  const sentChips = await panel.$$eval('.msg.user .attachment', (a) => a.length);
+  const answer = (await panel.$$eval('.msg.agent', (m) => m.map((x) => x.innerText).join(' '))).replace(/\s+/g, ' ');
+  console.log('chips in sent message:', sentChips);
+  console.log('answer:', answer.slice(0, 300));
+  const sumOk = /SUM\s*=\s*1,?143/i.test(answer);
+  const wordOk = /WORD\s*=\s*\**zebra/i.test(answer);
+  console.log(`csv read: ${sumOk}, image read: ${wordOk}`);
+  await panel.screenshot({ path: join(profile, 'panel.png') });
+  console.log('panel screenshot:', join(profile, 'panel.png'));
+  const ok = sentChips === 2 && sumOk && (wordOk || process.env.E2E_ATTACH === 'text-only');
+  console.log(ok ? 'E2E PASS' : 'E2E FAIL');
+  await browser.close();
+  server.close();
+  process.exit(ok ? 0 : 1);
+}
 
 if (process.env.E2E_SKILLS) {
   await panel.click('#settings-open');

@@ -107,7 +107,7 @@ async function handleMessage(msg) {
 
       case 'prompt': {
         const session = requireSession(tabId);
-        session.prompt(msg.text, msg.context).catch((err) => send({ type: 'error', tabId, message: err.message || String(err) }));
+        session.prompt(msg.text, msg.context, msg.attachments).catch((err) => send({ type: 'error', tabId, message: err.message || String(err) }));
         break;
       }
 

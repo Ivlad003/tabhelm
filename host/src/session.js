@@ -1,4 +1,6 @@
 import { spawn } from 'node:child_process';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { Readable, Writable } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 import * as acp from '@agentclientprotocol/sdk';
@@ -72,7 +74,7 @@ export class AgentSession {
       this.connection.initialize({
         protocolVersion: acp.PROTOCOL_VERSION,
         clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false },
-        clientInfo: { name: 'tabhelm', version: '0.10.0' },
+        clientInfo: { name: 'tabhelm', version: '0.11.0' },
       }),
       this.exited.then(() => {
         throw new Error(`${agent.name} exited during startup. Check that it is installed and logged in.`);
@@ -94,6 +96,7 @@ export class AgentSession {
 
     this.mcpServers = mcpServers;
     this.authMethods = init.authMethods || [];
+    this.promptCaps = init.agentCapabilities?.promptCapabilities || {};
     await this.openSession();
   }
 
@@ -184,7 +187,37 @@ export class AgentSession {
   }
 
   // `context` carries the conversation from a previous agent in this chat.
-  async prompt(text, context) {
+  // Turns chat attachments into ACP content blocks the agent can take: images and
+  // embedded files when it supports them, otherwise a saved file / inline text.
+  attachmentBlocks(attachments = []) {
+    const blocks = [];
+    const notes = [];
+    for (const a of attachments) {
+      if (a.kind === 'image') {
+        if (this.promptCaps.image) {
+          blocks.push({ type: 'image', mimeType: a.mimeType, data: a.data });
+        } else {
+          const path = this.saveAttachment(a.name, Buffer.from(a.data, 'base64'));
+          notes.push(`The user attached an image "${a.name}", saved at ${path}. Open it with your file tools if you can view images.`);
+        }
+      } else if (this.promptCaps.embeddedContext) {
+        blocks.push({ type: 'resource', resource: { uri: `file:///attachments/${encodeURIComponent(a.name)}`, mimeType: a.mimeType || 'text/plain', text: a.text } });
+      } else {
+        notes.push(`Attached file "${a.name}":\n\`\`\`\n${a.text}\n\`\`\``);
+      }
+    }
+    return { blocks, notes };
+  }
+
+  saveAttachment(name, buffer) {
+    const dir = join(this.workspace, 'attachments');
+    mkdirSync(dir, { recursive: true });
+    const path = join(dir, `${Date.now()}-${name.replace(/[^\w.-]+/g, '_')}`);
+    writeFileSync(path, buffer);
+    return path;
+  }
+
+  async prompt(text, context, attachments = []) {
     if (this.busy) throw new Error('Agent is still working on the previous message');
     this.busy = true;
     const history = context ? `Earlier in this chat (with another agent), for context:\n${context}\n\n` : '';
@@ -192,12 +225,15 @@ export class AgentSession {
     if (this.firstPrompt) skills = skillsPreamble(this.skills);
     else if (this.skillsChanged) skills = `[TabHelm] The user changed the enabled skills. ${skillsPreamble(this.skills) || 'No skills are enabled now.\n\n'}`;
     this.skillsChanged = false;
-    const fullText = this.firstPrompt ? BROWSER_PREAMBLE.replace('User request:\n', `${skills}${history}User request:\n`) + text : skills + history + text;
+    const { blocks, notes } = this.attachmentBlocks(attachments);
+    const listed = attachments.length ? `\n\n[Attached: ${attachments.map((a) => a.name).join(', ')}]` : '';
+    const body = text + listed + (notes.length ? `\n\n${notes.join('\n\n')}` : '');
+    const fullText = this.firstPrompt ? BROWSER_PREAMBLE.replace('User request:\n', `${skills}${history}User request:\n`) + body : skills + history + body;
     this.firstPrompt = false;
     try {
       const result = await this.connection.prompt({
         sessionId: this.sessionId,
-        prompt: [{ type: 'text', text: fullText }],
+        prompt: [{ type: 'text', text: fullText }, ...blocks],
       });
       this.emit({ type: 'done', stopReason: result.stopReason });
     } finally {

@@ -110,8 +110,8 @@ class BuiltinAgent {
   async initialize() {
     return {
       protocolVersion: acp.PROTOCOL_VERSION,
-      agentCapabilities: { mcpCapabilities: { http: false, sse: false }, promptCapabilities: { image: false } },
-      agentInfo: { name: 'tabhelm-builtin', title: `TabHelm ${provider.name}`, version: '0.10.0' },
+      agentCapabilities: { mcpCapabilities: { http: false, sse: false }, promptCapabilities: { image: true, embeddedContext: true } },
+      agentInfo: { name: 'tabhelm-builtin', title: `TabHelm ${provider.name}`, version: '0.11.0' },
       authMethods: provider.keyEnv ? [{ id: 'api-key', name: `Use ${provider.keyEnv}`, description: keyHelp(provider) }] : [],
     };
   }
@@ -142,7 +142,7 @@ class BuiltinAgent {
     const toolOwner = new Map();
     for (const server of params.mcpServers || []) {
       if (!('command' in server)) continue;
-      const client = new Client({ name: 'tabhelm-builtin', version: '0.10.0' });
+      const client = new Client({ name: 'tabhelm-builtin', version: '0.11.0' });
       const env = { ...process.env, ...Object.fromEntries((server.env || []).map((e) => [e.name, e.value])) };
       await client.connect(new StdioClientTransport({ command: server.command, args: server.args, env, stderr: 'ignore' }));
       mcpClients.push(client);
@@ -193,8 +193,21 @@ class BuiltinAgent {
   async prompt({ sessionId, prompt }) {
     const session = this.require(sessionId);
     session.abort = new AbortController();
-    const text = prompt.filter((p) => p.type === 'text').map((p) => p.text).join('\n');
-    session.messages.push({ role: 'user', content: text });
+    // Text, attached files (embedded resources) and images from the chat.
+    const parts = [];
+    for (const p of prompt) {
+      if (p.type === 'text') parts.push(p.text);
+      else if (p.type === 'resource' && p.resource?.text) parts.push(`Attached file ${decodeURIComponent(p.resource.uri.split('/').pop())}:\n\`\`\`\n${p.resource.text}\n\`\`\``);
+    }
+    const images = prompt.filter((p) => p.type === 'image');
+    const vision = session.models.find((m) => m.id === session.model)?.vision;
+    if (images.length && !vision) parts.push(`[${images.length} image(s) attached, but ${session.model} cannot see images. Tell the user to pick a model marked "vision".]`);
+    const text = parts.join('\n\n');
+    session.messages.push(
+      images.length && vision
+        ? { role: 'user', content: [{ type: 'text', text }, ...images.map((i) => ({ type: 'image_url', image_url: { url: `data:${i.mimeType};base64,${i.data}` } }))] }
+        : { role: 'user', content: text },
+    );
 
     try {
       for (let step = 0; step < MAX_STEPS; step++) {
@@ -358,7 +371,10 @@ function compactHistory(messages) {
   }
   // Only the most recent screenshot stays.
   const imageIdx = messages.map((m, i) => (Array.isArray(m.content) ? i : -1)).filter((i) => i >= 0);
-  for (const i of imageIdx.slice(0, -1)) messages[i].content = '[older screenshot removed]';
+  for (const i of imageIdx.slice(0, -1)) {
+    const text = messages[i].content.find((c) => c.type === 'text')?.text || '';
+    messages[i].content = `${text}\n[older image removed]`;
+  }
 }
 
 function friendlyError(status, detail, model) {

@@ -2,6 +2,13 @@
 
 All notable changes to TabHelm. The newest release is at the top; the panel's update banner links here.
 
+## [0.11.0] - 2026-10-12
+
+### Added
+- **Attachments in the chat:** images and text files (txt, md, csv, tsv, json, log) via the Attach button, drag and drop, or pasting an image. Images are downscaled to 1600 px.
+- Agents receive images and files over ACP where they support it; otherwise images are saved into the agent's workspace and text is put inline. The built-in agent sends images to vision models.
+- Attachments appear in the sent message, the hand-over context and the Markdown export.
+
 ## [0.10.0] - 2026-10-12
 
 ### Added
@@ -71,6 +78,7 @@ All notable changes to TabHelm. The newest release is at the top; the panel's up
 ### Added
 - First version: side-panel chat that drives terminal agents over ACP, with browser tools over MCP.
 
+[0.11.0]: https://github.com/Ivlad003/tabhelm/releases/tag/v0.11.0
 [0.10.0]: https://github.com/Ivlad003/tabhelm/releases/tag/v0.10.0
 [0.9.0]: https://github.com/Ivlad003/tabhelm/releases/tag/v0.9.0
 [0.8.1]: https://github.com/Ivlad003/tabhelm/releases/tag/v0.8.1

@@ -59,6 +59,16 @@ const server = http.createServer(async (req, res) => {
     return res.writeHead(429).end('{"error":{"message":"slow down"}}');
   }
 
+  // Attachment check: answer from what actually reached the model.
+  const firstUser = messages.find((m) => m.role === 'user' && JSON.stringify(m.content).includes('SUM='));
+  if (firstUser) {
+    const parts = Array.isArray(firstUser.content) ? firstUser.content : [{ type: 'text', text: firstUser.content }];
+    stats.imageSent = parts.some((p) => p.type === 'image_url' && p.image_url.url.startsWith('data:image/'));
+    const text = parts.filter((p) => p.type === 'text').map((p) => p.text).join('\n');
+    const sum = /plums,678/.test(text) ? 1143 : 0;
+    return stream(res, [{ delta: { content: `SUM=${sum}; WORD=${stats.imageSent ? 'ZEBRA' : 'none'}` } }, { delta: {}, finish_reason: 'stop' }]);
+  }
+
   const lastUser = messages.map((m) => m.role).lastIndexOf('user');
   const step = messages.slice(lastUser).filter((m) => m.role === 'assistant').length;
   const toolResults = messages.slice(lastUser).filter((m) => m.role === 'tool').map((m) => m.content);
@@ -114,7 +124,11 @@ check('browser tools offered to the model', stats.toolsOffered >= 4, JSON.string
 check('429 retried', stats.rateLimited === 1 && stats.completions >= 5, JSON.stringify(stats));
 check('API key sent', stats.badAuth === 0, JSON.stringify(stats));
 
-// 2. No key: the panel shows the sign-in card with instructions. HOME points to an
+// 2. Image + CSV attachments reach a vision model as image_url and text.
+const attachOut = await run({ TABHELM_OPENROUTER_BASE_URL: base, OPENROUTER_API_KEY: 'test-key', E2E_ATTACH: '1', E2E_MODEL: 'mock/pro' });
+check('attachments reach the model (image + CSV)', /E2E PASS/.test(attachOut) && stats.imageSent === true, attachOut);
+
+// 3. No key: the panel shows the sign-in card with instructions. HOME points to an
 //    empty folder so a real ~/.tabhelm/env cannot supply a key.
 const emptyHome = mkdtempSync(join(tmpdir(), 'tabhelm-home-'));
 const authOut = await run({ TABHELM_OPENROUTER_BASE_URL: base, OPENROUTER_API_KEY: '', HOME: emptyHome, E2E_EXPECT_AUTH: '1' });

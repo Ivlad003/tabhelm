@@ -1,6 +1,20 @@
 {
   "news": [
     {
+      "id": "2026-10-attachments",
+      "date": "2026-10-12",
+      "minVersion": "0.11.0",
+      "title": {
+        "en": "Attach images and files",
+        "uk": "Картинки й файли в чаті"
+      },
+      "text": {
+        "en": "Attach images, txt, md and csv files to a message — or just drop or paste them into the panel.",
+        "uk": "Додавайте до повідомлення картинки та файли txt, md, csv — або просто перетягніть чи вставте їх у панель."
+      },
+      "url": "https://github.com/Ivlad003/tabhelm#attachments"
+    },
+    {
       "id": "2026-10-free-agents",
       "date": "2026-10-12",
       "minVersion": "0.10.0",
