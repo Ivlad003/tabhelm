@@ -5,7 +5,8 @@ import { randomBytes, timingSafeEqual } from 'node:crypto';
 // browser tools. It listens on 127.0.0.1 only and requires a per-run token,
 // so other local processes and web pages cannot drive the browser through it.
 
-const TOOL_TIMEOUT_MS = 90_000;
+// Generous: some tools wait for the user to approve in the side panel.
+const TOOL_TIMEOUT_MS = 5 * 60_000;
 
 export async function startToolServer({ runTool, log }) {
   const token = randomBytes(24).toString('hex');

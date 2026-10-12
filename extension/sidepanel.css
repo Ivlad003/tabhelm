@@ -351,3 +351,15 @@ select:focus,
   align-items: center;
   gap: 5px;
 }
+
+.card .detail {
+  margin: 0 0 8px;
+  font-size: 11px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 140px;
+  overflow: auto;
+  background: var(--code-bg);
+  padding: 6px;
+  border-radius: 4px;
+}

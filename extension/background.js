@@ -1,8 +1,13 @@
-import { runTool, handleDialog, detach } from './browser-tools.js';
+import { runTool, releaseChat } from './browser-tools.js';
 
 const HOST_NAME = 'com.tabhelm.host';
-const panels = new Map(); // tabId -> side panel port
+const panels = new Map(); // chat tabId -> side panel port
+const confirms = new Map(); // id -> { resolve, chatTabId }
+let nextConfirmId = 1;
 let nativePort = null;
+
+// Dev hook for scripts/tools-test.js: lets the test call tools directly from the service worker.
+self.tabhelmDebug = { runTool };
 
 // Each tab gets its own side panel instance, bound to that tab's id.
 chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: false }).catch(() => {});
@@ -11,6 +16,20 @@ chrome.action.onClicked.addListener((tab) => {
   chrome.sidePanel.setOptions({ tabId: tab.id, path: `sidepanel.html?tabId=${tab.id}`, enabled: true });
   chrome.sidePanel.open({ tabId: tab.id });
 });
+
+// UI hooks the browser tools use to ask the user or report the active tab.
+const ui = {
+  confirm(chatTabId, title, detail) {
+    const port = panels.get(chatTabId);
+    if (!port) return Promise.resolve(false);
+    const id = nextConfirmId++;
+    port.postMessage({ type: 'confirm', id, title, detail });
+    return new Promise((resolve) => confirms.set(id, { resolve, chatTabId }));
+  },
+  onTarget(chatTabId, tab) {
+    panels.get(chatTabId)?.postMessage({ type: 'target', tabId: tab.id, title: tab.title || tab.url, isChat: tab.id === chatTabId });
+  },
+};
 
 function ensureNative() {
   if (nativePort) return nativePort;
@@ -27,14 +46,15 @@ function ensureNative() {
 async function onHostMessage(msg) {
   if (msg.type === 'tool_call') {
     let reply;
+    let label;
     try {
-      const content =
-        msg.tool === 'browser_handle_dialog' ? await handleDialog(msg.tabId, msg.args) : await runTool(msg.tabId, msg.tool, msg.args);
-      reply = { type: 'tool_result', id: msg.id, ok: true, content };
+      const result = await runTool(msg.tabId, msg.tool, msg.args, ui);
+      label = result.label;
+      reply = { type: 'tool_result', id: msg.id, ok: true, content: result.content };
     } catch (err) {
       reply = { type: 'tool_result', id: msg.id, ok: false, error: err.message || String(err) };
     }
-    panels.get(msg.tabId)?.postMessage({ type: 'tool_activity', tool: msg.tool, args: msg.args, ok: reply.ok, error: reply.error });
+    panels.get(msg.tabId)?.postMessage({ type: 'tool_activity', tool: msg.tool, args: msg.args, label, ok: reply.ok, error: reply.error });
     nativePort?.postMessage(reply);
     return;
   }
@@ -49,6 +69,11 @@ chrome.runtime.onConnect.addListener((port) => {
   panels.set(tabId, port);
 
   port.onMessage.addListener((msg) => {
+    if (msg.type === 'confirm_response') {
+      confirms.get(msg.id)?.resolve(Boolean(msg.allow));
+      confirms.delete(msg.id);
+      return;
+    }
     try {
       ensureNative().postMessage({ ...msg, tabId });
     } catch (err) {
@@ -59,8 +84,13 @@ chrome.runtime.onConnect.addListener((port) => {
   port.onDisconnect.addListener(() => {
     if (panels.get(tabId) !== port) return;
     panels.delete(tabId);
+    for (const [id, c] of confirms) {
+      if (c.chatTabId !== tabId) continue;
+      c.resolve(false);
+      confirms.delete(id);
+    }
     nativePort?.postMessage({ type: 'stop', tabId });
-    detach(tabId);
+    releaseChat(tabId);
     // Let the host (and this service worker) shut down when no chat is open.
     if (!panels.size && nativePort) {
       nativePort.disconnect();
@@ -70,6 +100,7 @@ chrome.runtime.onConnect.addListener((port) => {
 });
 
 chrome.tabs.onRemoved.addListener((tabId) => {
+  if (!panels.has(tabId)) return;
   nativePort?.postMessage({ type: 'stop', tabId });
-  detach(tabId);
+  releaseChat(tabId);
 });

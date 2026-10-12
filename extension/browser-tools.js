@@ -1,61 +1,84 @@
-// Browser tools executed on behalf of the agent, always scoped to one tabId.
-// Reads go through chrome.scripting (isolated world); clicks and typing go
-// through chrome.debugger (CDP Input.*) so pages receive trusted events.
+// Browser tools executed for an agent. Every chat (side panel) is bound to the
+// tab it was opened on; the agent may additionally work with tabs it opened,
+// tabs the page opened, or tabs the user approved. Reads go through
+// chrome.scripting; mouse and keyboard go through CDP Input.* (trusted events).
 
-const attached = new Set();
-const dialogs = new Map(); // tabId -> { type, message }
+import { cdp, attach, detach, dialogs, consoleLogs, requests, fileChoosers, dragData } from './cdp.js';
+import * as P from './page-scripts.js';
 
-chrome.debugger.onDetach.addListener((source) => {
-  attached.delete(source.tabId);
-  dialogs.delete(source.tabId);
-});
+const chats = new Map(); // chatTabId -> { chatTabId, current, owned: Set, notes: [] }
 
-chrome.debugger.onEvent.addListener((source, method, params) => {
-  if (method === 'Page.javascriptDialogOpening') dialogs.set(source.tabId, { type: params.type, message: params.message });
-  if (method === 'Page.javascriptDialogClosed') dialogs.delete(source.tabId);
-});
-
-export function detach(tabId) {
-  if (attached.has(tabId)) chrome.debugger.detach({ tabId }).catch(() => {});
-  attached.delete(tabId);
-}
-
-async function attach(tabId) {
-  if (attached.has(tabId)) return;
-  try {
-    await chrome.debugger.attach({ tabId }, '1.3');
-  } catch (err) {
-    const msg = String(err.message || err);
-    if (/already attached/i.test(msg)) throw new Error('Another debugger (probably DevTools) is attached to this tab. Close DevTools and retry.');
-    throw new Error(`Cannot control this tab: ${msg}`);
+function chatState(chatTabId) {
+  let c = chats.get(chatTabId);
+  if (!c) {
+    c = { chatTabId, current: chatTabId, owned: new Set([chatTabId]), notes: [] };
+    chats.set(chatTabId, c);
   }
-  attached.add(tabId);
-  await cdp(tabId, 'Page.enable');
+  return c;
 }
 
-function cdp(tabId, method, params = {}) {
-  return chrome.debugger.sendCommand({ tabId }, method, params);
+export function releaseChat(chatTabId) {
+  const c = chats.get(chatTabId);
+  chats.delete(chatTabId);
+  const stillUsed = new Set([...chats.values()].flatMap((o) => [...o.owned]));
+  for (const t of c?.owned || [chatTabId]) if (!stillUsed.has(t)) detach(t);
 }
 
-async function inject(tabId, func, args = []) {
-  const [res] = await chrome.scripting.executeScript({ target: { tabId }, func, args });
-  return res?.result;
-}
+chrome.tabs.onCreated.addListener((tab) => {
+  for (const c of chats.values()) {
+    if (tab.openerTabId != null && c.owned.has(tab.openerTabId)) {
+      c.owned.add(tab.id);
+      c.notes.push(`The page opened a new tab ${tab.id} (${tab.pendingUrl || tab.url || 'loading'}). Use browser_tabs to switch to it.`);
+    }
+  }
+});
+
+chrome.tabs.onRemoved.addListener((tabId) => {
+  for (const c of chats.values()) {
+    c.owned.delete(tabId);
+    if (c.current === tabId && tabId !== c.chatTabId) {
+      c.current = c.chatTabId;
+      c.notes.push(`Tab ${tabId} was closed; tools act on the chat tab again.`);
+    }
+  }
+});
+
+// ---------- helpers ----------
 
 const text = (t) => [{ type: 'text', text: t }];
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+function parseRef(ref) {
+  const m = /^(?:f(\d+):)?(e\d+)$/.exec(String(ref ?? '').trim());
+  if (!m) throw new Error(`Invalid ref "${ref}". Use a ref from browser_snapshot or browser_find, e.g. "e12" or "f3:e5".`);
+  return { frameId: m[1] ? Number(m[1]) : 0, ref: m[2] };
+}
+
+async function inject(tabId, func, args = [], frameId = 0) {
+  const [res] = await chrome.scripting.executeScript({ target: { tabId, frameIds: [frameId] }, func, args });
+  return res?.result;
+}
+
+async function injectAll(tabId, func, args = []) {
+  const results = await chrome.scripting.executeScript({ target: { tabId, allFrames: true }, func, args });
+  return results.filter((r) => r.result).sort((a, b) => a.frameId - b.frameId);
+}
+
+function checked(res) {
+  if (!res) throw new Error('The page did not respond (it may be navigating). Try again.');
+  if (res.error) throw new Error(res.error);
+  return res;
+}
+
 async function assertControllable(tabId) {
   const tab = await chrome.tabs.get(tabId).catch(() => null);
-  if (!tab) throw new Error('The tab this chat belongs to was closed.');
+  if (!tab) throw new Error('The tab was closed.');
   const url = tab.url || tab.pendingUrl || '';
-  if (/^(chrome|chrome-extension|edge|brave|about|devtools):/.test(url) || url.startsWith('https://chromewebstore.google.com')) {
+  if (/^(chrome|chrome-extension|edge|brave|about|devtools|view-source):/.test(url) || url.startsWith('https://chromewebstore.google.com')) {
     throw new Error(`Chrome does not allow extensions to control ${url}. Navigate to a normal web page first.`);
   }
   const dialog = dialogs.get(tabId);
-  if (dialog) {
-    throw new Error(`A JavaScript ${dialog.type} dialog is blocking the page: "${dialog.message}". Use browser_handle_dialog first.`);
-  }
+  if (dialog) throw new Error(`A JavaScript ${dialog.type} dialog is blocking the page: "${dialog.message}". Use browser_handle_dialog first.`);
   return tab;
 }
 
@@ -70,23 +93,111 @@ async function waitForLoad(tabId, timeoutMs = 30_000) {
   return chrome.tabs.get(tabId);
 }
 
-// After an action, give the page a moment; if it started navigating, wait for it.
+// After an action give the page a moment; if it navigated, wait for the load.
 async function settle(tabId, urlBefore) {
   await sleep(400);
   const tab = await waitForLoad(tabId, 15_000);
-  return tab.url !== urlBefore ? ` Page navigated to ${tab.url}` : '';
+  let note = tab.url !== urlBefore ? ` Page navigated to ${tab.url}.` : '';
+  if (dialogs.has(tabId)) note += ` A ${dialogs.get(tabId).type} dialog opened: "${dialogs.get(tabId).message}".`;
+  return note;
 }
 
-async function resolveRef(tabId, ref) {
-  const res = await inject(tabId, elementCenter, [ref]);
-  if (!res || res.error) throw new Error(res?.error || `Element ${ref} not found`);
-  return res;
+function normalizeUrl(url) {
+  url = String(url).trim();
+  return /^[a-z][a-z0-9+.-]*:/i.test(url) ? url : `https://${url}`;
 }
 
-async function mouseClick(tabId, x, y) {
-  await cdp(tabId, 'Input.dispatchMouseEvent', { type: 'mouseMoved', x, y });
-  await cdp(tabId, 'Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', clickCount: 1 });
-  await cdp(tabId, 'Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', clickCount: 1 });
+// Offset of a frame's viewport inside the top-level viewport (matching iframes by URL).
+async function frameOffset(tabId, frameId) {
+  if (frameId === 0) return { x: 0, y: 0 };
+  const frame = await chrome.webNavigation.getFrame({ tabId, frameId }).catch(() => null);
+  if (!frame || frame.parentFrameId < 0) return null;
+  const local = await inject(tabId, P.iframeOffset, [frame.url], frame.parentFrameId).catch(() => null);
+  if (!local) return null;
+  const up = await frameOffset(tabId, frame.parentFrameId);
+  return up && { x: up.x + local.x, y: up.y + local.y };
+}
+
+// Resolves a ref to top-level viewport coordinates. `exact: false` means the
+// element is in a cross-origin frame we could not position.
+async function locate(tabId, refStr, scroll = true) {
+  const { frameId, ref } = parseRef(refStr);
+  const res = checked(await inject(tabId, P.elementCenter, [ref, scroll], frameId));
+  if (frameId === 0) return { ...res, frameId, ref, exact: true };
+  if (res.topX != null) return { ...res, x: res.topX, y: res.topY, frameId, ref, exact: true };
+  const off = await frameOffset(tabId, frameId);
+  if (off) return { ...res, x: res.x + off.x, y: res.y + off.y, frameId, ref, exact: true };
+  return { ...res, frameId, ref, exact: false };
+}
+
+async function point(tabId, ref, xy, name) {
+  if (ref) {
+    const loc = await locate(tabId, ref);
+    if (!loc.exact) throw new Error(`Cannot position ${ref}: it is inside a cross-origin iframe we could not locate.`);
+    return { x: loc.x, y: loc.y, label: `${ref} "${loc.label}"` };
+  }
+  if (xy && typeof xy.x === 'number' && typeof xy.y === 'number') return { x: xy.x, y: xy.y, label: `(${xy.x}, ${xy.y})` };
+  throw new Error(`Provide ${name}: a ref or x/y coordinates.`);
+}
+
+// ---------- mouse & keyboard ----------
+
+const MODIFIER_BITS = { Alt: 1, Control: 2, Meta: 4, Shift: 8 };
+const MODIFIER_ALIASES = { ctrl: 'Control', control: 'Control', shift: 'Shift', alt: 'Alt', option: 'Alt', meta: 'Meta', cmd: 'Meta', command: 'Meta', win: 'Meta' };
+
+function modifierMask(list = []) {
+  return list.reduce((mask, m) => mask | (MODIFIER_BITS[MODIFIER_ALIASES[String(m).toLowerCase()]] || 0), 0);
+}
+
+// Input events block while a page handler shows alert()/confirm(); stop
+// waiting as soon as a dialog opens so the agent can handle it.
+async function input(tabId, method, params) {
+  let timer;
+  const dialogOpened = new Promise((resolve) => {
+    timer = setInterval(() => dialogs.has(tabId) && resolve('dialog'), 50);
+  });
+  try {
+    return await Promise.race([cdp(tabId, method, params), dialogOpened]);
+  } finally {
+    clearInterval(timer);
+  }
+}
+
+async function mouseClick(tabId, x, y, { button = 'left', count = 1, modifiers = 0 } = {}) {
+  await input(tabId, 'Input.dispatchMouseEvent', { type: 'mouseMoved', x, y, modifiers });
+  for (let i = 1; i <= count; i++) {
+    if (dialogs.has(tabId)) return;
+    await input(tabId, 'Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button, clickCount: i, modifiers });
+    if ((await input(tabId, 'Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button, clickCount: i, modifiers })) === 'dialog') return;
+  }
+}
+
+async function mouseDrag(tabId, from, to) {
+  dragData.delete(tabId);
+  await cdp(tabId, 'Input.setInterceptDrags', { enabled: true });
+  try {
+    await input(tabId, 'Input.dispatchMouseEvent', { type: 'mouseMoved', x: from.x, y: from.y });
+    await input(tabId, 'Input.dispatchMouseEvent', { type: 'mousePressed', x: from.x, y: from.y, button: 'left', buttons: 1, clickCount: 1 });
+    const steps = 12;
+    for (let i = 1; i <= steps; i++) {
+      const x = from.x + ((to.x - from.x) * i) / steps;
+      const y = from.y + ((to.y - from.y) * i) / steps;
+      await input(tabId, 'Input.dispatchMouseEvent', { type: 'mouseMoved', x, y, button: 'left', buttons: 1 });
+      await sleep(16);
+    }
+    const data = dragData.get(tabId);
+    if (data) {
+      // Native HTML5 drag-and-drop: replay it as drag events at the target.
+      for (const type of ['dragEnter', 'dragOver', 'drop']) {
+        await input(tabId, 'Input.dispatchDragEvent', { type, x: to.x, y: to.y, data });
+      }
+    }
+    await input(tabId, 'Input.dispatchMouseEvent', { type: 'mouseReleased', x: to.x, y: to.y, button: 'left', buttons: 0, clickCount: 1 });
+    return data ? 'html5' : 'mouse';
+  } finally {
+    dragData.delete(tabId);
+    await cdp(tabId, 'Input.setInterceptDrags', { enabled: false }).catch(() => {});
+  }
 }
 
 const KEYS = {
@@ -104,106 +215,364 @@ const KEYS = {
   Home: { code: 'Home', keyCode: 36 },
   End: { code: 'End', keyCode: 35 },
   Space: { key: ' ', code: 'Space', keyCode: 32, text: ' ' },
+  Insert: { code: 'Insert', keyCode: 45 },
+  ...Object.fromEntries(Array.from({ length: 12 }, (_, i) => [`F${i + 1}`, { code: `F${i + 1}`, keyCode: 112 + i }])),
 };
 
-async function pressKey(tabId, name) {
-  const k = KEYS[name] || (name.length === 1 ? { key: name, code: '', keyCode: name.toUpperCase().charCodeAt(0), text: name } : null);
-  if (!k) throw new Error(`Unsupported key "${name}". Supported: ${Object.keys(KEYS).join(', ')} or a single character.`);
-  const base = { key: k.key || name, code: k.code, windowsVirtualKeyCode: k.keyCode, nativeVirtualKeyCode: k.keyCode };
-  await cdp(tabId, 'Input.dispatchKeyEvent', { type: k.text ? 'keyDown' : 'rawKeyDown', text: k.text, ...base });
-  await cdp(tabId, 'Input.dispatchKeyEvent', { type: 'keyUp', ...base });
+// Editing shortcuts need explicit commands to take effect via CDP.
+const EDIT_COMMANDS = { a: 'selectAll', c: 'copy', x: 'cut', v: 'paste', z: 'undo', y: 'redo' };
+
+function parseCombo(combo) {
+  const parts = String(combo).split('+').map((p) => p.trim()).filter(Boolean);
+  if (String(combo).endsWith('++')) parts.push('+');
+  const keyName = parts.pop();
+  const mods = parts.map((p) => MODIFIER_ALIASES[p.toLowerCase()]);
+  if (mods.some((m) => !m)) throw new Error(`Unknown modifier in "${combo}". Use Control, Shift, Alt, Meta.`);
+  const modifiers = modifierMask(mods);
+
+  let def = KEYS[keyName] || KEYS[keyName?.[0]?.toUpperCase() + keyName?.slice(1)];
+  if (!def && keyName?.length === 1) {
+    const ch = keyName;
+    const upper = ch.toUpperCase();
+    const code = /[a-z]/i.test(ch) ? `Key${upper}` : /\d/.test(ch) ? `Digit${ch}` : '';
+    const printable = !(modifiers & (MODIFIER_BITS.Control | MODIFIER_BITS.Meta | MODIFIER_BITS.Alt));
+    const key = modifiers & MODIFIER_BITS.Shift ? upper : ch.toLowerCase();
+    def = { key, code, keyCode: upper.charCodeAt(0), text: printable ? key : undefined };
+    if (!printable && EDIT_COMMANDS[ch.toLowerCase()]) {
+      def.commands = [modifiers & MODIFIER_BITS.Shift && ch.toLowerCase() === 'z' ? 'redo' : EDIT_COMMANDS[ch.toLowerCase()]];
+    }
+  }
+  if (!def) throw new Error(`Unsupported key "${keyName}". Use names like Enter, Tab, Escape, ArrowDown, F5, a single character, or combos like Control+A.`);
+  return { ...def, key: def.key || keyName, modifiers };
 }
 
-export async function runTool(tabId, tool, args) {
-  const tab = await assertControllable(tabId);
+async function pressKey(tabId, combo) {
+  const k = parseCombo(combo);
+  const base = { key: k.key, code: k.code, windowsVirtualKeyCode: k.keyCode, nativeVirtualKeyCode: k.keyCode, modifiers: k.modifiers };
+  if ((await input(tabId, 'Input.dispatchKeyEvent', { type: k.text ? 'keyDown' : 'rawKeyDown', text: k.text, commands: k.commands, ...base })) === 'dialog') return;
+  await input(tabId, 'Input.dispatchKeyEvent', { type: 'keyUp', ...base });
+}
+
+// Clicks may open a native file chooser; intercept it so the agent can fill it.
+async function withFileChooserIntercept(tabId, fn) {
+  fileChoosers.delete(tabId);
+  await input(tabId, 'Page.setInterceptFileChooserDialog', { enabled: true }).catch(() => {});
+  try {
+    return await fn();
+  } finally {
+    await input(tabId, 'Page.setInterceptFileChooserDialog', { enabled: false }).catch(() => {});
+  }
+}
+
+const chooserNote = (tabId) => (fileChoosers.has(tabId) ? ' A file chooser opened: call browser_upload_file with paths (no ref) to pick files.' : '');
+
+// ---------- screenshots ----------
+
+async function screenshot(tabId, args) {
+  const dpr = (await cdp(tabId, 'Runtime.evaluate', { expression: 'devicePixelRatio', returnByValue: true })).result?.value || 1;
+  const metrics = await cdp(tabId, 'Page.getLayoutMetrics');
+  const vp = metrics.cssVisualViewport;
+  let clip;
+  let note;
+  let beyond = false;
+
+  if (args.ref) {
+    const { frameId, ref } = parseRef(args.ref);
+    const r = checked(await inject(tabId, P.elementRect, [ref], frameId));
+    const off = (await frameOffset(tabId, frameId)) || { x: 0, y: 0 };
+    clip = { x: vp.pageX + off.x + r.x, y: vp.pageY + off.y + r.y, width: Math.max(1, r.width), height: Math.max(1, r.height) };
+    note = `Element ${args.ref}, ${Math.round(r.width)}×${Math.round(r.height)} CSS px.`;
+    beyond = true;
+  } else if (args.fullPage) {
+    const size = metrics.cssContentSize;
+    const width = Math.min(Math.ceil(size.width), 2000);
+    const height = Math.min(Math.ceil(size.height), 12000);
+    clip = { x: 0, y: 0, width, height };
+    note = `Full page ${width}×${height} CSS px${size.height > height ? ' (cut at 12000px)' : ''}. These are page coordinates; for clicking by position use a viewport screenshot.`;
+    beyond = true;
+  } else {
+    clip = { x: vp.pageX, y: vp.pageY, width: vp.clientWidth, height: vp.clientHeight };
+    note = `Viewport ${Math.round(vp.clientWidth)}×${Math.round(vp.clientHeight)} CSS px. Image pixels map 1:1 to x/y for browser_click_xy, browser_hover and browser_drag.`;
+  }
+
+  const shot = cdp(tabId, 'Page.captureScreenshot', { format: 'jpeg', quality: 60, clip: { ...clip, scale: 1 / dpr }, captureBeyondViewport: beyond });
+  const { data } = await Promise.race([
+    shot,
+    sleep(20_000).then(() => {
+      throw new Error('Screenshot timed out. Background tabs may not render; switch to a visible tab.');
+    }),
+  ]);
+  return [{ type: 'text', text: note }, { type: 'image', data, mimeType: 'image/jpeg' }];
+}
+
+// ---------- tabs ----------
+
+async function tabsTool(c, args, ui) {
+  const describe = (t) =>
+    `${t.id}${t.id === c.current ? ' (current)' : ''}${t.id === c.chatTabId ? ' (chat tab)' : ''}${c.owned.has(t.id) ? '' : ' (needs user approval)'}: ${t.title || ''} — ${t.url || t.pendingUrl || ''}`;
+
+  switch (args.action) {
+    case 'list': {
+      const tabs = args.all
+        ? await chrome.tabs.query({})
+        : (await Promise.all([...c.owned].map((id) => chrome.tabs.get(id).catch(() => null)))).filter(Boolean);
+      return { content: text(tabs.map(describe).join('\n') || 'No tabs.') };
+    }
+    case 'new': {
+      // Opened in the background so the user keeps seeing the chat tab and panel.
+      const tab = await chrome.tabs.create({ url: normalizeUrl(args.url || 'about:blank'), active: false, openerTabId: c.chatTabId });
+      c.owned.add(tab.id);
+      c.current = tab.id;
+      const loaded = await waitForLoad(tab.id);
+      ui.onTarget(c.chatTabId, loaded);
+      return { content: text(`Opened tab ${tab.id} in the background: ${loaded.url}. Tools now act on it. Note: background tabs may not render screenshots.`) };
+    }
+    case 'switch': {
+      const id = Number(args.tabId);
+      const tab = await chrome.tabs.get(id).catch(() => null);
+      if (!tab) throw new Error(`No tab ${args.tabId}.`);
+      if (!c.owned.has(id)) {
+        const ok = await ui.confirm(c.chatTabId, 'Let the agent control another tab?', `${tab.title}\n${tab.url}`);
+        if (!ok) throw new Error('The user did not allow controlling that tab.');
+        c.owned.add(id);
+      }
+      c.current = id;
+      ui.onTarget(c.chatTabId, tab);
+      return { content: text(`Tools now act on tab ${id}: ${tab.title} — ${tab.url}`) };
+    }
+    case 'close': {
+      const id = Number(args.tabId);
+      if (id === c.chatTabId) throw new Error('The chat tab cannot be closed by the agent.');
+      if (!c.owned.has(id)) throw new Error('Only tabs the agent opened or was allowed to control can be closed.');
+      await chrome.tabs.remove(id);
+      return { content: text(`Closed tab ${id}.`) };
+    }
+    default:
+      throw new Error('action must be list, new, switch or close.');
+  }
+}
+
+// ---------- dispatcher ----------
+
+export async function runTool(chatTabId, tool, args, ui) {
+  const c = chatState(chatTabId);
+  let result;
+  if (tool === 'browser_tabs') result = await tabsTool(c, args, ui);
+  else if (tool === 'browser_handle_dialog') result = await handleDialog(c.current, args);
+  else {
+    const tabId = c.current;
+    const tab = await assertControllable(tabId);
+    await attach(tabId);
+    result = await runPageTool(tabId, tab, tool, args, ui, chatTabId);
+  }
+  if (c.notes.length) {
+    result.content = [...result.content, { type: 'text', text: `\n${c.notes.splice(0).join('\n')}` }];
+  }
+  return result;
+}
+
+async function runPageTool(tabId, tab, tool, args, ui, chatTabId) {
   const urlBefore = tab.url;
 
   switch (tool) {
     case 'browser_snapshot': {
-      const snap = await inject(tabId, pageSnapshot, [24_000]);
-      return text(`URL: ${snap.url}\nTitle: ${snap.title}\n\n${snap.text}${snap.truncated ? '\n… (truncated, scroll or use browser_get_text for more)' : ''}`);
+      const frames = await injectAll(tabId, P.pageSnapshot, [24_000]);
+      const main = frames.find((f) => f.frameId === 0)?.result;
+      if (!main) throw new Error('Could not read the page (it may still be loading).');
+      let out = `URL: ${main.url}\nTitle: ${main.title}\n\n${main.text}${main.truncated ? '\n… (truncated; scroll, use browser_find or browser_get_text)' : ''}`;
+      for (const f of frames) {
+        if (f.frameId === 0 || !f.result.text.trim()) continue;
+        const body = f.result.text.replace(/\[(e\d+)\]/g, `[f${f.frameId}:$1]`);
+        out += `\n\n── iframe f${f.frameId}: ${f.result.url} ──\n${body.length > 6000 ? `${body.slice(0, 6000)}\n…` : body}`;
+      }
+      return { content: text(out) };
     }
 
-    case 'browser_click': {
-      await attach(tabId);
-      const { x, y, covered } = await resolveRef(tabId, args.ref);
-      await mouseClick(tabId, x, y);
-      const nav = await settle(tabId, urlBefore);
-      return text(`Clicked ${args.ref}.${covered ? ` Warning: the point was covered by ${covered}.` : ''}${nav}`);
-    }
-
-    case 'browser_type': {
-      await attach(tabId);
-      const { x, y } = await resolveRef(tabId, args.ref);
-      await mouseClick(tabId, x, y);
-      const prep = await inject(tabId, prepareTyping, [args.ref, args.clear !== false]);
-      if (prep?.error) throw new Error(prep.error);
-      await cdp(tabId, 'Input.insertText', { text: args.text });
-      if (args.submit) await pressKey(tabId, 'Enter');
-      const nav = await settle(tabId, urlBefore);
-      return text(`Typed into ${args.ref}.${nav}`);
-    }
-
-    case 'browser_select_option': {
-      const res = await inject(tabId, selectOption, [args.ref, args.value]);
-      if (res?.error) throw new Error(res.error);
-      return text(`Selected "${res.label}" in ${args.ref}.`);
-    }
-
-    case 'browser_press_key': {
-      await attach(tabId);
-      await pressKey(tabId, args.key);
-      const nav = await settle(tabId, urlBefore);
-      return text(`Pressed ${args.key}.${nav}`);
-    }
-
-    case 'browser_scroll': {
-      const res = await inject(tabId, scrollPage, [args.ref || null, args.direction]);
-      if (res?.error) throw new Error(res.error);
-      return text(`Scrolled ${args.direction}. Position ${res.position}/${res.max}px.`);
-    }
-
-    case 'browser_navigate': {
-      let url = String(args.url).trim();
-      if (!/^[a-z][a-z0-9+.-]*:/i.test(url)) url = `https://${url}`;
-      await chrome.tabs.update(tabId, { url });
-      await sleep(300);
-      const loaded = await waitForLoad(tabId);
-      return text(`Opened ${loaded.url} — "${loaded.title}". Take a snapshot to see it.`);
-    }
-
-    case 'browser_go_back': {
-      await chrome.tabs.goBack(tabId);
-      await sleep(300);
-      const loaded = await waitForLoad(tabId);
-      return text(`Went back to ${loaded.url}.`);
-    }
-
-    case 'browser_screenshot': {
-      await attach(tabId);
-      const { data } = await cdp(tabId, 'Page.captureScreenshot', { format: 'jpeg', quality: 60 });
-      return [{ type: 'image', data, mimeType: 'image/jpeg' }];
+    case 'browser_find': {
+      const frames = await injectAll(tabId, P.findInPage, [args.text, 25]);
+      const lines = frames.flatMap((f) => (f.frameId === 0 ? f.result.lines : f.result.lines.map((l) => l.replace(/^\[(e\d+)\]/, `[f${f.frameId}:$1]`))));
+      return { content: text(lines.length ? lines.join('\n') : `No visible element contains "${args.text}".`), label: `"${args.text}": ${lines.length} found` };
     }
 
     case 'browser_get_text': {
-      const res = await inject(tabId, () => ({ url: location.href, text: document.body?.innerText || '' }));
+      const res = await inject(tabId, P.pageText);
       const body = res.text.length > 40_000 ? `${res.text.slice(0, 40_000)}\n… (truncated)` : res.text;
-      return text(`URL: ${res.url}\n\n${body}`);
+      return { content: text(`URL: ${res.url}\n\n${body}`) };
+    }
+
+    case 'browser_screenshot':
+      return { content: await screenshot(tabId, args), label: args.fullPage ? 'full page' : args.ref || '' };
+
+    case 'browser_click': {
+      const loc = await locate(tabId, args.ref);
+      const opts = { button: args.button || 'left', count: args.double ? 2 : 1, modifiers: modifierMask(args.modifiers) };
+      let how = '';
+      await withFileChooserIntercept(tabId, async () => {
+        if (loc.exact) await mouseClick(tabId, loc.x, loc.y, opts);
+        else {
+          checked(await inject(tabId, P.domClick, [loc.ref], loc.frameId));
+          how = ' (DOM click: iframe position unknown)';
+        }
+        how += await settle(tabId, urlBefore);
+      });
+      const warn = loc.covered ? ` Warning: the point was covered by ${loc.covered}.` : '';
+      return { content: text(`Clicked ${args.ref} "${loc.label}".${how}${warn}${chooserNote(tabId)}`), label: loc.label };
+    }
+
+    case 'browser_click_xy': {
+      const opts = { button: args.button || 'left', count: args.double ? 2 : 1, modifiers: modifierMask(args.modifiers) };
+      let nav = '';
+      await withFileChooserIntercept(tabId, async () => {
+        await mouseClick(tabId, args.x, args.y, opts);
+        nav = await settle(tabId, urlBefore);
+      });
+      return { content: text(`Clicked at (${args.x}, ${args.y}).${nav}${chooserNote(tabId)}`) };
+    }
+
+    case 'browser_hover': {
+      const p = await point(tabId, args.ref, args, 'the element');
+      await input(tabId, 'Input.dispatchMouseEvent', { type: 'mouseMoved', x: p.x, y: p.y });
+      await sleep(300);
+      return { content: text(`Hovering over ${p.label}. Take a snapshot to see menus or tooltips that appeared.`), label: p.label };
+    }
+
+    case 'browser_drag': {
+      const from = await point(tabId, args.fromRef, args.from, 'the start (fromRef or from)');
+      const to = await point(tabId, args.toRef, args.to, 'the target (toRef or to)');
+      const kind = await mouseDrag(tabId, from, to);
+      const nav = await settle(tabId, urlBefore);
+      return { content: text(`Dragged ${from.label} → ${to.label} (${kind === 'html5' ? 'HTML5 drag-and-drop' : 'mouse drag'}).${nav}`), label: `${from.label} → ${to.label}` };
+    }
+
+    case 'browser_type': {
+      const loc = await locate(tabId, args.ref);
+      const clear = args.clear !== false;
+      if (loc.exact) {
+        await mouseClick(tabId, loc.x, loc.y);
+        checked(await inject(tabId, P.prepareTyping, [loc.ref, clear], loc.frameId));
+        await cdp(tabId, 'Input.insertText', { text: args.text });
+      } else {
+        checked(await inject(tabId, P.setValueFallback, [loc.ref, args.text, clear], loc.frameId));
+      }
+      if (args.submit) await pressKey(tabId, 'Enter');
+      const nav = await settle(tabId, urlBefore);
+      return { content: text(`Typed into ${args.ref} "${loc.label}".${nav}`), label: loc.label };
+    }
+
+    case 'browser_select_option': {
+      const { frameId, ref } = parseRef(args.ref);
+      const res = checked(await inject(tabId, P.selectOption, [ref, args.value], frameId));
+      return { content: text(`Selected "${res.label}" in ${args.ref}.`) };
+    }
+
+    case 'browser_press_key': {
+      await pressKey(tabId, args.key);
+      const nav = await settle(tabId, urlBefore);
+      return { content: text(`Pressed ${args.key}.${nav}`) };
+    }
+
+    case 'browser_scroll': {
+      const { frameId, ref } = args.ref ? parseRef(args.ref) : { frameId: 0, ref: null };
+      const res = checked(await inject(tabId, P.scrollPage, [ref, args.direction, args.amount || 0], frameId));
+      return { content: text(`Scrolled ${args.direction}. Position ${res.position}/${res.max}px.`) };
+    }
+
+    case 'browser_upload_file': {
+      const files = Array.isArray(args.paths) ? args.paths : [];
+      if (!files.length) throw new Error('paths must list at least one absolute file path.');
+      const host = new URL(tab.url).host;
+      const ok = await ui.confirm(chatTabId, `Upload ${files.length} file(s) to ${host}?`, files.join('\n'));
+      if (!ok) throw new Error('The user declined the upload.');
+
+      if (args.ref) {
+        const { frameId, ref } = parseRef(args.ref);
+        if (frameId !== 0) throw new Error('File inputs inside iframes are not supported yet.');
+        const token = crypto.randomUUID();
+        checked(await inject(tabId, P.markForUpload, [ref, token]));
+        const sel = JSON.stringify(`[data-tabhelm-upload="${token}"]`);
+        const { result } = await cdp(tabId, 'Runtime.evaluate', {
+          expression: `(function q(root){const el=root.querySelector(${sel});if(el)return el;for(const h of root.querySelectorAll('*'))if(h.shadowRoot){const r=q(h.shadowRoot);if(r)return r}return null})(document)`,
+        });
+        if (!result?.objectId) throw new Error('Could not find the file input.');
+        await cdp(tabId, 'DOM.setFileInputFiles', { files, objectId: result.objectId });
+        await cdp(tabId, 'Runtime.callFunctionOn', { objectId: result.objectId, functionDeclaration: 'function(){this.removeAttribute("data-tabhelm-upload")}' }).catch(() => {});
+      } else if (fileChoosers.has(tabId)) {
+        await cdp(tabId, 'DOM.setFileInputFiles', { files, backendNodeId: fileChoosers.get(tabId) });
+        fileChoosers.delete(tabId);
+      } else {
+        throw new Error('Pass the ref of a file input (hidden ones are listed at the end of the snapshot), or click the upload button first so a file chooser opens.');
+      }
+      return { content: text(`Attached ${files.length} file(s).`), label: files.map((f) => f.split('/').pop()).join(', ') };
+    }
+
+    case 'browser_navigate': {
+      const url = normalizeUrl(args.url);
+      await chrome.tabs.update(tabId, { url });
+      await sleep(300);
+      const loaded = await waitForLoad(tabId);
+      return { content: text(`Opened ${loaded.url} — "${loaded.title}". Take a snapshot to see it.`) };
+    }
+
+    case 'browser_go_back':
+    case 'browser_go_forward': {
+      await (tool === 'browser_go_back' ? chrome.tabs.goBack(tabId) : chrome.tabs.goForward(tabId));
+      await sleep(300);
+      const loaded = await waitForLoad(tabId);
+      return { content: text(`Now at ${loaded.url}.`) };
+    }
+
+    case 'browser_reload': {
+      await chrome.tabs.reload(tabId, { bypassCache: Boolean(args.bypassCache) });
+      await sleep(300);
+      const loaded = await waitForLoad(tabId);
+      return { content: text(`Reloaded ${loaded.url}.`) };
     }
 
     case 'browser_wait': {
       if (args.text) {
         const deadline = Date.now() + 30_000;
         while (Date.now() < deadline) {
-          const found = await inject(tabId, (t) => document.body?.innerText.includes(t), [args.text]).catch(() => false);
-          if (found) return text(`Text "${args.text}" is on the page.`);
+          if (await inject(tabId, P.hasText, [args.text]).catch(() => false)) return { content: text(`Text "${args.text}" is on the page.`) };
           await sleep(500);
         }
-        return text(`Text "${args.text}" did not appear within 30s.`);
+        return { content: text(`Text "${args.text}" did not appear within 30s.`) };
       }
       const seconds = Math.min(Math.max(Number(args.seconds) || 1, 0), 30);
       await sleep(seconds * 1000);
-      return text(`Waited ${seconds}s.`);
+      return { content: text(`Waited ${seconds}s.`) };
+    }
+
+    case 'browser_console': {
+      const all = consoleLogs.get(tabId) || [];
+      const levels = { error: ['error'], warning: ['error', 'warning'] }[args.level] || null;
+      const list = (levels ? all.filter((e) => levels.includes(e.level)) : all).slice(-100);
+      if (args.clear) consoleLogs.delete(tabId);
+      const body = list.map((e) => `[${e.level}] ${e.text.length > 500 ? `${e.text.slice(0, 500)}…` : e.text}`).join('\n');
+      return { content: text(body || 'No console messages captured yet (capture starts when the agent first touches the tab; reload to see load-time messages).') };
+    }
+
+    case 'browser_network': {
+      let list = [...(requests.get(tabId)?.values() || [])];
+      if (args.filter) list = list.filter((r) => r.url.includes(args.filter));
+      if (args.failedOnly) list = list.filter((r) => r.failed || r.status >= 400);
+      list = list.slice(-100);
+      if (args.clear) requests.delete(tabId);
+      const body = list
+        .map((r) => `${r.method} ${r.failed ? `FAILED(${r.failed})` : r.status ?? 'pending'} ${r.type} ${r.url.length > 200 ? `${r.url.slice(0, 200)}…` : r.url}`)
+        .join('\n');
+      return { content: text(body || 'No requests captured yet (capture starts when the agent first touches the tab; reload to see page-load requests).') };
+    }
+
+    case 'browser_evaluate': {
+      const host = new URL(tab.url).host;
+      const ok = await ui.confirm(chatTabId, `Run JavaScript on ${host}?`, args.expression);
+      if (!ok) throw new Error('The user declined running this script.');
+      const res = await cdp(tabId, 'Runtime.evaluate', { expression: args.expression, awaitPromise: true, returnByValue: true, userGesture: true });
+      if (res.exceptionDetails) throw new Error(res.exceptionDetails.exception?.description || res.exceptionDetails.text);
+      const v = res.result;
+      let out = v.type === 'undefined' ? 'undefined' : 'value' in v ? JSON.stringify(v.value, null, 2) : v.description || v.type;
+      if (out && out.length > 20_000) out = `${out.slice(0, 20_000)}\n…`;
+      return { content: text(out ?? 'undefined') };
     }
 
     default:
@@ -212,209 +581,9 @@ export async function runTool(tabId, tool, args) {
 }
 
 // Dialogs block script injection, so this path skips assertControllable().
-export async function handleDialog(tabId, args) {
-  if (!dialogs.has(tabId)) return text('No dialog is open.');
+async function handleDialog(tabId, args) {
+  if (!dialogs.has(tabId)) return { content: text('No dialog is open.') };
   await cdp(tabId, 'Page.handleJavaScriptDialog', { accept: Boolean(args.accept), promptText: args.promptText });
   dialogs.delete(tabId);
-  return text(args.accept ? 'Dialog accepted.' : 'Dialog dismissed.');
-}
-
-// ---- Functions below are serialized and run inside the page (isolated world).
-// They must not reference anything outside their own body.
-
-function pageSnapshot(maxChars) {
-  const state = (window.__tabhelm ||= { refs: new Map(), next: 1 });
-  state.refs = new Map();
-
-  const SKIP = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEMPLATE', 'SVG', 'HEAD', 'META', 'LINK', 'IFRAME', 'CANVAS']);
-  const ROLES = new Set([
-    'button', 'link', 'checkbox', 'radio', 'tab', 'menuitem', 'menuitemcheckbox', 'menuitemradio',
-    'option', 'switch', 'combobox', 'textbox', 'searchbox', 'slider', 'spinbutton', 'treeitem',
-  ]);
-  const clamp = (s, n) => {
-    s = (s || '').replace(/\s+/g, ' ').trim();
-    return s.length > n ? `${s.slice(0, n)}…` : s;
-  };
-
-  const lines = [];
-  let size = 0;
-  let truncated = false;
-  const push = (line) => {
-    if (truncated) return;
-    if (size + line.length > maxChars) {
-      truncated = true;
-      return;
-    }
-    if (lines[lines.length - 1] === line) return;
-    lines.push(line);
-    size += line.length + 1;
-  };
-
-  const visible = (el) =>
-    el.checkVisibility ? el.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true }) : el.getClientRects().length > 0;
-
-  function interactiveRole(el) {
-    const role = el.getAttribute('role');
-    if (role && ROLES.has(role)) return role;
-    switch (el.tagName) {
-      case 'A':
-        return el.hasAttribute('href') ? 'link' : null;
-      case 'BUTTON':
-      case 'SUMMARY':
-        return 'button';
-      case 'SELECT':
-        return 'combobox';
-      case 'TEXTAREA':
-        return 'textbox';
-      case 'INPUT': {
-        const t = (el.type || 'text').toLowerCase();
-        if (t === 'hidden') return null;
-        if (['button', 'submit', 'reset', 'image'].includes(t)) return 'button';
-        if (t === 'checkbox' || t === 'radio') return t;
-        return `textbox:${t}`;
-      }
-    }
-    const ce = el.getAttribute('contenteditable');
-    if (ce === '' || ce === 'true' || ce === 'plaintext-only') return 'textbox';
-    if (el.hasAttribute('onclick')) return 'clickable';
-    const ti = el.getAttribute('tabindex');
-    if (ti !== null && Number(ti) >= 0) return 'focusable';
-    return null;
-  }
-
-  function labelOf(el) {
-    const aria = el.getAttribute('aria-label');
-    if (aria) return clamp(aria, 80);
-    const by = el.getAttribute('aria-labelledby');
-    if (by) {
-      const t = by.split(/\s+/).map((id) => document.getElementById(id)?.innerText || '').join(' ');
-      if (t.trim()) return clamp(t, 80);
-    }
-    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName)) {
-      return clamp(el.labels?.[0]?.innerText || el.placeholder || el.getAttribute('name') || el.title || '', 80);
-    }
-    const inner = clamp(el.innerText, 80);
-    if (inner) return inner;
-    const img = el.querySelector?.('img[alt]');
-    return clamp(img?.alt || el.title || '', 80);
-  }
-
-  function describe(el, role, ref) {
-    let line = `[${ref}] ${role.replace(/^textbox:text$/, 'textbox')} "${labelOf(el)}"`;
-    if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
-      if (el.type === 'checkbox' || el.type === 'radio') line += el.checked ? ' [checked]' : '';
-      else if (el.type === 'password') line += el.value ? ' value=•••' : '';
-      else if (el.value) line += ` value="${clamp(el.value, 60)}"`;
-    } else if (el.tagName === 'SELECT') {
-      const opts = [...el.options].slice(0, 15).map((o) => clamp(o.text, 30));
-      line += ` selected="${clamp(el.selectedOptions[0]?.text, 40)}" options=[${opts.join(' | ')}${el.options.length > 15 ? ' | …' : ''}]`;
-    } else if (el.tagName === 'A') {
-      const href = el.getAttribute('href') || '';
-      if (href && !href.startsWith('javascript:')) line += ` → ${clamp(href, 60)}`;
-    }
-    const aria = (n) => el.getAttribute(n);
-    if (aria('aria-checked') === 'true') line += ' [checked]';
-    if (aria('aria-expanded')) line += aria('aria-expanded') === 'true' ? ' [expanded]' : ' [collapsed]';
-    if (aria('aria-selected') === 'true') line += ' [selected]';
-    if (el.disabled || aria('aria-disabled') === 'true') line += ' [disabled]';
-    return line;
-  }
-
-  function ownText(el) {
-    let t = '';
-    for (const n of el.childNodes) if (n.nodeType === Node.TEXT_NODE) t += n.textContent;
-    return clamp(t, 300);
-  }
-
-  function walk(root) {
-    for (const el of root.children) {
-      if (truncated) return;
-      if (SKIP.has(el.tagName)) {
-        if (el.tagName === 'IFRAME' && visible(el)) push(`[iframe ${clamp(el.title || el.src, 60)} — not readable yet]`);
-        continue;
-      }
-      if (!visible(el)) continue;
-
-      const role = interactiveRole(el);
-      if (role) {
-        const ref = `e${state.next++}`;
-        state.refs.set(ref, el);
-        push(describe(el, role, ref));
-        if (!['A', 'BUTTON', 'SUMMARY', 'SELECT', 'INPUT', 'TEXTAREA'].includes(el.tagName) && role !== 'textbox') {
-          walk(el);
-          if (el.shadowRoot) walk(el.shadowRoot);
-        }
-        continue;
-      }
-
-      const h = /^H([1-6])$/.exec(el.tagName);
-      const t = ownText(el);
-      if (h) push(`${'#'.repeat(+h[1])} ${clamp(el.innerText, 150)}`);
-      else if (t) push(t);
-      else if (el.tagName === 'IMG' && el.alt) push(`img "${clamp(el.alt, 80)}"`);
-
-      if (!h) walk(el);
-      if (el.shadowRoot) walk(el.shadowRoot);
-    }
-  }
-
-  if (document.body) walk(document.body);
-  return { url: location.href, title: document.title, text: lines.join('\n'), truncated };
-}
-
-function elementCenter(ref) {
-  const el = window.__tabhelm?.refs.get(ref);
-  if (!el || !el.isConnected) return { error: `Ref ${ref} is stale or unknown. Take a new browser_snapshot.` };
-  el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' });
-  const r = el.getBoundingClientRect();
-  if (r.width === 0 && r.height === 0) return { error: `Element ${ref} is not visible.` };
-  const x = r.left + r.width / 2;
-  const y = r.top + r.height / 2;
-  let hit = document.elementFromPoint(x, y);
-  while (hit?.shadowRoot) {
-    const inner = hit.shadowRoot.elementFromPoint(x, y);
-    if (!inner || inner === hit) break;
-    hit = inner;
-  }
-  const ok = !hit || el === hit || el.contains(hit) || hit.contains(el);
-  const covered = ok ? null : `<${hit.tagName.toLowerCase()}${hit.id ? `#${hit.id}` : ''}> "${(hit.innerText || '').trim().slice(0, 40)}"`;
-  return { x, y, covered };
-}
-
-function prepareTyping(ref, clear) {
-  const el = window.__tabhelm?.refs.get(ref);
-  if (!el || !el.isConnected) return { error: `Ref ${ref} is stale or unknown. Take a new browser_snapshot.` };
-  el.focus();
-  if (!clear) return {};
-  if (typeof el.select === 'function' && ['INPUT', 'TEXTAREA'].includes(el.tagName)) {
-    el.select();
-  } else if (el.isContentEditable) {
-    const range = document.createRange();
-    range.selectNodeContents(el);
-    const sel = getSelection();
-    sel.removeAllRanges();
-    sel.addRange(range);
-  }
-  return {};
-}
-
-function selectOption(ref, value) {
-  const el = window.__tabhelm?.refs.get(ref);
-  if (!el || !el.isConnected) return { error: `Ref ${ref} is stale or unknown. Take a new browser_snapshot.` };
-  if (el.tagName !== 'SELECT') return { error: `${ref} is not a <select>; click it and pick the option instead.` };
-  const want = String(value).trim().toLowerCase();
-  const opt = [...el.options].find((o) => o.value.toLowerCase() === want || o.text.trim().toLowerCase() === want);
-  if (!opt) return { error: `No option matching "${value}".` };
-  el.value = opt.value;
-  el.dispatchEvent(new Event('input', { bubbles: true }));
-  el.dispatchEvent(new Event('change', { bubbles: true }));
-  return { label: opt.text.trim() };
-}
-
-function scrollPage(ref, direction) {
-  const target = ref ? window.__tabhelm?.refs.get(ref) : document.scrollingElement || document.documentElement;
-  if (!target) return { error: `Ref ${ref} is stale or unknown. Take a new browser_snapshot.` };
-  const amount = (ref ? target.clientHeight : innerHeight) * 0.8;
-  target.scrollBy({ top: direction === 'down' ? amount : -amount, behavior: 'instant' });
-  return { position: Math.round(target.scrollTop), max: Math.round(target.scrollHeight - target.clientHeight) };
+  return { content: text(args.accept ? 'Dialog accepted.' : 'Dialog dismissed.') };
 }

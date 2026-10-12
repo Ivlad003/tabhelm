@@ -26,13 +26,22 @@ port.postMessage({ type: 'list_agents' });
 
 // ---------- Tab binding ----------
 
+// The agent acts on this tab unless it switched to another one via browser_tabs.
+let targetTabId = tabId;
+
 async function showTab() {
-  const tab = await chrome.tabs.get(tabId).catch(() => null);
-  els.tab.textContent = tab ? `Controls: ${tab.title || tab.url}` : 'Tab closed';
+  const tab = await chrome.tabs.get(targetTabId).catch(() => null);
+  const where = targetTabId === tabId ? 'Controls' : 'Controls another tab';
+  els.tab.textContent = tab ? `${where}: ${tab.title || tab.url}` : 'Tab closed';
 }
 showTab();
 chrome.tabs.onUpdated.addListener((id, info) => {
-  if (id === tabId && (info.title || info.url)) showTab();
+  if (id === targetTabId && (info.title || info.url)) showTab();
+});
+chrome.tabs.onRemoved.addListener((id) => {
+  if (id !== targetTabId) return;
+  targetTabId = tabId;
+  showTab();
 });
 
 // ---------- Messages from host ----------
@@ -53,6 +62,13 @@ function onMessage(msg) {
       break;
     case 'permission':
       addPermission(msg);
+      break;
+    case 'confirm':
+      addConfirm(msg);
+      break;
+    case 'target':
+      targetTabId = msg.tabId;
+      showTab();
       break;
     case 'done':
       endTurn(msg.stopReason === 'cancelled' ? 'Stopped' : null);
@@ -165,47 +181,100 @@ function onToolCall(u) {
   }
 }
 
-function addAction({ tool, args, ok, error }) {
+function addAction({ tool, args, label: detail, ok, error }) {
   agentBubble = null;
   const el = add('div', `action ${ok ? 'ok' : 'fail'}`);
   const icon = document.createElement('span');
   icon.className = 'icon';
   icon.textContent = ok ? '↳' : '✗';
   const label = document.createElement('span');
-  label.textContent = describeAction(tool, args) + (error ? ` — ${error}` : '');
+  label.textContent = describeAction(tool, args, detail) + (error ? ` — ${error}` : '');
   el.append(icon, label);
   scrollDown();
 }
 
-function describeAction(tool, a = {}) {
+function describeAction(tool, a = {}, detail) {
+  const target = (ref) => (detail ? `“${truncate(detail, 40)}”` : ref);
   switch (tool) {
     case 'browser_snapshot':
       return 'Read the page';
-    case 'browser_click':
-      return `Click ${a.ref}`;
+    case 'browser_find':
+      return `Find ${detail || `“${truncate(a.text, 30)}”`}`;
+    case 'browser_get_text':
+      return 'Read page text';
+    case 'browser_screenshot':
+      return `Screenshot${a.fullPage ? ' (full page)' : a.ref ? ` of ${a.ref}` : ''}`;
+    case 'browser_click': {
+      const kind = a.double ? 'Double-click' : a.button === 'right' ? 'Right-click' : a.button === 'middle' ? 'Middle-click' : 'Click';
+      return `${kind} ${target(a.ref)}`;
+    }
+    case 'browser_click_xy':
+      return `${a.double ? 'Double-click' : a.button === 'right' ? 'Right-click' : 'Click'} at (${a.x}, ${a.y})`;
+    case 'browser_hover':
+      return `Hover ${detail || a.ref || `(${a.x}, ${a.y})`}`;
+    case 'browser_drag':
+      return `Drag ${detail || ''}`;
     case 'browser_type':
-      return `Type “${truncate(a.text, 40)}” into ${a.ref}${a.submit ? ' + Enter' : ''}`;
+      return `Type “${truncate(a.text, 40)}” into ${target(a.ref)}${a.submit ? ' + Enter' : ''}`;
     case 'browser_select_option':
       return `Select “${a.value}” in ${a.ref}`;
     case 'browser_press_key':
       return `Press ${a.key}`;
     case 'browser_scroll':
       return `Scroll ${a.direction}`;
+    case 'browser_upload_file':
+      return `Upload ${detail || 'files'}`;
     case 'browser_navigate':
       return `Open ${a.url}`;
     case 'browser_go_back':
       return 'Go back';
-    case 'browser_screenshot':
-      return 'Take a screenshot';
-    case 'browser_get_text':
-      return 'Read page text';
+    case 'browser_go_forward':
+      return 'Go forward';
+    case 'browser_reload':
+      return 'Reload';
+    case 'browser_tabs':
+      return { list: 'List tabs', new: `New tab ${a.url || ''}`, switch: `Switch to tab ${a.tabId}`, close: `Close tab ${a.tabId}` }[a.action] || 'Tabs';
     case 'browser_wait':
       return a.text ? `Wait for “${truncate(a.text, 30)}”` : `Wait ${a.seconds || 1}s`;
     case 'browser_handle_dialog':
       return a.accept ? 'Accept dialog' : 'Dismiss dialog';
+    case 'browser_console':
+      return 'Read console';
+    case 'browser_network':
+      return 'Read network log';
+    case 'browser_evaluate':
+      return `Run JS: ${truncate(a.expression, 50)}`;
     default:
       return tool;
   }
+}
+
+// Confirmation asked by the extension itself (uploads, JS, other tabs);
+// these are shown even when auto-approve is on.
+function addConfirm(msg) {
+  agentBubble = null;
+  const card = add('div', 'card');
+  const title = document.createElement('div');
+  title.className = 'title';
+  title.textContent = msg.title;
+  const detail = document.createElement('pre');
+  detail.className = 'detail';
+  detail.textContent = msg.detail || '';
+  const options = document.createElement('div');
+  options.className = 'options';
+  for (const [name, allow] of [['Allow', true], ['Deny', false]]) {
+    const b = document.createElement('button');
+    b.className = `btn${allow ? ' primary' : ''}`;
+    b.textContent = name;
+    b.onclick = () => {
+      port.postMessage({ type: 'confirm_response', id: msg.id, allow });
+      card.classList.add('resolved');
+      options.replaceChildren(Object.assign(document.createElement('span'), { textContent: `→ ${name}` }));
+    };
+    options.append(b);
+  }
+  card.append(title, detail, options);
+  scrollDown();
 }
 
 function addPermission(msg) {

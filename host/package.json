@@ -7,7 +7,8 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "install-host": "node scripts/install.js",
     "smoke": "node scripts/smoke.js",
-    "e2e": "node scripts/e2e.js"
+    "e2e": "node scripts/e2e.js",
+    "test:tools": "node scripts/tools-test.js"
   },
   "keywords": [],
   "author": "",
