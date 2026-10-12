@@ -3,9 +3,10 @@
 // Extension <-> host protocol (JSON messages):
 //   ext -> host: list_agents | start {tabId, agentId} | prompt {tabId, text}
 //                cancel {tabId} | stop {tabId} | permission_response {tabId, id, optionId}
-//                set_auto_approve {tabId, value} | set_config {tabId, configId, value}
+//                set_auto_approve {tabId, value} | set_config {tabId, configId, value} | authenticate {tabId, methodId}
 //                tool_result {id, ok, content|error}
 //   host -> ext: agents {agents} | status {tabId, state} | update {tabId, update} | config {tabId, options}
+//                auth {tabId, agent, methods}
 //                permission {tabId, id, ...} | done {tabId} | error {tabId, message}
 //                tool_call {id, tabId, tool, args}
 
@@ -13,7 +14,7 @@ import { appendFileSync, mkdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { createNativeChannel } from './native-messaging.js';
-import { availableAgents, getAgent } from './agents.js';
+import { listAgents, getAgent } from './agents.js';
 import { startToolServer } from './tool-server.js';
 import { AgentSession } from './session.js';
 
@@ -48,14 +49,14 @@ const toolServer = await startToolServer({
     }),
 });
 log(`host started, tool server ${toolServer.url}`);
-send({ type: 'agents', agents: availableAgents() });
+send({ type: 'agents', agents: listAgents() });
 
 async function handleMessage(msg) {
   const { tabId } = msg;
   try {
     switch (msg.type) {
       case 'list_agents':
-        send({ type: 'agents', agents: availableAgents() });
+        send({ type: 'agents', agents: listAgents() });
         break;
 
       case 'start': {
@@ -100,6 +101,10 @@ async function handleMessage(msg) {
         if (session) session.autoApprove = Boolean(msg.value);
         break;
       }
+
+      case 'authenticate':
+        await requireSession(tabId).authenticate(msg.methodId);
+        break;
 
       case 'set_config':
         await requireSession(tabId).setConfigOption(msg.configId, msg.value);

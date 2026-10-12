@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>TabHelm</title>
+    <meta name="description" content="A Chrome side panel that lets terminal coding agents — Claude Code, Codex, Cursor, Gemini, Antigravity, OpenCode, Qoder, Grok — read, click and type on the tab you are looking at." />
+    <link rel="icon" href="logo.svg" type="image/svg+xml" />
+    <style>
+      :root {
+        --bg: #fbfbfa;
+        --surface: #ffffff;
+        --text: #18181b;
+        --muted: #62626b;
+        --border: #e4e4e0;
+        --accent: #2f6fde;
+        --accent-soft: #e8f0fd;
+        --code-bg: #f2f2ef;
+        --ok: #1f8a4c;
+        color-scheme: light;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #141416;
+          --surface: #1c1c1f;
+          --text: #ececef;
+          --muted: #9b9ba4;
+          --border: #2c2c31;
+          --accent: #6b9af2;
+          --accent-soft: #1d2a42;
+          --code-bg: #232327;
+          --ok: #4cc27f;
+          color-scheme: dark;
+        }
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font: 16px/1.6 system-ui, -apple-system, 'Segoe UI', sans-serif;
+      }
+      a { color: var(--accent); }
+      .wrap { max-width: 980px; margin: 0 auto; padding: 0 20px; }
+
+      header.top {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 18px 0;
+      }
+      header.top img { width: 32px; height: 32px; }
+      header.top .name { font-weight: 700; font-size: 18px; flex: 1; }
+      .lang { display: flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+      .lang button {
+        font: inherit; font-size: 13px; padding: 4px 10px; border: 0; background: transparent; color: var(--muted); cursor: pointer;
+      }
+      .lang button[aria-pressed='true'] { background: var(--accent-soft); color: var(--text); font-weight: 600; }
+      header.top .gh { font-size: 14px; color: var(--muted); text-decoration: none; }
+
+      .hero { padding: 48px 0 36px; display: grid; gap: 22px; }
+      .hero h1 { font-size: clamp(30px, 5vw, 46px); line-height: 1.15; margin: 0; letter-spacing: -0.02em; max-width: 760px; }
+      .hero p.lead { font-size: 19px; color: var(--muted); margin: 0; max-width: 700px; }
+      .cta { display: flex; flex-wrap: wrap; gap: 12px; }
+      .btn {
+        display: inline-flex; align-items: center; gap: 8px; padding: 11px 18px; border-radius: 10px;
+        font-weight: 600; text-decoration: none; border: 1px solid var(--border); color: var(--text); background: var(--surface);
+      }
+      .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+      .btn small { font-weight: 400; opacity: 0.8; }
+
+      .install {
+        background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 18px 20px; display: grid; gap: 10px;
+      }
+      .install h2 { margin: 0; font-size: 15px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+      .cmd { display: flex; gap: 8px; align-items: stretch; }
+      .cmd code {
+        flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; background: var(--code-bg); padding: 12px 14px;
+        border-radius: 8px; font: 14px/1.4 ui-monospace, 'SF Mono', Menlo, monospace;
+      }
+      .cmd button {
+        font: inherit; font-size: 14px; padding: 0 14px; border-radius: 8px; border: 1px solid var(--border);
+        background: var(--surface); color: var(--text); cursor: pointer;
+      }
+      .install .note { font-size: 14px; color: var(--muted); margin: 0; }
+      /* Grid items default to min-width: auto; the nowrap command would widen the page. */
+      .hero > *, .install > * { min-width: 0; }
+
+      section { padding: 36px 0; border-top: 1px solid var(--border); }
+      section h2 { font-size: 26px; margin: 0 0 18px; letter-spacing: -0.01em; }
+
+      .diagram { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 16px; overflow-x: auto; }
+      .diagram svg { width: 100%; min-width: 640px; height: auto; display: block; }
+      .diagram .box { fill: var(--surface); stroke: var(--border); stroke-width: 1.5; }
+      .diagram .box.accent { fill: var(--accent-soft); stroke: var(--accent); }
+      .diagram text { fill: var(--text); font: 600 14px system-ui, sans-serif; }
+      .diagram text.sub { fill: var(--muted); font-weight: 400; font-size: 12px; }
+      .diagram .arrow { stroke: var(--muted); stroke-width: 1.5; fill: none; marker-end: url(#arrowhead); }
+      .diagram .label { fill: var(--muted); font: 12px ui-monospace, Menlo, monospace; }
+
+      .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; counter-reset: step; }
+      .step { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; }
+      .step::before {
+        counter-increment: step; content: counter(step); display: inline-grid; place-items: center; width: 26px; height: 26px;
+        border-radius: 50%; background: var(--accent); color: #fff; font-weight: 700; font-size: 14px; margin-bottom: 8px;
+      }
+      .step h3 { margin: 0 0 4px; font-size: 17px; }
+      .step p { margin: 0; color: var(--muted); font-size: 15px; }
+      .step code { font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+
+      .agents { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+      .agent { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+      .agent b { display: block; }
+      .agent span { font-size: 13px; color: var(--muted); font-family: ui-monospace, Menlo, monospace; }
+
+      .features { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+      .feature h3 { margin: 0 0 4px; font-size: 17px; }
+      .feature p { margin: 0; color: var(--muted); font-size: 15px; }
+
+      footer { padding: 30px 0 50px; color: var(--muted); font-size: 14px; border-top: 1px solid var(--border); }
+
+      [data-lang] { display: none; }
+      html[lang='en'] [data-lang='en'], html[lang='uk'] [data-lang='uk'] { display: revert; }
+      @media (max-width: 560px) {
+        .cmd { flex-direction: column; }
+        .cmd button { padding: 8px; }
+        header.top .gh { display: none; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header class="top">
+        <img src="logo.svg" alt="" />
+        <span class="name">TabHelm</span>
+        <div class="lang" role="group" aria-label="Language">
+          <button type="button" data-set-lang="en">EN</button>
+          <button type="button" data-set-lang="uk">UA</button>
+        </div>
+        <a class="gh" href="https://github.com/Ivlad003/tabhelm">GitHub ↗</a>
+      </header>
+
+      <div class="hero">
+        <h1>
+          <span data-lang="en">Let your terminal agent drive the tab you're looking at</span>
+          <span data-lang="uk">Ваш терміналний агент керує вкладкою, яку ви бачите</span>
+        </h1>
+        <p class="lead">
+          <span data-lang="en">TabHelm is a Chrome side panel chat. Pick Claude Code, Codex, Cursor, Gemini, Antigravity, OpenCode, Qoder or Grok — the agent runs on your machine with its own login and reads, clicks and types on the current tab of your real, logged-in browser.</span>
+          <span data-lang="uk">TabHelm — це чат у бічній панелі Chrome. Оберіть Claude Code, Codex, Cursor, Gemini, Antigravity, OpenCode, Qoder або Grok: агент працює на вашому комп'ютері зі своїм логіном і читає, клікає та вводить текст на поточній вкладці вашого звичайного браузера.</span>
+        </p>
+        <div class="cta">
+          <a class="btn primary" href="https://github.com/Ivlad003/tabhelm/releases/latest/download/tabhelm-extension.zip">
+            <span data-lang="en">Download extension</span><span data-lang="uk">Завантажити розширення</span> <small>.zip</small>
+          </a>
+          <a class="btn" href="https://github.com/Ivlad003/tabhelm/releases/latest">
+            <span data-lang="en">All releases</span><span data-lang="uk">Усі релізи</span>
+          </a>
+        </div>
+
+        <div class="install">
+          <h2><span data-lang="en">Install in one command</span><span data-lang="uk">Встановлення однією командою</span></h2>
+          <div class="cmd">
+            <code id="cmd">curl -fsSL https://ivlad003.github.io/tabhelm/install.sh | bash</code>
+            <button type="button" id="copy"><span data-lang="en">Copy</span><span data-lang="uk">Копіювати</span></button>
+          </div>
+          <p class="note">
+            <span data-lang="en">Linux and macOS, Node.js 20+. Installs into <code>~/.tabhelm/app</code>, sets up the native host and prints the folder to load in Chrome.</span>
+            <span data-lang="uk">Linux і macOS, Node.js 20+. Встановлює в <code>~/.tabhelm/app</code>, реєструє native host і показує папку, яку треба завантажити в Chrome.</span>
+          </p>
+        </div>
+      </div>
+
+      <section>
+        <h2><span data-lang="en">How it works</span><span data-lang="uk">Як це працює</span></h2>
+        <div class="diagram">
+          <svg viewBox="0 0 900 250" role="img" aria-label="Side panel → native host → agent → browser tools → tab">
+            <defs>
+              <marker id="arrowhead" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M0 0L10 5L0 10z" fill="currentColor" style="fill: var(--muted)" />
+              </marker>
+            </defs>
+            <rect class="box accent" x="10" y="20" width="200" height="90" rx="12" />
+            <text x="30" y="55">Chrome side panel</text>
+            <text class="sub" x="30" y="78">chat · model picker</text>
+            <text class="sub" x="30" y="96">approvals</text>
+
+            <rect class="box" x="10" y="150" width="200" height="80" rx="12" />
+            <text x="30" y="185">Your tab</text>
+            <text class="sub" x="30" y="207">real session, logged in</text>
+
+            <rect class="box" x="300" y="20" width="250" height="210" rx="12" />
+            <text x="320" y="55">TabHelm host (Node)</text>
+            <text class="sub" x="320" y="80">ACP client</text>
+            <text class="sub" x="320" y="100">MCP browser tools</text>
+            <text class="sub" x="320" y="120">127.0.0.1 + token</text>
+
+            <rect class="box accent" x="640" y="20" width="250" height="210" rx="12" />
+            <text x="660" y="55">Terminal agent</text>
+            <text class="sub" x="660" y="80">Claude Code · Codex · Cursor</text>
+            <text class="sub" x="660" y="100">Gemini · Antigravity · Qoder</text>
+            <text class="sub" x="660" y="120">OpenCode · Grok</text>
+
+            <path class="arrow" d="M210 60 H296" />
+            <text class="label" x="218" y="52">native msg</text>
+            <path class="arrow" d="M550 70 H636" />
+            <text class="label" x="560" y="62">ACP</text>
+            <path class="arrow" d="M640 170 H554" />
+            <text class="label" x="560" y="162">MCP tools</text>
+            <path class="arrow" d="M300 190 H214" />
+            <text class="label" x="222" y="182">click / type</text>
+          </svg>
+        </div>
+      </section>
+
+      <section>
+        <h2><span data-lang="en">Get started</span><span data-lang="uk">Початок роботи</span></h2>
+        <div class="steps">
+          <div class="step">
+            <h3><span data-lang="en">Run the installer</span><span data-lang="uk">Запустіть інсталятор</span></h3>
+            <p><span data-lang="en">One command sets up the host and registers it with Chrome, Chromium, Brave and Edge.</span><span data-lang="uk">Одна команда встановлює хост і реєструє його в Chrome, Chromium, Brave та Edge.</span></p>
+          </div>
+          <div class="step">
+            <h3><span data-lang="en">Load the extension</span><span data-lang="uk">Завантажте розширення</span></h3>
+            <p><span data-lang="en">Open <code>chrome://extensions</code>, turn on Developer mode, click Load unpacked and choose <code>~/.tabhelm/app/extension</code>.</span><span data-lang="uk">Відкрийте <code>chrome://extensions</code>, увімкніть Developer mode, натисніть Load unpacked і виберіть <code>~/.tabhelm/app/extension</code>.</span></p>
+          </div>
+          <div class="step">
+            <h3><span data-lang="en">Connect an agent</span><span data-lang="uk">Підключіть агента</span></h3>
+            <p><span data-lang="en">Click the TabHelm icon on any page, pick an agent and a model, press Connect and describe the task.</span><span data-lang="uk">Натисніть іконку TabHelm на будь-якій сторінці, оберіть агента й модель, натисніть Connect і опишіть завдання.</span></p>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2><span data-lang="en">Supported agents</span><span data-lang="uk">Підтримувані агенти</span></h2>
+        <div class="agents">
+          <div class="agent"><b>Claude Code</b><span>claude-agent-acp</span></div>
+          <div class="agent"><b>Codex</b><span>codex-acp</span></div>
+          <div class="agent"><b>Cursor Agent CLI</b><span>agent acp</span></div>
+          <div class="agent"><b>Gemini CLI</b><span>gemini --acp</span></div>
+          <div class="agent"><b>Google Antigravity</b><span>agy ACP server</span></div>
+          <div class="agent"><b>OpenCode</b><span>opencode acp</span></div>
+          <div class="agent"><b>Qoder CLI</b><span>qodercli --acp</span></div>
+          <div class="agent"><b>Grok</b><span>grok agent stdio</span></div>
+        </div>
+      </section>
+
+      <section>
+        <h2><span data-lang="en">What the agent can do</span><span data-lang="uk">Що вміє агент</span></h2>
+        <div class="features">
+          <div class="feature">
+            <h3><span data-lang="en">Read the page</span><span data-lang="uk">Читати сторінку</span></h3>
+            <p><span data-lang="en">Compact outline with element refs, text search, full text, screenshots — including iframes.</span><span data-lang="uk">Компактний конспект із посиланнями на елементи, пошук, повний текст і скриншоти, зокрема всередині iframe.</span></p>
+          </div>
+          <div class="feature">
+            <h3><span data-lang="en">Act like a person</span><span data-lang="uk">Діяти як людина</span></h3>
+            <p><span data-lang="en">Real (trusted) clicks, typing, hover, drag and drop, key combos, file uploads, scrolling and tabs.</span><span data-lang="uk">Справжні (trusted) кліки, введення, hover, drag & drop, комбінації клавіш, завантаження файлів, прокрутка й вкладки.</span></p>
+          </div>
+          <div class="feature">
+            <h3><span data-lang="en">Debug your app</span><span data-lang="uk">Налагоджувати ваш сайт</span></h3>
+            <p><span data-lang="en">Console messages, network requests and JavaScript evaluation for the tab you are building.</span><span data-lang="uk">Повідомлення console, мережеві запити й виконання JavaScript на вкладці, яку ви розробляєте.</span></p>
+          </div>
+          <div class="feature">
+            <h3><span data-lang="en">Stay in control</span><span data-lang="uk">Контроль за вами</span></h3>
+            <p><span data-lang="en">One tab per chat. Uploads, scripts and other tabs always ask first; every action is logged in the panel.</span><span data-lang="uk">Одна вкладка на чат. Завантаження файлів, скрипти й інші вкладки завжди потребують підтвердження, а кожна дія видна в панелі.</span></p>
+          </div>
+        </div>
+      </section>
+
+      <footer>
+        <span data-lang="en">TabHelm is an independent open project and is not affiliated with Google, Anthropic, OpenAI, Cursor, Qoder or xAI.</span>
+        <span data-lang="uk">TabHelm — незалежний відкритий проєкт, не пов'язаний із Google, Anthropic, OpenAI, Cursor, Qoder чи xAI.</span>
+        · <a href="https://github.com/Ivlad003/tabhelm">GitHub</a>
+      </footer>
+    </div>
+
+    <script>
+      const setLang = (lang) => {
+        document.documentElement.lang = lang;
+        for (const b of document.querySelectorAll('[data-set-lang]')) b.setAttribute('aria-pressed', String(b.dataset.setLang === lang));
+        try { localStorage.setItem('lang', lang); } catch {}
+      };
+      let initial = 'en';
+      try { initial = localStorage.getItem('lang') || (/^(uk|ru)/i.test(navigator.language) ? 'uk' : 'en'); } catch {}
+      setLang(initial);
+      for (const b of document.querySelectorAll('[data-set-lang]')) b.onclick = () => setLang(b.dataset.setLang);
+
+      document.getElementById('copy').onclick = async (e) => {
+        const button = e.currentTarget;
+        try {
+          await navigator.clipboard.writeText(document.getElementById('cmd').textContent);
+          button.dataset.done = '1';
+          const spans = button.querySelectorAll('span');
+          const old = [...spans].map((s) => s.textContent);
+          spans[0].textContent = 'Copied';
+          spans[1].textContent = 'Скопійовано';
+          setTimeout(() => spans.forEach((s, i) => (s.textContent = old[i])), 1500);
+        } catch {}
+      };
+    </script>
+  </body>
+</html>

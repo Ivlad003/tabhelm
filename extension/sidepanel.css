@@ -379,3 +379,19 @@ select:focus,
 .config[hidden] {
   display: none;
 }
+
+.install-hints {
+  margin-top: 16px;
+  text-align: left;
+  font-size: 12px;
+}
+
+.install-hints summary {
+  cursor: pointer;
+  text-align: center;
+}
+
+.install-hints ul {
+  padding-left: 18px;
+  overflow-wrap: anywhere;
+}

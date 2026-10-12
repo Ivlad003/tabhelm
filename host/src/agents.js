@@ -1,72 +1,110 @@
-import { accessSync, constants } from 'node:fs';
-import { delimiter, join, dirname } from 'node:path';
+import { accessSync, constants, realpathSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { delimiter, join, dirname, isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const hostRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const localBin = (name) => join(hostRoot, 'node_modules', '.bin', name);
 
-// Every agent is launched as an ACP server over stdio. `requires` is the
-// binary that must be on PATH for the agent to be offered in the side panel.
+// Agents installed by `npm run install-agent <id>` live here.
+export const AGENTS_DIR = join(homedir(), '.tabhelm', 'agents');
+
+// Every agent is launched as an ACP server over stdio. `launch` lists
+// candidates in priority order; the first whose command exists is used.
+// `requires` (optional) must also be on PATH, e.g. the CLI an adapter drives.
 export const AGENTS = [
   {
     id: 'claude',
     name: 'Claude Code',
     requires: 'claude',
-    command: localBin('claude-agent-acp'),
-    args: [],
+    launch: [{ command: localBin('claude-agent-acp'), args: [] }],
+    installHint: 'Install Claude Code: https://claude.com/claude-code',
   },
   {
     id: 'codex',
     name: 'Codex',
     requires: 'codex',
-    command: localBin('codex-acp'),
-    args: [],
+    launch: [{ command: localBin('codex-acp'), args: [] }],
+    installHint: 'Install Codex CLI: npm i -g @openai/codex',
   },
   {
     id: 'gemini',
     name: 'Gemini CLI',
-    requires: 'gemini',
-    command: 'gemini',
-    args: ['--acp'],
+    launch: [{ command: 'gemini', args: ['--acp'] }],
+    installHint: 'Install Gemini CLI: npm i -g @google/gemini-cli',
+  },
+  {
+    id: 'antigravity',
+    name: 'Google Antigravity',
+    // Google's official ACP server (from the ACP registry), not the `agy` TUI.
+    launch: [{ command: join(AGENTS_DIR, 'antigravity', 'agy_acp_server.par'), args: process.platform === 'linux' ? ['--uid='] : [] }],
+    installHint: 'Run: npm run install-agent antigravity',
   },
   {
     id: 'cursor',
-    name: 'Cursor Agent',
-    requires: 'cursor-agent',
-    command: 'cursor-agent',
-    args: ['acp'],
+    name: 'Cursor Agent CLI',
+    // The CLI ships as `agent`; older installs also have `cursor-agent`.
+    launch: [
+      // `agent` is a generic name, so only accept it when it resolves into a Cursor install.
+      { command: 'agent', args: ['acp'], pathIncludes: 'cursor' },
+      { command: 'cursor-agent', args: ['acp'] },
+    ],
+    installHint: 'Install Cursor CLI: curl https://cursor.com/install -fsS | bash',
   },
   {
     id: 'opencode',
     name: 'OpenCode',
-    requires: 'opencode',
-    command: 'opencode',
-    args: ['acp'],
+    launch: [{ command: 'opencode', args: ['acp'] }],
+    installHint: 'Install OpenCode: curl -fsSL https://opencode.ai/install | bash',
+  },
+  {
+    id: 'qoder',
+    name: 'Qoder CLI',
+    launch: [
+      { command: 'qodercli', args: ['--acp'] },
+      { command: join(AGENTS_DIR, 'qoder', 'node_modules', '.bin', 'qodercli'), args: ['--acp'] },
+    ],
+    installHint: 'Run: npm run install-agent qoder (or curl -fsSL https://qoder.com/install | bash)',
   },
   {
     id: 'grok',
     name: 'Grok (experimental)',
-    requires: 'grok',
-    command: 'grok',
-    args: ['agent', 'stdio'],
+    launch: [{ command: 'grok', args: ['agent', 'stdio'] }],
+    installHint: 'Install Grok CLI from x.ai',
   },
 ];
 
-function onPath(binary) {
-  for (const dir of (process.env.PATH || '').split(delimiter)) {
-    if (!dir) continue;
+function findExecutable(command) {
+  const candidates = isAbsolute(command) ? [command] : (process.env.PATH || '').split(delimiter).filter(Boolean).map((d) => join(d, command));
+  for (const path of candidates) {
     try {
-      accessSync(join(dir, binary), constants.X_OK);
-      return true;
+      accessSync(path, constants.X_OK);
+      return path;
     } catch {}
   }
-  return false;
+  return null;
 }
 
-export function availableAgents() {
-  return AGENTS.filter((a) => onPath(a.requires)).map(({ id, name }) => ({ id, name }));
+function resolveLaunch(agent) {
+  if (agent.requires && !findExecutable(agent.requires)) return null;
+  for (const candidate of agent.launch) {
+    const path = findExecutable(candidate.command);
+    if (!path) continue;
+    if (candidate.pathIncludes && !realpathSync(path).toLowerCase().includes(candidate.pathIncludes)) continue;
+    return { command: path, args: candidate.args };
+  }
+  return null;
+}
+
+// All known agents; the panel shows uninstalled ones disabled with a hint.
+export function listAgents() {
+  return AGENTS.map((a) => ({ id: a.id, name: a.name, installed: Boolean(resolveLaunch(a)), installHint: a.installHint }));
 }
 
 export function getAgent(id) {
-  return AGENTS.find((a) => a.id === id);
+  const agent = AGENTS.find((a) => a.id === id);
+  if (!agent) return null;
+  const launch = resolveLaunch(agent);
+  if (!launch) throw new Error(`${agent.name} is not installed. ${agent.installHint}`);
+  return { id: agent.id, name: agent.name, ...launch };
 }

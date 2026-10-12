@@ -71,6 +71,9 @@ function onMessage(msg) {
     case 'config':
       renderConfig(msg.options);
       break;
+    case 'auth':
+      addAuth(msg);
+      break;
     case 'target':
       targetTabId = msg.tabId;
       showTab();
@@ -95,20 +98,40 @@ function onMessage(msg) {
 
 async function fillAgents(agents) {
   const { lastAgent } = await chrome.storage.local.get('lastAgent');
+  const installed = agents.filter((a) => a.installed);
+  const preferred = installed.find((a) => a.id === lastAgent) || installed[0];
   els.agent.replaceChildren(
     ...agents.map((a) => {
-      const opt = new Option(a.name, a.id);
-      opt.selected = a.id === lastAgent;
+      const opt = new Option(a.installed ? a.name : `${a.name} — not installed`, a.id, false, a === preferred);
+      opt.disabled = !a.installed;
+      if (!a.installed) opt.title = a.installHint;
       return opt;
     }),
   );
-  if (!agents.length) els.agent.append(new Option('No agents found on PATH', ''));
+  if (!installed.length) els.agent.prepend(new Option('No agents found on PATH', '', true, true));
+
+  // Tell the user how to add the missing ones.
+  const missing = agents.filter((a) => !a.installed);
+  document.getElementById('install-hints')?.remove();
+  if (missing.length && els.empty?.isConnected) {
+    const details = document.createElement('details');
+    details.id = 'install-hints';
+    details.className = 'install-hints';
+    details.innerHTML = '<summary></summary><ul></ul>';
+    details.querySelector('summary').textContent = `${missing.length} more agent${missing.length > 1 ? 's' : ''} available`;
+    for (const a of missing) {
+      const li = document.createElement('li');
+      li.append(Object.assign(document.createElement('b'), { textContent: a.name }), document.createTextNode(` — ${a.installHint}`));
+      details.querySelector('ul').append(li);
+    }
+    els.empty.append(details);
+  }
   syncControls();
 }
 
 function onStatus(msg) {
   if (msg.state === 'starting') {
-    setStatus('starting', `Starting ${msg.agent.name}…`);
+    setStatus('starting', msg.detail || `Starting ${msg.agent.name}…`);
   } else if (msg.state === 'ready') {
     connected = true;
     restorePrefs = true;
@@ -161,6 +184,32 @@ function onUpdate(u) {
       );
       break;
   }
+  scrollDown();
+}
+
+// The agent needs a login before it can open a session.
+function addAuth(msg) {
+  setStatus('starting', 'Sign-in required');
+  const card = add('div', 'card');
+  const title = document.createElement('div');
+  title.className = 'title';
+  title.textContent = `${msg.agent.name} needs you to sign in`;
+  const options = document.createElement('div');
+  options.className = 'options';
+  for (const m of msg.methods) {
+    const b = document.createElement('button');
+    b.className = 'btn primary';
+    b.textContent = m.name;
+    if (m.description) b.title = m.description;
+    b.onclick = () => {
+      port.postMessage({ type: 'authenticate', methodId: m.id });
+      card.classList.add('resolved');
+      options.replaceChildren(Object.assign(document.createElement('span'), { textContent: `→ ${m.name}. Finish signing in in the window that opens.` }));
+    };
+    options.append(b);
+  }
+  card.append(title, options);
+  els.connect.disabled = false;
   scrollDown();
 }
 

@@ -20,7 +20,7 @@ const ch = createNativeChannel({
   onClose: () => console.log('host closed'),
   onMessage(msg) {
     if (msg.type === 'agents') {
-      console.log('agents:', msg.agents.map((a) => a.id).join(', '));
+      console.log('agents:', msg.agents.filter((a) => a.installed).map((a) => a.id).join(', '));
       ch.send({ type: 'start', tabId, agentId, autoApprove: true });
     } else if (msg.type === 'status') {
       console.log('status:', msg.state, msg.detail || '');

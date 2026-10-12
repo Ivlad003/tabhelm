@@ -64,7 +64,7 @@ export class AgentSession {
       this.connection.initialize({
         protocolVersion: acp.PROTOCOL_VERSION,
         clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false },
-        clientInfo: { name: 'tabhelm', version: '0.3.0' },
+        clientInfo: { name: 'tabhelm', version: '0.4.0' },
       }),
       this.exited.then(() => {
         throw new Error(`${agent.name} exited during startup. Check that it is installed and logged in.`);
@@ -84,17 +84,38 @@ export class AgentSession {
       },
     ];
 
+    this.mcpServers = mcpServers;
+    this.authMethods = init.authMethods || [];
+    await this.openSession();
+  }
+
+  // Creates the ACP session. If the agent needs a login first, the panel is
+  // shown its auth methods and openSession() runs again after authenticate().
+  async openSession() {
+    const { agent } = this;
     try {
-      const session = await this.connection.newSession({ cwd: this.workspace, mcpServers });
+      const session = await this.connection.newSession({ cwd: this.workspace, mcpServers: this.mcpServers });
       this.sessionId = session.sessionId;
       this.configOptions = session.configOptions || [];
     } catch (err) {
-      const methods = (init.authMethods || []).map((m) => m.name).join(', ');
-      const hint = methods ? ` The agent asks for authentication (${methods}); log in once in a terminal and retry.` : '';
-      throw new Error(`${err.message || err}.${hint}`);
+      if (err?.code === -32000 && this.authMethods.length) {
+        this.emit({
+          type: 'auth',
+          agent: { id: agent.id, name: agent.name },
+          methods: this.authMethods.map((m) => ({ id: m.id, name: m.name, description: m.description, type: m.type || 'agent' })),
+        });
+        return;
+      }
+      throw new Error(err?.message || String(err));
     }
     this.emit({ type: 'status', state: 'ready', agent: { id: agent.id, name: agent.name } });
     this.emitConfig();
+  }
+
+  async authenticate(methodId) {
+    this.emit({ type: 'status', state: 'starting', agent: { id: this.agent.id, name: this.agent.name }, detail: 'Signing in…' });
+    await this.connection.authenticate({ methodId });
+    await this.openSession();
   }
 
   emitConfig() {

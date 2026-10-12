@@ -1,0 +1,39 @@
+# Builds TabHelm and publishes a GitHub release when a v* tag is pushed.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Check tag matches manifest version
+        run: |
+          VERSION="$(node -p "require('./extension/manifest.json').version")"
+          [ "v$VERSION" = "$GITHUB_REF_NAME" ] || { echo "Tag $GITHUB_REF_NAME != manifest $VERSION"; exit 1; }
+
+      - name: Build
+        run: npm run build
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          gh release create "$GITHUB_REF_NAME" \
+            "dist/tabhelm-extension-$VERSION.zip" \
+            "dist/tabhelm-$VERSION.tar.gz" \
+            dist/tabhelm-extension.zip \
+            dist/tabhelm.tar.gz \
+            --title "TabHelm $VERSION" \
+            --notes "Install: \`curl -fsSL https://ivlad003.github.io/tabhelm/install.sh | bash\` — or download \`tabhelm-extension.zip\` and load it unpacked. See the README for details."

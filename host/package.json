@@ -1,6 +1,6 @@
 {
   "name": "tabhelm-host",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "TabHelm native host: bridges the Chrome side panel to terminal coding agents over ACP",
   "private": true,
   "type": "module",
@@ -9,7 +9,8 @@
     "install-host": "node scripts/install.js",
     "smoke": "node scripts/smoke.js",
     "e2e": "node scripts/e2e.js",
-    "test:tools": "node scripts/tools-test.js"
+    "test:tools": "node scripts/tools-test.js",
+    "install-agent": "node scripts/install-agent.js"
   },
   "dependencies": {
     "@agentclientprotocol/claude-agent-acp": "^0.89.1",
