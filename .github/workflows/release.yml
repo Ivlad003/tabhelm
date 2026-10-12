@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 jobs:
   release:
@@ -37,3 +38,8 @@ jobs:
             dist/tabhelm.tar.gz \
             --title "TabHelm $VERSION" \
             --notes "Install: \`curl -fsSL https://ivlad003.github.io/tabhelm/install.sh | bash\` — or download \`tabhelm-extension.zip\` and load it unpacked. See the README for details."
+
+      - name: Refresh the site so the panel's news feed announces this version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run pages.yml --repo "$GITHUB_REPOSITORY" --ref main

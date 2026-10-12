@@ -1,0 +1,18 @@
+{
+  "news": [
+    {
+      "id": "2026-10-failover-export",
+      "date": "2026-10-12",
+      "minVersion": "0.6.0",
+      "title": {
+        "en": "Continue with another agent",
+        "uk": "Продовження з іншим агентом"
+      },
+      "text": {
+        "en": "If an agent fails mid-task, hand the job to another CLI in one click. Export the chat and action log from the Export menu.",
+        "uk": "Якщо агент падає посеред завдання, передайте його іншому CLI одним кліком. Чат і журнал дій можна завантажити через меню Export."
+      },
+      "url": "https://github.com/Ivlad003/tabhelm#switching-agents-and-continuing-after-a-failure"
+    }
+  ]
+}

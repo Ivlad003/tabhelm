@@ -8,12 +8,12 @@
 // E2E_SWITCH=<agentId> afterwards switches agents and checks the conversation was handed over,
 // then presses New chat;
 // E2E_FAILOVER=<agentId> kills the first agent mid-task, continues with <agentId>
-// via the panel's "Continue with" card, then checks the Markdown export)
+// via the panel's "Continue with" card, then checks the Markdown export;
+// E2E_NEWS=1 only checks the update/news banner against a local feed)
 import puppeteer from 'puppeteer-core';
 import http from 'node:http';
-import { existsSync, mkdtempSync, statSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
-import { readdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -33,7 +33,13 @@ const PAGE = `<!doctype html><title>Signup test</title>
 <label><input type=checkbox id=terms> I agree</label>
 <button id=save onclick="document.getElementById('out').textContent='Saved: '+document.getElementById('name').value+' / '+document.getElementById('color').value+' / '+(document.getElementById('terms').checked?'agreed':'no')">Save</button>
 <p id=out></p>`;
-const server = http.createServer((q, r) => r.writeHead(200, { 'content-type': 'text/html' }).end(PAGE)).listen(0, '127.0.0.1');
+const NEWS = {
+  latest: { version: '9.9.9', url: 'https://example.com/release', install: 'curl -fsSL https://example.com/install.sh | bash' },
+  news: [{ id: 'test-news', title: { en: 'Test news title', uk: 'Тестова новина' }, text: { en: 'Body', uk: 'Текст' } }],
+};
+const server = http
+  .createServer((q, r) => (q.url === '/news.json' ? r.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(NEWS)) : r.writeHead(200, { 'content-type': 'text/html' }).end(PAGE)))
+  .listen(0, '127.0.0.1');
 await new Promise((r) => server.once('listening', r));
 const url = `http://127.0.0.1:${server.address().port}/`;
 
@@ -56,6 +62,8 @@ const sw = await swTarget.worker();
 const tabId = await sw.evaluate(async (u) => (await chrome.tabs.query({ url: u + '*' }))[0].id, url);
 console.log('ext', extId, 'tab', tabId);
 
+if (process.env.E2E_NEWS) await sw.evaluate((u) => chrome.storage.local.set({ newsUrl: `${u}news.json` }), url);
+
 // Open the panel in its own window so the test page stays the visible tab in
 // its window (like the real side panel); background tabs render no frames.
 const panelUrl = `chrome-extension://${extId}/sidepanel.html?tabId=${tabId}`;
@@ -63,6 +71,33 @@ await sw.evaluate((url) => chrome.windows.create({ url, type: 'popup', width: 42
 const panel = await (await browser.waitForTarget((t) => t.url() === panelUrl)).page();
 panel.on('console', (m) => console.log('[panel]', m.text()));
 await panel.waitForSelector('#agent');
+
+if (process.env.E2E_NEWS) {
+  const bannerText = () => panel.$eval('#news', (e) => (e.hidden ? '' : e.innerText.replace(/\s+/g, ' ')));
+  await panel.waitForSelector('.banner.update', { timeout: 15000 });
+  const update = await bannerText();
+  await panel.click('.banner .btn.primary');
+  const stepsVisible = await panel.$eval('.banner-steps', (e) => !e.hidden && e.innerText.includes('install.sh'));
+  await panel.screenshot({ path: join(profile, 'panel.png') });
+  await panel.click('.banner-close');
+  await panel.reload();
+  await panel.waitForSelector('.banner.news', { timeout: 15000 });
+  const news = await bannerText();
+  await panel.click('.banner-close');
+  await panel.reload();
+  await new Promise((r) => setTimeout(r, 1500));
+  const after = await bannerText();
+  console.log('update banner:', update);
+  console.log('update steps visible:', stepsVisible);
+  console.log('news banner:', news);
+  console.log('after dismissing both:', JSON.stringify(after));
+  console.log('panel screenshot:', join(profile, 'panel.png'));
+  const ok = /9\.9\.9/.test(update) && stepsVisible && /Test news title|Тестова новина/.test(news) && after === '';
+  console.log(ok ? 'E2E PASS' : 'E2E FAIL');
+  await browser.close();
+  server.close();
+  process.exit(ok ? 0 : 1);
+}
 await panel.waitForFunction(() => document.querySelectorAll('#agent option[value]').length > 0 && document.querySelector('#agent').value, { timeout: 15000 });
 console.log('agents:', await panel.$$eval('#agent option', (o) => o.map((x) => x.value).join(',')));
 await panel.select('#agent', agent);

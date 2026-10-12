@@ -512,3 +512,86 @@ select:focus,
 .menu-list button:hover {
   background: var(--tool-bg);
 }
+
+.news {
+  padding: 8px 12px 0;
+}
+
+.news[hidden] {
+  display: none;
+}
+
+.banner {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 12px;
+  background: var(--panel);
+}
+
+.banner.update {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--panel));
+}
+
+.banner-body {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.banner-title {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.banner-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.banner a {
+  color: var(--accent);
+}
+
+.banner-steps {
+  display: grid;
+  gap: 4px;
+  color: var(--muted);
+}
+
+.banner-steps[hidden] {
+  display: none;
+}
+
+.banner-cmd {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.banner-cmd code {
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  white-space: nowrap;
+  background: var(--code-bg);
+  padding: 4px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+}
+
+.banner-close {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 2px;
+}

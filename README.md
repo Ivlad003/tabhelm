@@ -88,6 +88,10 @@ sequenceDiagram
 
 Turn on **Record video** and every message you send is recorded until the agent finishes: the tab's frames (CDP screencast) are encoded in the panel with MediaRecorder (MP4/H.264, WebM fallback). An *agent cursor* with a click ripple is drawn on the page so the video shows where the agent pointed and clicked. Each video appears in the chat with a player and a **Download** button and is saved automatically to `~/Videos/TabHelm/` (or `~/.tabhelm/recordings/` if there is no `~/Videos`). Only the visible tab renders frames, so tabs the agent opens in the background are not captured.
 
+### Updates and news
+
+The panel checks `https://ivlad003.github.io/tabhelm/news.json` (at most every 6 hours). When a newer release exists it shows **"TabHelm X is available"** with an **Update** button (the install command to copy, then ↻ on `chrome://extensions`) and a link to the release notes. Project news appears as a separate banner. Dismissed banners do not come back; the panel works normally when offline.
+
 ### Signing in
 
 If an agent needs a login, the panel shows its sign-in options as buttons. Click one and finish in the window that opens. You can also log in once in a terminal (`claude`, `codex login`, `agent login`, …) — TabHelm reuses the agent's own credentials.
@@ -254,6 +258,7 @@ extension/                     Chrome extension (Manifest V3, no build step)
   cdp.js                       chrome.debugger sessions; dialog/console/network/file-chooser buffers
   page-scripts.js              functions injected into frames: snapshot, find, element geometry
   sidepanel.html|css|js        chat UI, model picker, approvals, action log, new chat, agent hand-over, video recorder
+  news.js                      update / news banner from the site's news.json
 host/                          native host (Node 20+)
   src/native-host.js           entry point launched by Chrome; routes messages, saves recordings
   src/native-messaging.js      4-byte length-prefixed framing, 1 MB guard
@@ -265,7 +270,8 @@ host/                          native host (Node 20+)
   scripts/install-agent.js     installs agents from the ACP registry
   scripts/smoke.js | e2e.js | tools-test.js | icons.js
 scripts/build.js               release build → dist/
-site/                          GitHub Pages: landing page, install.sh, logo
+scripts/news.js                builds news.json (site/news.json + latest release) for Pages
+site/                          GitHub Pages: landing page, install.sh, news.json source, logo
 .github/workflows/             release on tag, Pages deploy
 docs/research.md               research notes (Ukrainian)
 ```
@@ -288,11 +294,14 @@ Load `extension/` unpacked in Chrome. After editing extension files press ↻ on
 | `E2E_MODEL=haiku npm run e2e -- claude` | same, plus model switching and restore |
 | `E2E_RECORD=1 E2E_SWITCH=opencode npm run e2e -- claude` | same, plus video recording, agent hand-over and New chat |
 | `E2E_FAILOVER=opencode npm run e2e -- claude` | kills the agent mid-task, continues with OpenCode, checks the Markdown export |
+| `E2E_NEWS=1 npm run e2e` | update and news banners against a local feed |
 | `TABHELM_RELEASE=../dist/tabhelm-x.y.z npm run e2e -- claude` | the built release |
 
 **Build:** `npm run build` (repo root) writes `dist/`: the unpacked release, `tabhelm-extension[-x.y.z].zip` and `tabhelm[-x.y.z].tar.gz` (without `node_modules`; the Claude/Codex adapters bundle agent binaries, ~750 MB installed).
 
-**Release:** bump `version` in `extension/manifest.json`, `host/package.json` and `package.json`, then push a tag `vX.Y.Z`. The *Release* workflow builds and publishes the assets; the *Pages* workflow publishes `site/` on pushes to `main`.
+**Release:** bump `version` in `extension/manifest.json`, `host/package.json` and `package.json`, then push a tag `vX.Y.Z`. The *Release* workflow builds and publishes the assets and re-runs *Pages*, so the update banner appears in everyone's panel. *Pages* also publishes `site/` on pushes to `main`.
+
+**News:** add an item to `site/news.json` (`id`, `title`/`text` with `en` and `uk`, optional `url`, `minVersion`, `maxVersion`) and push to `main`. The Pages workflow merges it with the latest release (`scripts/news.js`) into the published `news.json`. To test a feed locally, set `newsUrl` in the extension's `chrome.storage.local` (see `E2E_NEWS=1 npm run e2e`).
 
 Logs: `~/.tabhelm/host.log`. Agents run in `~/.tabhelm/workspace`.
 

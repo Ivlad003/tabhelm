@@ -1,3 +1,5 @@
+import { showNews } from './news.js';
+
 const tabId = Number(new URLSearchParams(location.search).get('tabId'));
 const $ = (id) => document.getElementById(id);
 const els = {
@@ -894,3 +896,5 @@ function renderMarkdown(src) {
 }
 
 syncControls();
+
+showNews($('news'));
