@@ -5,12 +5,13 @@
 //                cancel {tabId} | stop {tabId} | permission_response {tabId, id, optionId}
 //                set_auto_approve {tabId, value} | set_config {tabId, configId, value} | authenticate {tabId, methodId}
 //                tool_result {id, ok, content|error}
+//                save_recording {tabId, id, filename, seq, last, data(base64)}
 //   host -> ext: agents {agents} | status {tabId, state} | update {tabId, update} | config {tabId, options}
-//                auth {tabId, agent, methods}
+//                auth {tabId, agent, methods} | recording_saved {tabId, id, path}
 //                permission {tabId, id, ...} | done {tabId} | error {tabId, message}
 //                tool_call {id, tabId, tool, args}
 
-import { appendFileSync, mkdirSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, renameSync, rmSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { createNativeChannel } from './native-messaging.js';
@@ -22,6 +23,11 @@ const home = join(homedir(), '.tabhelm');
 const workspace = join(home, 'workspace');
 mkdirSync(workspace, { recursive: true });
 const logFile = join(home, 'host.log');
+// Videos go to ~/Videos/TabHelm when ~/Videos exists, else ~/.tabhelm/recordings
+// (TABHELM_RECORDINGS_DIR overrides, e.g. in tests).
+const recordingsDir =
+  process.env.TABHELM_RECORDINGS_DIR ||
+  (existsSync(join(homedir(), 'Videos')) ? join(homedir(), 'Videos', 'TabHelm') : join(home, 'recordings'));
 
 function log(line) {
   appendFileSync(logFile, `${new Date().toISOString()} ${line}\n`);
@@ -79,7 +85,7 @@ async function handleMessage(msg) {
 
       case 'prompt': {
         const session = requireSession(tabId);
-        session.prompt(msg.text).catch((err) => send({ type: 'error', tabId, message: err.message || String(err) }));
+        session.prompt(msg.text, msg.context).catch((err) => send({ type: 'error', tabId, message: err.message || String(err) }));
         break;
       }
 
@@ -110,6 +116,10 @@ async function handleMessage(msg) {
         await requireSession(tabId).setConfigOption(msg.configId, msg.value);
         break;
 
+      case 'save_recording':
+        saveRecordingChunk(msg);
+        break;
+
       case 'tool_result': {
         const resolve = pendingTools.get(msg.id);
         pendingTools.delete(msg.id);
@@ -124,6 +134,21 @@ async function handleMessage(msg) {
     log(`error handling ${msg.type}: ${err.stack || err}`);
     send({ type: 'error', tabId, message: err.message || String(err) });
   }
+}
+
+// Recordings arrive in chunks: Chrome -> host messages may be large, but a
+// long video can still exceed the 64 MB per-message limit.
+function saveRecordingChunk({ tabId, id, filename, seq, last, data }) {
+  const safeName = /^[\w.-]{1,100}\.(webm|mp4)$/.test(filename || '') ? filename : `tabhelm-${Date.now()}.webm`;
+  mkdirSync(recordingsDir, { recursive: true });
+  const partial = join(recordingsDir, `.${id}.part`);
+  if (seq === 0) rmSync(partial, { force: true });
+  appendFileSync(partial, Buffer.from(data, 'base64'));
+  if (!last) return;
+  const path = join(recordingsDir, safeName);
+  renameSync(partial, path);
+  log(`recording saved: ${path}`);
+  send({ type: 'recording_saved', tabId, id, path });
 }
 
 function requireSession(tabId) {

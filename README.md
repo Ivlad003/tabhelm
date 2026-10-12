@@ -49,6 +49,8 @@ To update, run the install command again.
 | Chat | Agent replies, collapsible *Thinking*, plans, and an action log (`↳ Click "Save"`, `↳ Type "…" into "Email"`). |
 | **Auto-approve actions** | Lets the agent use tools without asking. Uploads, JavaScript and other tabs still ask (see below). |
 | **Send / Stop** | Sends a message; while the agent works, the button cancels the turn. |
+| **New chat** | Clears the chat and starts a fresh session with the same agent and model. |
+| **Record video** | Records the tab while the agent works on each message (see below). |
 
 ### Approvals
 
@@ -56,6 +58,14 @@ There are two layers of confirmation:
 
 1. **Agent permissions** — the agent asks before using a tool (ACP `session/request_permission`). You answer with its own buttons (*Allow once*, *Always allow*, *Reject*). **Auto-approve** answers these for you.
 2. **TabHelm confirmations** — always shown, even with auto-approve: uploading local files, running JavaScript in the page (`browser_evaluate`), and controlling a tab the agent did not open.
+
+### Switching agents mid-chat
+
+Pick another agent in the list at any time between messages. TabHelm starts a fresh session for it and sends the conversation so far (your messages and the previous agent's answers, last ~12k characters) together with your next message, so the new agent knows what happened. The tab, approvals and the action log stay as they are. **New chat** drops this context.
+
+### Recording videos
+
+Turn on **Record video** and every message you send is recorded until the agent finishes: the tab's frames (CDP screencast) are encoded in the panel with MediaRecorder (MP4/H.264, WebM fallback). An *agent cursor* with a click ripple is drawn on the page so the video shows where the agent pointed and clicked. Each video appears in the chat with a player and a **Download** button and is saved automatically to `~/Videos/TabHelm/` (or `~/.tabhelm/recordings/` if there is no `~/Videos`). Only the visible tab renders frames, so tabs the agent opens in the background are not captured.
 
 ### Signing in
 
@@ -222,9 +232,9 @@ extension/                     Chrome extension (Manifest V3, no build step)
   browser-tools.js             tool dispatcher: refs, mouse/keyboard, tabs, screenshots, uploads
   cdp.js                       chrome.debugger sessions; dialog/console/network/file-chooser buffers
   page-scripts.js              functions injected into frames: snapshot, find, element geometry
-  sidepanel.html|css|js        chat UI, model picker, approvals, action log
+  sidepanel.html|css|js        chat UI, model picker, approvals, action log, new chat, agent hand-over, video recorder
 host/                          native host (Node 20+)
-  src/native-host.js           entry point launched by Chrome; routes messages
+  src/native-host.js           entry point launched by Chrome; routes messages, saves recordings
   src/native-messaging.js      4-byte length-prefixed framing, 1 MB guard
   src/session.js               one ACP session per tab: start, auth, prompt, permissions, config
   src/agents.js                agent registry, PATH detection, install hints
@@ -255,6 +265,7 @@ Load `extension/` unpacked in Chrome. After editing extension files press ↻ on
 | `npm run test:tools` | every browser tool against a fixture page in headless Chrome (46 checks) |
 | `npm run e2e -- claude` | panel → agent → fills a real form in headless Chrome |
 | `E2E_MODEL=haiku npm run e2e -- claude` | same, plus model switching and restore |
+| `E2E_RECORD=1 E2E_SWITCH=opencode npm run e2e -- claude` | same, plus video recording, agent hand-over and New chat |
 | `TABHELM_RELEASE=../dist/tabhelm-x.y.z npm run e2e -- claude` | the built release |
 
 **Build:** `npm run build` (repo root) writes `dist/`: the unpacked release, `tabhelm-extension[-x.y.z].zip` and `tabhelm[-x.y.z].tar.gz` (without `node_modules`; the Claude/Codex adapters bundle agent binaries, ~750 MB installed).
@@ -281,6 +292,7 @@ Logs: `~/.tabhelm/host.log`. Agents run in `~/.tabhelm/workspace`.
 - Cross-origin iframes are positioned by URL; if a frame navigated elsewhere, clicks fall back to DOM clicks and hover/drag are unavailable. File inputs inside iframes are not supported.
 - Console and network capture starts when the agent first touches a tab.
 - Closing the panel stops the agent; chat history is not kept.
+- Recordings capture only the visible tab and contain no audio.
 - The installer supports Linux and macOS. The Chrome Web Store version is not published yet (the manifest's `key` field must be removed for the store).
 
 TabHelm is an independent project and is not affiliated with Google, Anthropic, OpenAI, Cursor, Qoder or xAI.

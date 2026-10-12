@@ -127,7 +127,7 @@ export function pageSnapshot(maxChars) {
         }
         continue;
       }
-      if (!visible(el)) continue;
+      if (!visible(el) || el.hasAttribute('data-tabhelm-overlay')) continue;
 
       const role = interactiveRole(el);
       if (role) {
@@ -369,4 +369,56 @@ export function pageText() {
 
 export function hasText(text) {
   return Boolean(document.body?.innerText.includes(text));
+}
+
+// Visible "agent cursor" so the user (and recordings) can see where the agent
+// points and clicks. Lives in a shadow root, ignores pointer events, fades out.
+export function showPointer(x, y, kind) {
+  const ID = 'tabhelm-pointer';
+  let host = document.getElementById(ID);
+  if (!host) {
+    host = document.createElement('div');
+    host.id = ID;
+    host.setAttribute('data-tabhelm-overlay', '');
+    const root = host.attachShadow({ mode: 'open' });
+    // Constructable stylesheets are not blocked by the page's style-src CSP.
+    const sheet = new CSSStyleSheet();
+    sheet.replaceSync(`
+      .cursor { position: fixed; left: 0; top: 0; width: 24px; height: 24px; margin: -2px 0 0 -2px; pointer-events: none;
+        z-index: 2147483647; transition: transform .3s ease, opacity .4s; filter: drop-shadow(0 1px 2px rgba(0,0,0,.45)); }
+      .ripple { position: fixed; width: 40px; height: 40px; margin: -20px 0 0 -20px; border-radius: 50%; border: 3px solid #2f6fde;
+        pointer-events: none; z-index: 2147483647; animation: ripple .65s ease-out forwards; }
+      @keyframes ripple { from { transform: scale(.3); opacity: 1 } to { transform: scale(1.5); opacity: 0 } }
+    `);
+    root.adoptedStyleSheets = [sheet];
+    const svgNs = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(svgNs, 'svg');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('class', 'cursor');
+    const path = document.createElementNS(svgNs, 'path');
+    path.setAttribute('d', 'M3 2l7.5 19 2.6-7.6L21 10.8z');
+    path.setAttribute('fill', '#2f6fde');
+    path.setAttribute('stroke', '#fff');
+    path.setAttribute('stroke-width', '1.6');
+    path.setAttribute('stroke-linejoin', 'round');
+    svg.append(path);
+    root.append(svg);
+    document.documentElement.append(host);
+    svg.style.transform = `translate(${x}px, ${y}px)`;
+  }
+  const root = host.shadowRoot;
+  const cursor = root.querySelector('.cursor');
+  cursor.style.opacity = '1';
+  cursor.style.transform = `translate(${x}px, ${y}px)`;
+  if (kind === 'click') {
+    const ripple = document.createElement('div');
+    ripple.className = 'ripple';
+    ripple.style.left = `${x}px`;
+    ripple.style.top = `${y}px`;
+    root.append(ripple);
+    setTimeout(() => ripple.remove(), 700);
+  }
+  clearTimeout(window.__tabhelmPointerTimer);
+  window.__tabhelmPointerTimer = setTimeout(() => (cursor.style.opacity = '0'), 4000);
+  return {};
 }

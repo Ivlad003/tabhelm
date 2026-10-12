@@ -10,6 +10,7 @@ export const consoleLogs = new Map(); // tabId -> [{ level, text, ts }]
 export const requests = new Map(); // tabId -> Map(requestId -> entry)
 export const fileChoosers = new Map(); // tabId -> backendNodeId
 export const dragData = new Map(); // tabId -> intercepted DragData
+export const screencastListeners = new Map(); // tabId -> (frame) => void
 
 export function cdp(tabId, method, params = {}) {
   return chrome.debugger.sendCommand({ tabId }, method, params);
@@ -35,7 +36,7 @@ export function detach(tabId) {
 
 function forget(tabId) {
   attached.delete(tabId);
-  for (const m of [dialogs, consoleLogs, requests, fileChoosers, dragData]) m.delete(tabId);
+  for (const m of [dialogs, consoleLogs, requests, fileChoosers, dragData, screencastListeners]) m.delete(tabId);
 }
 
 chrome.debugger.onDetach.addListener((source) => forget(source.tabId));
@@ -67,6 +68,11 @@ chrome.debugger.onEvent.addListener(({ tabId }, method, params) => {
       break;
     case 'Input.dragIntercepted':
       dragData.set(tabId, params.data);
+      break;
+    case 'Page.screencastFrame':
+      // Chrome sends the next frame only after an ack.
+      cdp(tabId, 'Page.screencastFrameAck', { sessionId: params.sessionId }).catch(() => {});
+      screencastListeners.get(tabId)?.({ data: params.data, width: params.metadata.deviceWidth, height: params.metadata.deviceHeight });
       break;
 
     case 'Runtime.consoleAPICalled': {

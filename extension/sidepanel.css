@@ -402,3 +402,70 @@ select:focus,
   font-size: 12px;
   color: var(--muted);
 }
+
+.btn.small {
+  padding: 2px 9px;
+  font-size: 12px;
+}
+
+.toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+
+.status[data-state='recording']::before {
+  background: var(--err);
+}
+
+.video {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px;
+  background: var(--panel);
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.video video {
+  width: 100%;
+  border-radius: 4px;
+  background: #000;
+}
+
+.video .row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  overflow-wrap: anywhere;
+}
+
+.rec-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--err);
+  margin-right: 4px;
+  animation: blink 1s steps(2) infinite;
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0.2;
+  }
+}
+
+.rec {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--err);
+  letter-spacing: 0.04em;
+}
+
+.rec[hidden] {
+  display: none;
+}

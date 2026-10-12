@@ -10,7 +10,9 @@
     <header class="bar">
       <div class="bar-row">
         <span class="brand">TabHelm</span>
+        <span id="rec-indicator" class="rec" hidden><span class="rec-dot"></span>REC</span>
         <span id="status" class="status" data-state="idle">Not connected</span>
+        <button id="new-chat" class="btn small" title="Clear the chat and start a fresh agent session">New chat</button>
       </div>
       <div class="bar-row">
         <select id="agent" aria-label="Agent"></select>
@@ -30,7 +32,10 @@
     <footer class="composer">
       <textarea id="input" rows="3" placeholder="Ask the agent to do something on this page…" disabled></textarea>
       <div class="composer-row">
-        <label class="auto"><input type="checkbox" id="auto" /> Auto-approve actions</label>
+        <div class="toggles">
+          <label class="auto"><input type="checkbox" id="auto" /> Auto-approve actions</label>
+          <label class="auto" title="Record a video of the tab while the agent works on each message"><input type="checkbox" id="record" /> Record video</label>
+        </div>
         <button id="send" class="btn primary" disabled>Send</button>
       </div>
     </footer>

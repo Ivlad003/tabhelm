@@ -1,4 +1,4 @@
-import { runTool, releaseChat } from './browser-tools.js';
+import { runTool, releaseChat, startRecording, stopRecording } from './browser-tools.js';
 
 const HOST_NAME = 'com.tabhelm.host';
 const panels = new Map(); // chat tabId -> side panel port
@@ -72,6 +72,17 @@ chrome.runtime.onConnect.addListener((port) => {
     if (msg.type === 'confirm_response') {
       confirms.get(msg.id)?.resolve(Boolean(msg.allow));
       confirms.delete(msg.id);
+      return;
+    }
+    // Recording is handled inside the extension; frames go straight back to the panel.
+    if (msg.type === 'record_start') {
+      startRecording(tabId, (frame) => port.postMessage({ type: 'frame', ...frame })).catch((err) =>
+        port.postMessage({ type: 'record_error', message: err.message || String(err) }),
+      );
+      return;
+    }
+    if (msg.type === 'record_stop') {
+      stopRecording(tabId);
       return;
     }
     try {

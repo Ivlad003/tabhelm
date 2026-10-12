@@ -3,10 +3,13 @@
 // Usage: node scripts/e2e.js [agentId]   (CHROME_PATH overrides the browser;
 // TABHELM_RELEASE=<dist/tabhelm-x.y.z> tests a built release instead of the sources;
 // E2E_MODEL=<model value> switches the model in the panel before the task;
-// E2E_EXPECT_AUTH=1 only checks that the panel shows the agent's sign-in card)
+// E2E_EXPECT_AUTH=1 only checks that the panel shows the agent's sign-in card;
+// E2E_RECORD=1 records the task and checks the saved video;
+// E2E_SWITCH=<agentId> afterwards switches agents and checks the conversation was handed over,
+// then presses New chat)
 import puppeteer from 'puppeteer-core';
 import http from 'node:http';
-import { mkdtempSync } from 'node:fs';
+import { existsSync, mkdtempSync, statSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -38,6 +41,8 @@ const browser = await puppeteer.launch({
   pipe: true,
   enableExtensions: [EXT],
   args: ['--no-first-run'],
+  // Inherited by the native host: keep test videos out of ~/Videos.
+  env: { ...process.env, TABHELM_RECORDINGS_DIR: join(profile, 'videos') },
 });
 const page = await browser.newPage();
 await page.goto(url);
@@ -48,9 +53,13 @@ const sw = await swTarget.worker();
 const tabId = await sw.evaluate(async (u) => (await chrome.tabs.query({ url: u + '*' }))[0].id, url);
 console.log('ext', extId, 'tab', tabId);
 
-const panel = await browser.newPage();
+// Open the panel in its own window so the test page stays the visible tab in
+// its window (like the real side panel); background tabs render no frames.
+const panelUrl = `chrome-extension://${extId}/sidepanel.html?tabId=${tabId}`;
+await sw.evaluate((url) => chrome.windows.create({ url, type: 'popup', width: 420, height: 800 }), panelUrl);
+const panel = await (await browser.waitForTarget((t) => t.url() === panelUrl)).page();
 panel.on('console', (m) => console.log('[panel]', m.text()));
-await panel.goto(`chrome-extension://${extId}/sidepanel.html?tabId=${tabId}`);
+await panel.waitForSelector('#agent');
 await panel.waitForFunction(() => document.querySelectorAll('#agent option[value]').length > 0 && document.querySelector('#agent').value, { timeout: 15000 });
 console.log('agents:', await panel.$$eval('#agent option', (o) => o.map((x) => x.value).join(',')));
 await panel.select('#agent', agent);
@@ -88,17 +97,42 @@ if (process.env.E2E_MODEL) {
   }, { timeout: 60000 }, process.env.E2E_MODEL);
   console.log('model restored after reconnect');
 }
+if (process.env.E2E_RECORD) await panel.click('#record');
 await panel.type('#input', 'Fill this form: name "Ada Lovelace", color Blue, tick the agreement checkbox, then click Save and tell me the exact confirmation text shown.');
 await panel.click('#send');
 await panel.waitForFunction(() => document.querySelector('#send').textContent === 'Send' && document.querySelector('#status').dataset.state !== 'working', { timeout: 240000, polling: 1000 });
 
 const out = await page.$eval('#out', (e) => e.textContent);
+
+let extraOk = true;
+if (process.env.E2E_RECORD) {
+  await panel.waitForFunction(() => /Saved to /.test(document.querySelector('.video')?.innerText || ''), { timeout: 60000 });
+  const info = await panel.$eval('.video', (e) => e.innerText.replace(/\s+/g, ' '));
+  const path = /Saved to (\S+)/.exec(info)[1];
+  const size = existsSync(path) ? statSync(path).size : 0;
+  console.log('video:', info, '| file bytes:', size);
+  extraOk &&= size > 10_000;
+}
+if (process.env.E2E_SWITCH) {
+  await panel.select('#agent', process.env.E2E_SWITCH);
+  await panel.waitForFunction(() => document.querySelector('#status').dataset.state === 'ready', { timeout: 90000 });
+  await panel.type('#input', 'Without using any tools: what exact confirmation text did the page show earlier in this chat?');
+  await panel.click('#send');
+  await panel.waitForFunction(() => document.querySelector('#send').textContent === 'Send', { timeout: 180000, polling: 1000 });
+  const reply = await panel.$$eval('.msg.agent', (m) => m.at(-1)?.innerText || '');
+  console.log(`after switch to ${process.env.E2E_SWITCH}:`, reply.replace(/\s+/g, ' ').slice(0, 200));
+  extraOk &&= /Ada Lovelace/.test(reply);
+
+  await panel.click('#new-chat');
+  await panel.waitForFunction(() => document.querySelector('#status').dataset.state === 'ready' && document.querySelectorAll('.msg').length === 0, { timeout: 90000 });
+  console.log('new chat: log cleared, agent reconnected');
+}
 const log = await panel.$eval('#log', (e) => [...e.children].map((c) => c.className + ': ' + c.innerText.replace(/\n/g, ' ')).join('\n'));
 console.log('---- panel log\n' + log + '\n----');
 console.log('page result:', out);
 await panel.screenshot({ path: join(profile, 'panel.png') });
 console.log('panel screenshot:', join(profile, 'panel.png'));
-const pass = out === 'Saved: Ada Lovelace / blue / agreed';
+const pass = out === 'Saved: Ada Lovelace / blue / agreed' && extraOk;
 console.log(pass ? 'E2E PASS' : 'E2E FAIL');
 await browser.close();
 server.close();

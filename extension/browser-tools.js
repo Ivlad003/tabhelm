@@ -3,7 +3,7 @@
 // tabs the page opened, or tabs the user approved. Reads go through
 // chrome.scripting; mouse and keyboard go through CDP Input.* (trusted events).
 
-import { cdp, attach, detach, dialogs, consoleLogs, requests, fileChoosers, dragData } from './cdp.js';
+import { cdp, attach, detach, dialogs, consoleLogs, requests, fileChoosers, dragData, screencastListeners } from './cdp.js';
 import * as P from './page-scripts.js';
 
 const chats = new Map(); // chatTabId -> { chatTabId, current, owned: Set, notes: [] }
@@ -18,6 +18,7 @@ function chatState(chatTabId) {
 }
 
 export function releaseChat(chatTabId) {
+  stopRecording(chatTabId);
   const c = chats.get(chatTabId);
   chats.delete(chatTabId);
   const stillUsed = new Set([...chats.values()].flatMap((o) => [...o.owned]));
@@ -39,9 +40,41 @@ chrome.tabs.onRemoved.addListener((tabId) => {
     if (c.current === tabId && tabId !== c.chatTabId) {
       c.current = c.chatTabId;
       c.notes.push(`Tab ${tabId} was closed; tools act on the chat tab again.`);
+      followTarget(c);
     }
   }
 });
+
+// ---------- recording ----------
+// Frames come from CDP Page.startScreencast on the tab the agent acts on; the
+// side panel turns them into a video. Background tabs do not render frames.
+
+const recordings = new Map(); // chatTabId -> { tabId, onFrame }
+
+export async function startRecording(chatTabId, onFrame) {
+  await stopRecording(chatTabId);
+  const c = chatState(chatTabId);
+  await assertControllable(c.current);
+  await attach(c.current);
+  screencastListeners.set(c.current, onFrame);
+  await cdp(c.current, 'Page.startScreencast', { format: 'jpeg', quality: 75, maxWidth: 1600, maxHeight: 1000 });
+  recordings.set(chatTabId, { tabId: c.current, onFrame });
+}
+
+export async function stopRecording(chatTabId) {
+  const rec = recordings.get(chatTabId);
+  if (!rec) return;
+  recordings.delete(chatTabId);
+  screencastListeners.delete(rec.tabId);
+  await cdp(rec.tabId, 'Page.stopScreencast').catch(() => {});
+}
+
+// Keep recording the tab the agent works on when it switches tabs.
+async function followTarget(c) {
+  const rec = recordings.get(c.chatTabId);
+  if (!rec || rec.tabId === c.current) return;
+  await startRecording(c.chatTabId, rec.onFrame).catch(() => {});
+}
 
 // ---------- helpers ----------
 
@@ -105,6 +138,11 @@ async function settle(tabId, urlBefore) {
 function normalizeUrl(url) {
   url = String(url).trim();
   return /^[a-z][a-z0-9+.-]*:/i.test(url) ? url : `https://${url}`;
+}
+
+// Shows the agent cursor at top-level viewport coordinates (best effort).
+function pointer(tabId, x, y, kind) {
+  return inject(tabId, P.showPointer, [x, y, kind]).catch(() => {});
 }
 
 // Offset of a frame's viewport inside the top-level viewport (matching iframes by URL).
@@ -324,6 +362,7 @@ async function tabsTool(c, args, ui) {
       c.owned.add(tab.id);
       c.current = tab.id;
       const loaded = await waitForLoad(tab.id);
+      await followTarget(c);
       ui.onTarget(c.chatTabId, loaded);
       return { content: text(`Opened tab ${tab.id} in the background: ${loaded.url}. Tools now act on it. Note: background tabs may not render screenshots.`) };
     }
@@ -337,6 +376,7 @@ async function tabsTool(c, args, ui) {
         c.owned.add(id);
       }
       c.current = id;
+      await followTarget(c);
       ui.onTarget(c.chatTabId, tab);
       return { content: text(`Tools now act on tab ${id}: ${tab.title} — ${tab.url}`) };
     }
@@ -408,7 +448,10 @@ async function runPageTool(tabId, tab, tool, args, ui, chatTabId) {
       const opts = { button: args.button || 'left', count: args.double ? 2 : 1, modifiers: modifierMask(args.modifiers) };
       let how = '';
       await withFileChooserIntercept(tabId, async () => {
-        if (loc.exact) await mouseClick(tabId, loc.x, loc.y, opts);
+        if (loc.exact) {
+          await pointer(tabId, loc.x, loc.y, 'click');
+          await mouseClick(tabId, loc.x, loc.y, opts);
+        }
         else {
           checked(await inject(tabId, P.domClick, [loc.ref], loc.frameId));
           how = ' (DOM click: iframe position unknown)';
@@ -423,6 +466,7 @@ async function runPageTool(tabId, tab, tool, args, ui, chatTabId) {
       const opts = { button: args.button || 'left', count: args.double ? 2 : 1, modifiers: modifierMask(args.modifiers) };
       let nav = '';
       await withFileChooserIntercept(tabId, async () => {
+        await pointer(tabId, args.x, args.y, 'click');
         await mouseClick(tabId, args.x, args.y, opts);
         nav = await settle(tabId, urlBefore);
       });
@@ -431,6 +475,7 @@ async function runPageTool(tabId, tab, tool, args, ui, chatTabId) {
 
     case 'browser_hover': {
       const p = await point(tabId, args.ref, args, 'the element');
+      await pointer(tabId, p.x, p.y, 'move');
       await input(tabId, 'Input.dispatchMouseEvent', { type: 'mouseMoved', x: p.x, y: p.y });
       await sleep(300);
       return { content: text(`Hovering over ${p.label}. Take a snapshot to see menus or tooltips that appeared.`), label: p.label };
@@ -439,7 +484,9 @@ async function runPageTool(tabId, tab, tool, args, ui, chatTabId) {
     case 'browser_drag': {
       const from = await point(tabId, args.fromRef, args.from, 'the start (fromRef or from)');
       const to = await point(tabId, args.toRef, args.to, 'the target (toRef or to)');
+      await pointer(tabId, from.x, from.y, 'click');
       const kind = await mouseDrag(tabId, from, to);
+      await pointer(tabId, to.x, to.y, 'move');
       const nav = await settle(tabId, urlBefore);
       return { content: text(`Dragged ${from.label} → ${to.label} (${kind === 'html5' ? 'HTML5 drag-and-drop' : 'mouse drag'}).${nav}`), label: `${from.label} → ${to.label}` };
     }
@@ -448,6 +495,7 @@ async function runPageTool(tabId, tab, tool, args, ui, chatTabId) {
       const loc = await locate(tabId, args.ref);
       const clear = args.clear !== false;
       if (loc.exact) {
+        await pointer(tabId, loc.x, loc.y, 'click');
         await mouseClick(tabId, loc.x, loc.y);
         checked(await inject(tabId, P.prepareTyping, [loc.ref, clear], loc.frameId));
         await cdp(tabId, 'Input.insertText', { text: args.text });

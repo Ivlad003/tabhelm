@@ -6,6 +6,9 @@ const els = {
   status: $('status'),
   tab: $('tab'),
   config: $('config'),
+  newChat: $('new-chat'),
+  record: $('record'),
+  recIndicator: $('rec-indicator'),
   log: $('log'),
   empty: $('empty'),
   input: $('input'),
@@ -21,6 +24,12 @@ let agentText = '';
 let thoughtEl = null;
 let planEl = null;
 const toolCards = new Map();
+// Conversation kept so a newly selected agent can be told what happened so far.
+let transcript = []; // { role: 'user' | 'agent', name?, text }
+let turnText = ''; // everything the agent said in the current turn
+let pendingContext = null; // transcript handed to the next agent on its first message
+let connectedAgent = null;
+const emptyTemplate = $('empty').cloneNode(true);
 
 const port = chrome.runtime.connect({ name: `panel:${tabId}` });
 port.onMessage.addListener(onMessage);
@@ -78,6 +87,16 @@ function onMessage(msg) {
       targetTabId = msg.tabId;
       showTab();
       break;
+    case 'frame':
+      onFrame(msg);
+      break;
+    case 'record_error':
+      notice(`Recording failed: ${msg.message}`, true);
+      stopRecording(true);
+      break;
+    case 'recording_saved':
+      onRecordingSaved(msg);
+      break;
     case 'done':
       endTurn(msg.stopReason === 'cancelled' ? 'Stopped' : null);
       break;
@@ -134,6 +153,7 @@ function onStatus(msg) {
     setStatus('starting', msg.detail || `Starting ${msg.agent.name}…`);
   } else if (msg.state === 'ready') {
     connected = true;
+    connectedAgent = msg.agent;
     restorePrefs = true;
     setStatus('ready', msg.agent.name);
     notice(`${msg.agent.name} connected`);
@@ -158,6 +178,7 @@ function onUpdate(u) {
         agentText = '';
       }
       agentText += u.text;
+      turnText += u.text;
       agentBubble.innerHTML = renderMarkdown(agentText);
       break;
     case 'agent_thought_chunk':
@@ -419,7 +440,52 @@ els.connect.onclick = () => {
   port.postMessage({ type: 'start', agentId, autoApprove: els.auto.checked });
 };
 
+// Switching agents mid-chat starts a fresh session for the new agent and hands
+// it the conversation so far with the next message.
+els.agent.onchange = () => {
+  if (!connected || busy) return;
+  const agentId = els.agent.value;
+  chrome.storage.local.set({ lastAgent: agentId });
+  pendingContext = buildContext();
+  const name = els.agent.selectedOptions[0]?.text;
+  notice(`Switching to ${name}${pendingContext ? '. It will get this conversation as context.' : '.'}`);
+  connected = false;
+  els.config.hidden = true;
+  syncControls();
+  port.postMessage({ type: 'start', agentId, autoApprove: els.auto.checked });
+};
+
+els.newChat.onclick = () => {
+  if (busy) stop();
+  stopRecording(true);
+  transcript = [];
+  pendingContext = null;
+  turnText = '';
+  busy = false;
+  agentBubble = thoughtEl = planEl = null;
+  toolCards.clear();
+  const empty = emptyTemplate.cloneNode(true);
+  els.log.replaceChildren(empty);
+  els.empty = empty;
+  port.postMessage({ type: 'list_agents' }); // re-adds install hints to the empty state
+  // A fresh agent session forgets the previous conversation too.
+  if (connected) {
+    connected = false;
+    els.config.hidden = true;
+    port.postMessage({ type: 'start', agentId: els.agent.value, autoApprove: els.auto.checked });
+  }
+  syncControls();
+};
+
 els.auto.onchange = () => port.postMessage({ type: 'set_auto_approve', value: els.auto.checked });
+
+chrome.storage.local.get('recordVideo').then(({ recordVideo }) => (els.record.checked = Boolean(recordVideo)));
+els.record.onchange = () => {
+  chrome.storage.local.set({ recordVideo: els.record.checked });
+  if (!busy) return;
+  if (els.record.checked) startRecording();
+  else stopRecording();
+};
 
 els.send.onclick = () => (busy ? stop() : send());
 els.input.addEventListener('keydown', (e) => {
@@ -438,8 +504,12 @@ function send() {
   thoughtEl = null;
   planEl = null;
   busy = true;
+  turnText = '';
+  transcript.push({ role: 'user', text });
   setStatus('working', 'Working…');
-  port.postMessage({ type: 'prompt', text });
+  if (els.record.checked) startRecording();
+  port.postMessage({ type: 'prompt', text, context: pendingContext });
+  pendingContext = null;
   syncControls();
   scrollDown();
 }
@@ -450,21 +520,151 @@ function stop() {
 
 function endTurn(note) {
   if (note) notice(note);
+  if (turnText.trim()) transcript.push({ role: 'agent', name: connectedAgent?.name || 'Agent', text: turnText.trim() });
+  turnText = '';
+  stopRecording();
   busy = false;
   agentBubble = null;
   thoughtEl = null;
-  if (connected) setStatus('ready', els.agent.selectedOptions[0]?.text || 'Connected');
+  if (connected) setStatus('ready', connectedAgent?.name || 'Connected');
   syncControls();
+}
+
+// Last ~12k characters of the conversation, oldest first.
+function buildContext() {
+  const lines = transcript.map((t) => `${t.role === 'user' ? 'User' : t.name}: ${t.text}`);
+  let out = '';
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (out.length + lines[i].length > 12_000) break;
+    out = `${lines[i]}\n\n${out}`;
+  }
+  return out.trim() || null;
 }
 
 function syncControls() {
   els.connect.textContent = connected ? 'Disconnect' : 'Connect';
   els.connect.disabled = !connected && !els.agent.value;
-  els.agent.disabled = connected;
+  els.agent.disabled = busy;
   els.input.disabled = !connected;
   els.send.disabled = !connected;
   els.send.textContent = busy ? 'Stop' : 'Send';
   for (const select of els.config.querySelectorAll('select')) select.disabled = busy;
+}
+
+// ---------- Video recording ----------
+// The extension streams JPEG frames of the tab (CDP screencast); they are
+// painted on a canvas and encoded with MediaRecorder. Each finished video is
+// shown in the chat and saved by the host to ~/Videos/TabHelm.
+
+const rec = { active: false, recorder: null, canvas: null, ctx: null, img: null, chunks: [], mime: '', started: 0, heartbeat: null };
+
+function startRecording() {
+  if (rec.active) return;
+  Object.assign(rec, { active: true, recorder: null, chunks: [], img: null });
+  els.recIndicator.hidden = false;
+  port.postMessage({ type: 'record_start' });
+}
+
+async function onFrame({ data }) {
+  if (!rec.active) return;
+  const img = new Image();
+  img.src = `data:image/jpeg;base64,${data}`;
+  try {
+    await img.decode();
+  } catch {
+    return;
+  }
+  if (!rec.active) return;
+  rec.img = img;
+  if (!rec.recorder) {
+    rec.canvas = document.createElement('canvas');
+    // Even dimensions keep H.264 encoders happy.
+    rec.canvas.width = img.naturalWidth & ~1;
+    rec.canvas.height = img.naturalHeight & ~1;
+    rec.ctx = rec.canvas.getContext('2d');
+    paintFrame();
+    rec.mime = ['video/mp4;codecs=avc1.42E01F', 'video/webm;codecs=vp9', 'video/webm'].find((t) => MediaRecorder.isTypeSupported(t));
+    rec.recorder = new MediaRecorder(rec.canvas.captureStream(30), { mimeType: rec.mime, videoBitsPerSecond: 5_000_000 });
+    rec.recorder.ondataavailable = (e) => e.data.size && rec.chunks.push(e.data);
+    rec.recorder.start(1000);
+    rec.started = Date.now();
+    // Screencast only sends frames on change; repaint so the timeline stays continuous.
+    rec.heartbeat = setInterval(paintFrame, 500);
+  } else {
+    paintFrame();
+  }
+}
+
+function paintFrame() {
+  if (rec.img) rec.ctx.drawImage(rec.img, 0, 0, rec.canvas.width, rec.canvas.height);
+}
+
+function stopRecording(discard = false) {
+  if (!rec.active) return;
+  rec.active = false;
+  els.recIndicator.hidden = true;
+  clearInterval(rec.heartbeat);
+  port.postMessage({ type: 'record_stop' });
+  const recorder = rec.recorder;
+  if (!recorder) {
+    if (!discard) notice('No video recorded: the tab did not render any frames.', true);
+    return;
+  }
+  const { chunks, mime, started } = rec;
+  recorder.onstop = () => {
+    if (discard) return;
+    addVideo(new Blob(chunks, { type: mime.split(';')[0] }), Date.now() - started);
+  };
+  paintFrame();
+  setTimeout(() => recorder.stop(), 150);
+}
+
+const videoCards = new Map(); // recording id -> status element
+
+async function addVideo(blob, durationMs) {
+  if (!blob.size) return;
+  const url = URL.createObjectURL(blob);
+  const ext = blob.type.includes('mp4') ? 'mp4' : 'webm';
+  const stamp = new Date().toISOString().slice(0, 19).replace('T', '_').replaceAll(':', '-');
+  const filename = `tabhelm-${stamp}.${ext}`;
+  const id = crypto.randomUUID();
+
+  const card = add('div', 'video');
+  const video = Object.assign(document.createElement('video'), { src: url, controls: true, muted: true, playsInline: true });
+  const row = document.createElement('div');
+  row.className = 'row';
+  const info = document.createElement('span');
+  const secs = Math.round(durationMs / 1000);
+  info.textContent = `Recording · ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')} · ${(blob.size / 1048576).toFixed(1)} MB`;
+  const download = Object.assign(document.createElement('a'), { className: 'btn small', href: url, download: filename, textContent: 'Download' });
+  row.append(info, download);
+  const saved = document.createElement('div');
+  saved.textContent = 'Saving…';
+  card.append(video, row, saved);
+  videoCards.set(id, saved);
+  scrollDown();
+
+  // Send to the host in chunks; it writes the file to ~/Videos/TabHelm.
+  const CHUNK = 768 * 1024;
+  for (let offset = 0, seq = 0; offset < blob.size; offset += CHUNK, seq++) {
+    const data = await blobToBase64(blob.slice(offset, offset + CHUNK));
+    port.postMessage({ type: 'save_recording', id, filename, seq, last: offset + CHUNK >= blob.size, data });
+  }
+}
+
+function onRecordingSaved({ id, path }) {
+  const el = videoCards.get(id);
+  if (el) el.textContent = `Saved to ${path}`;
+  videoCards.delete(id);
+}
+
+function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
 }
 
 function setStatus(state, label) {
