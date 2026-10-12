@@ -395,3 +395,10 @@ select:focus,
   padding-left: 18px;
   overflow-wrap: anywhere;
 }
+
+.auth-hints {
+  margin: 0 0 8px;
+  padding-left: 18px;
+  font-size: 12px;
+  color: var(--muted);
+}

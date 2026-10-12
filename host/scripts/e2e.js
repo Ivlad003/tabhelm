@@ -2,7 +2,8 @@
 // drives the side panel and checks that the agent filled and saved the form.
 // Usage: node scripts/e2e.js [agentId]   (CHROME_PATH overrides the browser;
 // TABHELM_RELEASE=<dist/tabhelm-x.y.z> tests a built release instead of the sources;
-// E2E_MODEL=<model value> switches the model in the panel before the task)
+// E2E_MODEL=<model value> switches the model in the panel before the task;
+// E2E_EXPECT_AUTH=1 only checks that the panel shows the agent's sign-in card)
 import puppeteer from 'puppeteer-core';
 import http from 'node:http';
 import { mkdtempSync } from 'node:fs';
@@ -55,6 +56,15 @@ console.log('agents:', await panel.$$eval('#agent option', (o) => o.map((x) => x
 await panel.select('#agent', agent);
 await panel.click('#auto');
 await panel.click('#connect');
+if (process.env.E2E_EXPECT_AUTH) {
+  await panel.waitForFunction(() => [...document.querySelectorAll('.card .title')].some((t) => /sign in/.test(t.textContent)), { timeout: 60000 });
+  const buttons = await panel.$$eval('.card .options button', (b) => b.map((x) => x.textContent));
+  console.log('sign-in options:', buttons.join(' | '));
+  console.log(buttons.length ? 'E2E PASS' : 'E2E FAIL');
+  await browser.close();
+  server.close();
+  process.exit(buttons.length ? 0 : 1);
+}
 await panel.waitForFunction(() => document.querySelector('#status').dataset.state === 'ready', { timeout: 60000 });
 await panel.waitForSelector('#config select.model', { timeout: 30000 });
 const models = await panel.$$eval('#config select.model option', (o) => o.map((x) => x.value));

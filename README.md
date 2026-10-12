@@ -61,6 +61,9 @@ There are two layers of confirmation:
 
 If an agent needs a login, the panel shows its sign-in options as buttons. Click one and finish in the window that opens. You can also log in once in a terminal (`claude`, `codex login`, `agent login`, …) — TabHelm reuses the agent's own credentials.
 
+- **Google Antigravity** offers *Log in with Google*, Gemini Enterprise, a Gemini API key or Agent Platform right in the panel.
+- **Qoder CLI** reuses an existing login: run `qodercli login` once (for an agent installed with `install-agent`: `~/.tabhelm/agents/qoder/node_modules/.bin/qodercli login`).
+
 ### Tabs
 
 Each tab has its own panel and its own agent session. By default the agent only works on that tab. It can open new tabs in the background (`browser_tabs` → `new`); pop-ups opened by the page are added automatically. Switching to any other tab requires your approval.

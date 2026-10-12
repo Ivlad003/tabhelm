@@ -1,7 +1,10 @@
 #!/usr/bin/env node
 // Installs an ACP agent from the official ACP registry into ~/.tabhelm/agents/<id>.
-// Usage: npm run install-agent <antigravity|qoder>
+// Usage: npm run install-agent <antigravity|qoder> [--pinned]
 //        npm run install-agent -- --list      (show what the registry offers)
+//
+// npm packages are installed at @latest because registry pins can lag far
+// behind (e.g. Qoder 0.2.14 vs 1.x); --pinned uses the registry's version.
 //
 // Registry "binary" distributions are downloaded and unpacked; "npx"
 // distributions are installed with npm into the agent's folder.
@@ -55,9 +58,11 @@ if (binary) {
   rmSync(archive);
   chmodSync(join(dir, target.cmd), 0o755);
 } else if (npx) {
-  console.log(`npm install ${npx.package}`);
+  const pkgName = npx.package.replace(/(.)@[^@/]+$/, '$1');
+  const spec = process.argv.includes('--pinned') ? npx.package : `${pkgName}@latest`;
+  console.log(`npm install ${spec}`);
   writeFileSync(join(dir, 'package.json'), '{"private": true}\n');
-  execFileSync('npm', ['install', '--no-audit', '--no-fund', '--loglevel=error', npx.package], { cwd: dir, stdio: 'inherit' });
+  execFileSync('npm', ['install', '--no-audit', '--no-fund', '--loglevel=error', spec], { cwd: dir, stdio: 'inherit' });
 } else {
   throw new Error(`${entry.name} uses an unsupported distribution: ${Object.keys(entry.distribution).join(', ')}`);
 }

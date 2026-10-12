@@ -196,7 +196,10 @@ function addAuth(msg) {
   title.textContent = `${msg.agent.name} needs you to sign in`;
   const options = document.createElement('div');
   options.className = 'options';
+  const hints = document.createElement('ul');
+  hints.className = 'auth-hints';
   for (const m of msg.methods) {
+    if (m.description) hints.append(Object.assign(document.createElement('li'), { textContent: `${m.name}: ${m.description}` }));
     const b = document.createElement('button');
     b.className = 'btn primary';
     b.textContent = m.name;
@@ -208,7 +211,7 @@ function addAuth(msg) {
     };
     options.append(b);
   }
-  card.append(title, options);
+  card.append(title, hints, options);
   els.connect.disabled = false;
   scrollDown();
 }
