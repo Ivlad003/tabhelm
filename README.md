@@ -51,9 +51,10 @@ To update, run the install command again.
 | Agent list + **Connect** | Starts the chosen agent for this tab. Agents that are not installed are shown disabled, with an install hint. |
 | Model + effort | Appear after connecting. The list comes from the agent itself (ACP `configOptions`). Your choice is remembered per agent. |
 | **Controls: …** | The tab the agent is working on. It changes if the agent opens or switches tabs. |
-| Chat | Agent replies, collapsible *Thinking*, plans, and an action log (`↳ Click "Save"`, `↳ Type "…" into "Email"`). |
+| Chat | Agent replies, collapsible *Thinking*, plans, and the agent's steps (`↳ Click "Save"`, tool search, …) grouped into one scrollable **Steps** block per run. |
 | **Auto-approve actions** | Lets the agent use tools without asking. Uploads, JavaScript and other tabs still ask (see below). |
 | **Send / Stop** | Sends a message; while the agent works, the button cancels the turn. |
+| **History** | Saved chats — open one to continue it; its page opens too. |
 | **Folder…** | Optional working folder (project) for the chat — see below. |
 | **Attach** | Adds images and text files (txt, md, csv, tsv, json, log) to the message. You can also drop files on the panel or paste an image. |
 | **New chat** | Clears the chat and starts a fresh session with the same agent and model. |
@@ -95,6 +96,15 @@ sequenceDiagram
 ### Recording videos
 
 Turn on **Record video** and every message you send is recorded until the agent finishes: the tab's frames (CDP screencast) are encoded in the panel with MediaRecorder (MP4/H.264, WebM fallback). An *agent cursor* with a click ripple is drawn on the page so the video shows where the agent pointed and clicked. Each video appears in the chat with a player, **Download** and **Delete** (click twice; removes it from the chat and from disk) and is saved automatically to `~/Videos/TabHelm/` (or `~/.tabhelm/recordings/` if there is no `~/Videos`). Only the visible tab renders frames, so tabs the agent opens in the background are not captured.
+
+### History
+
+Every chat is saved on your computer (messages, steps, stats, the page, agent and folder). **History** lists them with search. Opening a chat:
+
+- if its tab is still open, TabHelm switches to that tab and opens the chat in its panel;
+- otherwise the current tab goes back to the chat's page and the chat is shown here.
+
+To continue, connect any agent — it gets the whole conversation with your next message. Closing and reopening the panel on a tab restores that tab's chat. Delete chats with ×; up to 200 are kept.
 
 ### Working folder (project)
 
@@ -336,6 +346,8 @@ extension/                     Chrome extension (Manifest V3, no build step)
   settings.js                  Settings view: skills from links, versions, update check
   attachments.js               image / text attachments: picking, drop, paste, downscaling
   folder.js                    working folder: picker, typed path, recent folders, auto-approve warning
+  history.js                   saved chats: storage, list, search, opening in the chat's tab
+  tokens.css                   copy of design/tokens.css
 host/                          native host (Node 20+)
   src/native-host.js           entry point launched by Chrome; routes messages, saves recordings
   src/native-messaging.js      4-byte length-prefixed framing, 1 MB guard
@@ -351,6 +363,8 @@ host/                          native host (Node 20+)
   scripts/install-agent.js     installs any ACP-registry agent and records how to launch it
   scripts/set-key.js           stores an API key in ~/.tabhelm/env without echoing it
   scripts/smoke.js | e2e.js | tools-test.js | icons.js
+design/                        design system: tokens.css (source of truth) and its guide
+scripts/design.js              copies design tokens into the extension and the site
 scripts/build.js               release build → dist/
 scripts/news.js                builds news.json (site/news.json + latest release) for Pages
 scripts/release-notes.js       release notes from CHANGELOG.md
@@ -378,6 +392,7 @@ Load `extension/` unpacked in Chrome. After editing extension files press ↻ on
 | `E2E_RECORD=1 E2E_SWITCH=opencode npm run e2e -- claude` | same, plus video recording, agent hand-over and New chat |
 | `E2E_FAILOVER=opencode npm run e2e -- claude` | kills the agent mid-task, continues with OpenCode, checks the Markdown export |
 | `E2E_NEWS=1 npm run e2e` | update and news banners against a local feed |
+| `E2E_HISTORY=1 npm run e2e -- claude` | steps block, saved history, reopening a chat (tab goes back to its page), continuing it, restore after reopening the panel |
 | `E2E_FOLDER=1 npm run e2e -- claude` | binds a project folder (AGENTS.md + skill) and checks the agent follows it and creates a file there |
 | `E2E_ATTACH=1 npm run e2e -- claude` | attaches an image and a CSV and checks the agent reads both |
 | `E2E_SKILLS=1 npm run e2e -- claude` | adds a skill in Settings and checks the agent reads and follows it |
@@ -385,6 +400,8 @@ Load `extension/` unpacked in Chrome. After editing extension files press ↻ on
 | `TABHELM_RELEASE=../dist/tabhelm-x.y.z npm run e2e -- claude` | the built release |
 
 **Build:** `npm run build` (repo root) writes `dist/`: the unpacked release, `tabhelm-extension[-x.y.z].zip` and `tabhelm[-x.y.z].tar.gz` (without `node_modules`; the Claude/Codex adapters bundle agent binaries, ~750 MB installed).
+
+**Design:** colours, radii and fonts come from [`design/tokens.css`](design/README.md) (soft emerald, light and dark). After editing it run `npm run design`.
 
 **Release:** add a section to `CHANGELOG.md`, bump `version` in `extension/manifest.json`, `host/package.json` and `package.json`, then push a tag `vX.Y.Z`. The release notes are taken from the changelog. The *Release* workflow builds and publishes the assets and re-runs *Pages*, so the update banner appears in everyone's panel. *Pages* also publishes `site/` on pushes to `main`.
 

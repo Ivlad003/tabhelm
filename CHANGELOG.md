@@ -2,6 +2,16 @@
 
 All notable changes to TabHelm. The newest release is at the top; the panel's update banner links here.
 
+## [0.13.0] - 2026-10-12
+
+### Added
+- **Design system** in soft emerald tones (`design/tokens.css` + guide), shared by the side panel and the website, light and dark; new emerald logo and icons.
+- **Steps block:** the agent's actions and its own tool calls (e.g. tool search) and thinking are grouped into one scrollable message per run, with a step count.
+- **History:** chats are saved and listed with search; opening a chat switches to its tab (or brings the current tab back to its page) and any agent can continue it. Reopening the panel restores the tab's chat.
+
+### Fixed
+- A chat reopened while the agent was still starting could lose its context; any fresh agent session in a chat with history now gets that history with its first message.
+
 ## [0.12.0] - 2026-10-12
 
 ### Added
@@ -86,6 +96,7 @@ All notable changes to TabHelm. The newest release is at the top; the panel's up
 ### Added
 - First version: side-panel chat that drives terminal agents over ACP, with browser tools over MCP.
 
+[0.13.0]: https://github.com/Ivlad003/tabhelm/releases/tag/v0.13.0
 [0.12.0]: https://github.com/Ivlad003/tabhelm/releases/tag/v0.12.0
 [0.11.0]: https://github.com/Ivlad003/tabhelm/releases/tag/v0.11.0
 [0.10.0]: https://github.com/Ivlad003/tabhelm/releases/tag/v0.10.0

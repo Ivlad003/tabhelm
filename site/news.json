@@ -1,6 +1,20 @@
 {
   "news": [
     {
+      "id": "2026-10-history-design",
+      "date": "2026-10-12",
+      "minVersion": "0.13.0",
+      "title": {
+        "en": "Chat history and a fresh emerald look",
+        "uk": "Історія чатів і новий смарагдовий вигляд"
+      },
+      "text": {
+        "en": "Chats are saved: open one from History to continue it on its page with any agent. Agent steps are grouped into one scrollable block.",
+        "uk": "Чати зберігаються: відкрийте будь-який з History і продовжте на його сторінці з будь-яким агентом. Кроки агента зібрані в один блок із прокруткою."
+      },
+      "url": "https://github.com/Ivlad003/tabhelm#history"
+    },
+    {
       "id": "2026-10-folder-stats",
       "date": "2026-10-12",
       "minVersion": "0.12.0",
