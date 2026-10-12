@@ -69,6 +69,10 @@ export function hostVersionMismatch() {
 
 function toggle(open) {
   $('settings').hidden = !open;
+  if (open) {
+    $('history').hidden = true;
+    $('history-open').setAttribute('aria-pressed', 'false');
+  }
   $('log').hidden = open;
   $('settings-open').setAttribute('aria-pressed', String(open));
 }

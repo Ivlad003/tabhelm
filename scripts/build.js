@@ -26,6 +26,9 @@ if (hostPkg.version !== version) {
   process.exit(1);
 }
 
+step('Checking design tokens');
+run(process.execPath, [join(root, 'scripts/design.js'), '--check']);
+
 step('Checking syntax');
 const jsFiles = [
   ...readdirSync(join(root, 'extension')).filter((f) => f.endsWith('.js')).map((f) => join(root, 'extension', f)),

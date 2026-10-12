@@ -32,6 +32,16 @@ export async function initFolder(panelPort, chatTabId, { changed }) {
   render();
 }
 
+// Restores a saved chat's folder without restarting the agent.
+export async function restoreFolder(path) {
+  if (!path) return;
+  const info = await request({ type: 'folder_info', path });
+  if (info.error) return;
+  folder = { path: info.path, name: info.name, instructions: info.instructions, skills: info.skills, git: info.git };
+  await chrome.storage.session.set({ [`folder:${tabId}`]: folder });
+  render();
+}
+
 export function currentFolder() {
   return folder?.path || null;
 }

@@ -6,39 +6,26 @@
     <title>TabHelm</title>
     <meta name="description" content="A Chrome side panel that lets terminal coding agents — Claude Code, Codex, Cursor, Antigravity, OpenCode, Qoder, Grok or OpenRouter — read, click and type on the tab you are looking at." />
     <link rel="icon" href="logo.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="tokens.css" />
     <style>
+      /* Colours and type come from tokens.css (design/tokens.css). */
       :root {
-        --bg: #fbfbfa;
-        --surface: #ffffff;
-        --text: #18181b;
-        --muted: #62626b;
-        --border: #e4e4e0;
-        --accent: #2f6fde;
-        --accent-soft: #e8f0fd;
-        --code-bg: #f2f2ef;
-        --ok: #1f8a4c;
-        color-scheme: light;
-      }
-      @media (prefers-color-scheme: dark) {
-        :root {
-          --bg: #141416;
-          --surface: #1c1c1f;
-          --text: #ececef;
-          --muted: #9b9ba4;
-          --border: #2c2c31;
-          --accent: #6b9af2;
-          --accent-soft: #1d2a42;
-          --code-bg: #232327;
-          --ok: #4cc27f;
-          color-scheme: dark;
-        }
+        --bg: var(--th-bg);
+        --surface: var(--th-surface);
+        --text: var(--th-text);
+        --muted: var(--th-muted);
+        --border: var(--th-border);
+        --accent: var(--th-accent);
+        --accent-soft: var(--th-accent-soft);
+        --code-bg: var(--th-code-bg);
+        --ok: var(--th-ok);
       }
       * { box-sizing: border-box; }
       body {
         margin: 0;
         background: var(--bg);
         color: var(--text);
-        font: 16px/1.6 system-ui, -apple-system, 'Segoe UI', sans-serif;
+        font: 16px/1.6 var(--th-font);
       }
       a { color: var(--accent); }
       .wrap { max-width: 980px; margin: 0 auto; padding: 0 20px; }
@@ -66,7 +53,14 @@
         display: inline-flex; align-items: center; gap: 8px; padding: 11px 18px; border-radius: 10px;
         font-weight: 600; text-decoration: none; border: 1px solid var(--border); color: var(--text); background: var(--surface);
       }
-      .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+      .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--th-accent-text); }
+      .btn:hover { border-color: var(--th-border-strong); }
+      .btn.primary:hover { background: var(--th-accent-strong); border-color: var(--th-accent-strong); }
+      body { background: radial-gradient(1200px 500px at 15% -10%, var(--th-accent-soft), transparent 60%), var(--bg); }
+      .hero h1 { color: var(--th-text); }
+      .hero h1 em { font-style: normal; color: var(--th-accent-strong); }
+      .install, .diagram, .step, .agent, .news-item { box-shadow: var(--th-shadow); }
+      code, .cmd code { font-family: var(--th-font-mono); }
       .btn small { font-weight: 400; opacity: 0.8; }
 
       .install {
@@ -102,7 +96,7 @@
       .step { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; }
       .step::before {
         counter-increment: step; content: counter(step); display: inline-grid; place-items: center; width: 26px; height: 26px;
-        border-radius: 50%; background: var(--accent); color: #fff; font-weight: 700; font-size: 14px; margin-bottom: 8px;
+        border-radius: 50%; background: var(--accent); color: var(--th-accent-text); font-weight: 700; font-size: 14px; margin-bottom: 8px;
       }
       .step h3 { margin: 0 0 4px; font-size: 17px; }
       .step p { margin: 0; color: var(--muted); font-size: 15px; }

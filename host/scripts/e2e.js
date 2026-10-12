@@ -12,7 +12,8 @@
 // E2E_NEWS=1 only checks the update/news banner against a local feed;
 // E2E_SKILLS=1 adds a skill in Settings and checks the agent reads and follows it;
 // E2E_ATTACH=1 attaches an image and a CSV and checks the agent reads both;
-// E2E_FOLDER=1 binds a project folder (AGENTS.md + skill) and checks the agent works in it)
+// E2E_FOLDER=1 binds a project folder (AGENTS.md + skill) and checks the agent works in it;
+// E2E_HISTORY=1 checks the steps block, saved history, replay, continuing and reopening)
 import puppeteer from 'puppeteer-core';
 import http from 'node:http';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
@@ -87,6 +88,7 @@ const panelUrl = `chrome-extension://${extId}/sidepanel.html?tabId=${tabId}`;
 await sw.evaluate((url) => chrome.windows.create({ url, type: 'popup', width: 420, height: 800 }), panelUrl);
 const panel = await (await browser.waitForTarget((t) => t.url() === panelUrl)).page();
 panel.on('console', (m) => console.log('[panel]', m.text()));
+if (process.env.E2E_DARK) await panel.emulateMediaFeatures([{ name: 'prefers-color-scheme', value: 'dark' }]);
 await panel.waitForSelector('#agent');
 
 if (process.env.E2E_FOLDER) {
@@ -305,6 +307,46 @@ await panel.waitForFunction(() => document.querySelector('#send').textContent ==
 const out = await page.$eval('#out', (e) => e.textContent);
 
 let extraOk = true;
+if (process.env.E2E_HISTORY) {
+  const count = await panel.$eval('.activity .activity-count', (e) => Number(e.textContent)).catch(() => 0);
+  const blocks = await panel.$$eval('.activity', (b) => b.length);
+  console.log(`steps block: ${blocks} block(s), ${count} steps in the first`);
+  extraOk &&= blocks >= 1 && count >= 3;
+
+  await new Promise((r) => setTimeout(r, 1000)); // debounced save
+  await panel.click('#history-open');
+  await panel.waitForSelector('.history-item', { timeout: 10000 });
+  const items = await panel.$$eval('.history-item', (i) => i.map((x) => x.innerText.replace(/\s+/g, ' ')));
+  console.log('history:', items);
+  await panel.click('#history-close');
+
+  await panel.click('#new-chat');
+  await panel.waitForFunction(() => document.querySelector('#status').dataset.state === 'ready' && !document.querySelector('.msg'), { timeout: 90000 });
+
+  // Move the tab elsewhere; opening the chat must bring it back.
+  await page.goto(`${url}page-two`);
+  await panel.click('#history-open');
+  await panel.waitForSelector('.history-item .history-open', { timeout: 10000 });
+  await panel.click('.history-item .history-open');
+  await panel.waitForFunction(() => document.querySelectorAll('.msg.user').length === 1 && document.querySelector('.msg.agent'), { timeout: 20000 });
+  await panel.waitForFunction(() => document.querySelector('#status').dataset.state === 'ready' && !document.querySelector('#send').disabled, { timeout: 90000 });
+  const replayed = await panel.$eval('#log', (l) => ({ actions: l.querySelectorAll('.action').length, stats: l.querySelectorAll('.stats').length, text: l.innerText.slice(0, 120) }));
+  console.log('replayed:', JSON.stringify(replayed));
+  console.log('tab back on chat page:', page.url() === url, page.url());
+  extraOk &&= replayed.actions >= 3 && replayed.stats >= 1 && page.url() === url;
+
+  await panel.type('#input', 'Without using any tools: what exact confirmation text did the page show earlier in this chat?');
+  await panel.click('#send');
+  await panel.waitForFunction(() => document.querySelector('#send').textContent === 'Send' && document.querySelector('#status').dataset.state !== 'working', { timeout: 240000, polling: 1000 });
+  const reply = await panel.$$eval('.msg.agent', (m) => m.at(-1)?.innerText || '');
+  console.log('continued answer:', reply.replace(/\s+/g, ' ').slice(0, 160));
+  extraOk &&= /Ada Lovelace/.test(reply);
+
+  await new Promise((r) => setTimeout(r, 1000));
+  await panel.reload();
+  await panel.waitForFunction(() => document.querySelectorAll('.msg.user').length === 2, { timeout: 20000 });
+  console.log('restored after reopening the panel: 2 messages');
+}
 if (process.env.E2E_FAILOVER) {
   const downloads = join(profile, 'downloads');
   const session = await browser.target().createCDPSession();

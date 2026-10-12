@@ -4,14 +4,16 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>TabHelm</title>
+    <link rel="stylesheet" href="tokens.css" />
     <link rel="stylesheet" href="sidepanel.css" />
   </head>
   <body>
     <header class="bar">
       <div class="bar-row">
-        <span class="brand">TabHelm</span>
+        <span class="brand"><img src="icons/icon32.png" alt="" />TabHelm</span>
         <span id="rec-indicator" class="rec" hidden><span class="rec-dot"></span>REC</span>
         <span id="status" class="status" data-state="idle">Not connected</span>
+        <button id="history-open" class="btn small" aria-pressed="false" title="Saved chats">History</button>
         <button id="settings-open" class="btn small" aria-pressed="false" title="Skills and updates">Settings</button>
         <details class="menu" id="export-menu">
           <summary class="btn small" title="Download this chat and the agent's action log">Export</summary>
@@ -44,6 +46,17 @@
     </header>
 
     <div id="news" class="news" hidden></div>
+
+    <section id="history" class="settings" hidden aria-label="History">
+      <div class="settings-head">
+        <h2>History</h2>
+        <button id="history-close" class="btn small" type="button">Done</button>
+      </div>
+      <p class="hint">Chats are saved on this computer. Open one to continue it — its page opens too — and connect any agent: it gets the whole conversation.</p>
+      <input id="history-search" class="history-search" type="search" placeholder="Search chats" aria-label="Search chats" />
+      <p id="history-empty" class="hint" hidden>No saved chats yet.</p>
+      <ul id="history-list" class="history-list"></ul>
+    </section>
 
     <section id="settings" class="settings" hidden aria-label="Settings">
       <div class="settings-head">

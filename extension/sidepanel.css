@@ -1,37 +1,18 @@
+/* Colours, radii and type come from tokens.css (design/tokens.css). */
 :root {
-  --bg: #fbfbfa;
-  --panel: #ffffff;
-  --text: #1d1d1f;
-  --muted: #6e6e73;
-  --border: #e3e3e0;
-  --accent: #2f6fde;
-  --accent-text: #ffffff;
-  --user-bg: #eaf1fd;
-  --tool-bg: #f3f3f1;
-  --ok: #1f8a4c;
-  --warn: #b26b00;
-  --err: #c4321c;
-  --code-bg: #f1f1ee;
-  color-scheme: light;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #18181a;
-    --panel: #1f1f22;
-    --text: #ececef;
-    --muted: #9a9aa2;
-    --border: #2e2e33;
-    --accent: #5b8ff0;
-    --accent-text: #0d0d10;
-    --user-bg: #22304a;
-    --tool-bg: #26262a;
-    --ok: #4cc27f;
-    --warn: #e0a64a;
-    --err: #ef6a55;
-    --code-bg: #2a2a2f;
-    color-scheme: dark;
-  }
+  --bg: var(--th-bg);
+  --panel: var(--th-surface);
+  --text: var(--th-text);
+  --muted: var(--th-muted);
+  --border: var(--th-border);
+  --accent: var(--th-accent);
+  --accent-text: var(--th-accent-text);
+  --user-bg: var(--th-user-bubble);
+  --tool-bg: var(--th-surface-2);
+  --ok: var(--th-ok);
+  --warn: var(--th-warn);
+  --err: var(--th-err);
+  --code-bg: var(--th-code-bg);
 }
 
 * {
@@ -49,7 +30,7 @@ body {
   flex-direction: column;
   background: var(--bg);
   color: var(--text);
-  font: 13px/1.45 system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font: 13px/1.5 var(--th-font);
 }
 
 .bar {
@@ -71,6 +52,15 @@ body {
   font-weight: 650;
   letter-spacing: 0.01em;
   flex: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--th-accent-strong);
+}
+
+.brand img {
+  width: 18px;
+  height: 18px;
 }
 
 .status {
@@ -837,4 +827,218 @@ body.dropping .composer {
 #folder-warning {
   text-align: left;
   font-size: 11px;
+}
+
+/* ---- Design system refinements ---- */
+.btn {
+  border-radius: var(--th-radius-s);
+  transition: background-color 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.btn:hover:not(:disabled) {
+  background: var(--th-accent-softer);
+  border-color: var(--th-border-strong);
+}
+
+.btn.primary:hover:not(:disabled) {
+  background: var(--th-accent-strong);
+  border-color: var(--th-accent-strong);
+}
+
+.btn:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+input:focus-visible {
+  outline: none;
+  box-shadow: var(--th-focus);
+}
+
+select,
+textarea,
+.skill-form input,
+.folder-form input {
+  border-radius: var(--th-radius-s);
+}
+
+.msg.user {
+  border-radius: var(--th-radius-m) var(--th-radius-m) 3px var(--th-radius-m);
+}
+
+.card,
+.video,
+.banner,
+.skill,
+.tool {
+  border-radius: var(--th-radius-m);
+}
+
+.card {
+  box-shadow: var(--th-shadow);
+}
+
+.banner.update {
+  background: var(--th-accent-soft);
+}
+
+.msg.agent code,
+.msg.agent pre,
+.banner-cmd code {
+  font-family: var(--th-font-mono);
+}
+
+input[type='checkbox'] {
+  accent-color: var(--th-accent);
+}
+
+.notice.error,
+#folder-warning,
+#version-warning {
+  color: var(--th-err);
+}
+
+/* ---- Steps block ---- */
+.activity {
+  border: 1px solid var(--border);
+  border-radius: var(--th-radius-m);
+  background: var(--th-accent-softer);
+}
+
+.activity > summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.activity > summary::-webkit-details-marker {
+  display: none;
+}
+
+.activity > summary::after {
+  content: '▾';
+  margin-left: auto;
+  color: var(--th-faint);
+}
+
+.activity:not([open]) > summary::after {
+  content: '▸';
+}
+
+.activity-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: blink 1.2s ease-in-out infinite;
+}
+
+.activity.done .activity-dot {
+  animation: none;
+  background: var(--th-faint);
+}
+
+.activity-title {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.activity-count {
+  font-variant-numeric: tabular-nums;
+  background: var(--th-accent-soft);
+  color: var(--th-accent-strong);
+  border-radius: 999px;
+  padding: 0 7px;
+  font-size: 11px;
+}
+
+.activity-list {
+  display: grid;
+  gap: 4px;
+  max-height: 190px;
+  overflow-y: auto;
+  padding: 2px 10px 8px;
+  border-top: 1px solid var(--border);
+}
+
+.activity-list .tool {
+  background: var(--panel);
+}
+
+.activity-list .thought {
+  padding: 2px 0;
+}
+
+/* ---- History ---- */
+.history-search {
+  width: 100%;
+  font: inherit;
+  font-size: 12px;
+  padding: 6px 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--th-radius-s);
+  background: var(--bg);
+  color: var(--text);
+  margin-bottom: 8px;
+}
+
+.history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.history-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--th-radius-m);
+  background: var(--panel);
+  padding: 2px 6px 2px 2px;
+}
+
+.history-item.current {
+  border-color: var(--accent);
+  background: var(--th-accent-softer);
+}
+
+.history-open {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+  text-align: left;
+  font: inherit;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  padding: 6px 8px;
+  border-radius: var(--th-radius-s);
+  cursor: pointer;
+}
+
+.history-open:hover {
+  background: var(--th-accent-softer);
+}
+
+.history-title {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history-meta {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.history-item .banner-close {
+  margin-top: 8px;
 }

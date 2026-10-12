@@ -1,7 +1,8 @@
 import { showNews } from './news.js';
 import { initSettings, enabledSkillUrls, handleSettingsMessage, hostVersionMismatch } from './settings.js';
 import { initAttachments, takeAttachments, hasAttachments, chip } from './attachments.js';
-import { initFolder, currentFolder, handleFolderMessage, updateFolderWarning } from './folder.js';
+import { initFolder, currentFolder, handleFolderMessage, updateFolderWarning, restoreFolder } from './folder.js';
+import { initHistory, saveChat, loadChat, newChatId, setCurrentChat, closeHistory } from './history.js';
 
 const tabId = Number(new URLSearchParams(location.search).get('tabId'));
 const $ = (id) => document.getElementById(id);
@@ -38,7 +39,38 @@ let autoContinue = null; // message sent automatically once the next agent is re
 let connectedAgent = null;
 let currentModel = null;
 let agentsList = [];
-const record = (type, data = {}) => journal.push({ ts: new Date().toISOString(), type, ...data });
+// The chat is saved to History after changes (debounced).
+let chatId = null;
+let chatCreated = null;
+let replaying = false; // true while a saved chat is rendered; nothing is recorded
+let saveTimer = null;
+const record = (type, data = {}) => {
+  if (replaying) return;
+  journal.push({ ts: new Date().toISOString(), type, ...data });
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveCurrentChat, 600);
+};
+
+async function saveCurrentChat() {
+  if (!journal.some((e) => e.type === 'user')) return;
+  if (!chatId) {
+    chatId = newChatId();
+    chatCreated = Date.now();
+    setCurrentChat(chatId);
+    chrome.storage.session.set({ [`activeChat:${tabId}`]: chatId });
+  }
+  const tab = await chrome.tabs.get(tabId).catch(() => null);
+  await saveChat({
+    id: chatId,
+    created: chatCreated,
+    tabId,
+    url: tab?.url,
+    pageTitle: tab?.title,
+    agent: connectedAgent?.name || journal.findLast?.((e) => e.agent)?.agent || null,
+    folder: currentFolder(),
+    journal,
+  });
+}
 // Usage reported by the agent: running session cost and context window use.
 const usage = { cost: null, currency: 'USD', context: null, lastTurn: null };
 const emptyTemplate = $('empty').cloneNode(true);
@@ -188,6 +220,9 @@ function onStatus(msg) {
     currentModel = null;
     Object.assign(usage, { cost: null, context: null, lastTurn: null });
     restorePrefs = true;
+    // Any fresh agent session in a chat with history gets that history with its
+    // first message (reconnects, restarts, chats reopened from History).
+    if (!pendingContext && journal.some((e) => e.type === 'user')) pendingContext = buildContext();
     setStatus('ready', msg.agent.name);
     record('agent_connected', { agent: msg.agent.name });
     notice(`${msg.agent.name} connected`);
@@ -213,6 +248,7 @@ function onUpdate(u) {
     case 'agent_message_chunk':
       thoughtEl = null;
       if (!agentBubble) {
+        breakActivity();
         agentBubble = add('div', 'msg agent');
         agentText = '';
         if (turn?.text) turn.text += '\n\n'; // separate answers split by tool calls
@@ -223,7 +259,16 @@ function onUpdate(u) {
       break;
     case 'agent_thought_chunk':
       if (!thoughtEl) {
-        const d = add('details', 'thought');
+        // Thinking between steps stays inside the current steps block.
+        const inBlock = activity && activity.el === els.log.lastElementChild;
+        const d = document.createElement('details');
+        d.className = 'thought';
+        if (inBlock) addToActivity(d, false);
+        else {
+          breakActivity();
+          els.empty?.remove();
+          els.log.append(d);
+        }
         d.innerHTML = '<summary>Thinking</summary><div></div>';
         thoughtEl = d.querySelector('div');
       }
@@ -251,6 +296,7 @@ function onUpdate(u) {
 
 // The agent needs a login before it can open a session.
 function addAuth(msg) {
+  breakActivity();
   setStatus('starting', 'Sign-in required');
   const card = add('div', 'card');
   const title = document.createElement('div');
@@ -340,7 +386,9 @@ function onToolCall(u) {
   }
   if (!card) {
     agentBubble = null;
-    card = { el: add('div', 'tool') };
+    card = { el: document.createElement('div') };
+    card.el.className = 'tool';
+    addToActivity(card.el);
     card.el.innerHTML = '<span class="title"></span> <span class="state"></span><pre hidden></pre>';
     toolCards.set(u.toolCallId, card);
   }
@@ -357,19 +405,62 @@ function onToolCall(u) {
   }
 }
 
-function addAction({ tool, args, label: detail, ok, error }) {
-  agentBubble = null;
-  const el = add('div', `action ${ok ? 'ok' : 'fail'}`);
+// ---------- Activity block ----------
+// Consecutive steps of the agent (browser actions and its own tool calls such as
+// tool search) are collected in one scrollable message.
+
+let activity = null; // { el, list, count }
+
+function activityBlock() {
+  // Continue the block only while it is the latest thing in the chat.
+  if (activity && activity.el === els.log.lastElementChild) return activity;
+  breakActivity();
+  const el = add('details', 'activity');
+  el.open = true;
+  const summary = document.createElement('summary');
+  summary.innerHTML = '<span class="activity-dot"></span><span class="activity-title">Steps</span><span class="activity-count"></span>';
+  const list = document.createElement('div');
+  list.className = 'activity-list';
+  el.append(summary, list);
+  activity = { el, list, count: 0 };
+  return activity;
+}
+
+function addToActivity(node, isStep = true) {
+  const a = activityBlock();
+  a.list.append(node);
+  if (isStep) a.count++;
+  a.el.querySelector('.activity-count').textContent = String(a.count);
+  a.list.scrollTop = a.list.scrollHeight;
+  scrollDown();
+}
+
+// Ends the current block (new answer, message or card). It stays open — the
+// list scrolls inside a fixed height — and can be collapsed by clicking it.
+function breakActivity() {
+  if (!activity) return;
+  activity.el.classList.add('done');
+  activity = null;
+}
+
+function actionRow(desc, ok, error) {
+  const el = document.createElement('div');
+  el.className = `action ${ok ? 'ok' : 'fail'}`;
   const icon = document.createElement('span');
   icon.className = 'icon';
   icon.textContent = ok ? '↳' : '✗';
   const label = document.createElement('span');
-  const desc = describeAction(tool, args, detail);
   label.textContent = desc + (error ? ` — ${error}` : '');
+  el.append(icon, label);
+  return el;
+}
+
+function addAction({ tool, args, label: detail, ok, error }) {
+  agentBubble = null;
+  const desc = describeAction(tool, args, detail);
   record('action', { agent: connectedAgent?.name, tool, args, desc, ok, error });
   turn?.actions.push(`${ok ? '' : '✗ '}${desc}${error ? ` (${error})` : ''}`);
-  el.append(icon, label);
-  scrollDown();
+  addToActivity(actionRow(desc, ok, error));
 }
 
 function describeAction(tool, a = {}, detail) {
@@ -437,6 +528,7 @@ function describeAction(tool, a = {}, detail) {
 // Confirmation asked by the extension itself (uploads, JS, other tabs);
 // these are shown even when auto-approve is on.
 function addConfirm(msg) {
+  breakActivity();
   agentBubble = null;
   const card = add('div', 'card');
   const title = document.createElement('div');
@@ -464,6 +556,7 @@ function addConfirm(msg) {
 }
 
 function addPermission(msg) {
+  breakActivity();
   agentBubble = null;
   const card = add('div', 'card');
   const title = document.createElement('div');
@@ -550,6 +643,9 @@ els.newChat.onclick = () => {
   if (busy) stop();
   stopRecording(true);
   journal = [];
+  chatId = null;
+  setCurrentChat(null);
+  chrome.storage.session.remove(`activeChat:${tabId}`);
   turn = null;
   pendingContext = null;
   autoContinue = null;
@@ -590,9 +686,10 @@ els.input.addEventListener('keydown', (e) => {
   }
 });
 
-function send() {
+async function send() {
   let text = els.input.value.trim();
   if ((!text && !hasAttachments()) || !connected) return;
+  breakActivity();
   const attachments = takeAttachments();
   if (!text) text = 'Please look at the attached file(s).';
   els.input.value = '';
@@ -613,15 +710,16 @@ function send() {
   record('user', { text, attachments: attachments.map((a) => ({ name: a.name, kind: a.kind, size: a.size })) });
   setStatus('working', 'Working…');
   if (els.record.checked) startRecording();
-  port.postMessage({
-    type: 'prompt',
-    text,
-    context: pendingContext,
-    attachments: attachments.map(({ kind, name, mimeType, data, text: body }) => ({ kind, name, mimeType, data, text: body })),
-  });
+  const context = pendingContext; // a string or a pending buildContext()
   pendingContext = null;
   syncControls();
   scrollDown();
+  port.postMessage({
+    type: 'prompt',
+    text,
+    context: await context,
+    attachments: attachments.map(({ kind, name, mimeType, data, text: body }) => ({ kind, name, mimeType, data, text: body })),
+  });
 }
 
 function stop() {
@@ -638,6 +736,11 @@ function endTurn(note, failure = null) {
     turn = null;
   }
   stopRecording();
+  // The turn's steps block stops pulsing but stays open.
+  if (activity) {
+    activity.el.classList.add('done');
+    activity = null;
+  }
   const wasBusy = busy;
   busy = false;
   agentBubble = null;
@@ -1043,6 +1146,140 @@ initFolder(port, tabId, {
     startAgent(els.agent.value);
   },
 });
+// ---------- History: open and replay saved chats ----------
+
+initHistory({
+  open(meta, tabAlive) {
+    if (meta.id === chatId) return closeHistory();
+    // The chat's own tab is still open: switch to it and open its panel there.
+    // These calls must stay synchronous to keep the user gesture.
+    if (tabAlive && meta.tabId !== tabId) {
+      chrome.sidePanel.setOptions({ tabId: meta.tabId, path: `sidepanel.html?tabId=${meta.tabId}&chat=${meta.id}`, enabled: true });
+      chrome.sidePanel.open({ tabId: meta.tabId });
+      chrome.tabs.update(meta.tabId, { active: true });
+      chrome.tabs.get(meta.tabId).then((t) => chrome.windows.update(t.windowId, { focused: true })).catch(() => {});
+      closeHistory();
+      return;
+    }
+    closeHistory();
+    openSavedChat(meta.id, { navigate: !tabAlive });
+  },
+});
+
+async function openSavedChat(id, { navigate = false } = {}) {
+  // Block sending until the agent has restarted with this chat's context.
+  const wasConnected = connected;
+  if (wasConnected) {
+    connected = false;
+    setStatus('starting', 'Loading chat…');
+    syncControls();
+  }
+  const chat = await loadChat(id);
+  if (!chat) return notice('This chat is no longer saved.', true);
+  // Bring this tab back to the chat's page.
+  const tab = await chrome.tabs.get(tabId).catch(() => null);
+  if (navigate && chat.url && tab?.url !== chat.url) await chrome.tabs.update(tabId, { url: chat.url });
+  if (busy) stop();
+  stopRecording(true);
+  replayChat(chat);
+  if (chat.folder) await restoreFolder(chat.folder);
+  if (wasConnected) {
+    notice(`Continuing with ${connectedAgent?.name}; it gets this conversation as context.`);
+    startAgent(els.agent.value);
+  } else {
+    notice('Chat restored. Pick an agent and press Connect to continue — it gets this conversation as context.');
+  }
+}
+
+// Renders a saved journal without recording anything.
+function replayChat(chat) {
+  replaying = true;
+  journal = [...chat.journal];
+  chatId = chat.id;
+  chatCreated = chat.created;
+  setCurrentChat(chatId);
+  chrome.storage.session.set({ [`activeChat:${tabId}`]: chatId });
+  turn = null;
+  busy = false;
+  agentBubble = thoughtEl = planEl = null;
+  activity = null;
+  toolCards.clear();
+  els.log.replaceChildren();
+  els.empty = null;
+  for (const e of journal) {
+    switch (e.type) {
+      case 'user': {
+        breakActivity();
+        const bubble = add('div', 'msg user');
+        bubble.textContent = e.text;
+        if (e.attachments?.length) {
+          const list = document.createElement('div');
+          list.className = 'attachments';
+          list.append(...e.attachments.map((a) => chip(a)));
+          bubble.append(list);
+        }
+        break;
+      }
+      case 'action':
+        addToActivity(actionRow(e.desc, e.ok, e.error));
+        break;
+      case 'agent_tool': {
+        const el = document.createElement('div');
+        el.className = 'tool';
+        el.textContent = `${e.title} ${e.ok ? '✓' : '✗'}`;
+        addToActivity(el);
+        break;
+      }
+      case 'agent':
+        if (activity) {
+          activity.el.classList.add('done');
+          activity = null;
+        }
+        if (e.thought) {
+          const d = add('details', 'thought');
+          d.innerHTML = '<summary>Thinking</summary><div></div>';
+          d.querySelector('div').textContent = e.thought;
+        }
+        if (e.text) add('div', 'msg agent').innerHTML = renderMarkdown(e.text);
+        if (e.failure) notice(`${e.agent || 'Agent'} stopped before finishing: ${e.failure}`, true);
+        if (e.stats) showStats(e.stats);
+        break;
+      case 'permission':
+      case 'confirm':
+        notice(`🔐 ${e.title} → ${e.answer}`);
+        break;
+      case 'notice':
+        if (e.error) notice(e.text, true);
+        break;
+      case 'video':
+        notice(`🎥 Recording saved: ${e.path}`);
+        break;
+      case 'agent_connected':
+        notice(`${e.agent} connected`);
+        break;
+      case 'agent_switch':
+        notice(`Switched to ${e.to}`);
+        break;
+      case 'folder':
+        notice(e.path ? `Working folder: ${e.path}` : 'Working folder removed');
+        break;
+    }
+  }
+  if (activity) {
+    activity.el.classList.add('done');
+    activity = null;
+  }
+  replaying = false;
+  scrollDown();
+}
+
+// Reopen the chat this panel had (closing the panel stops the agent, the chat stays).
+(async () => {
+  const fromHistory = new URLSearchParams(location.search).get('chat');
+  const active = fromHistory || (await chrome.storage.session.get(`activeChat:${tabId}`))[`activeChat:${tabId}`];
+  if (active) openSavedChat(active);
+})();
+
 initAttachments({
   list: $('attachments'),
   button: $('attach'),
