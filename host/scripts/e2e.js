@@ -6,11 +6,14 @@
 // E2E_EXPECT_AUTH=1 only checks that the panel shows the agent's sign-in card;
 // E2E_RECORD=1 records the task and checks the saved video;
 // E2E_SWITCH=<agentId> afterwards switches agents and checks the conversation was handed over,
-// then presses New chat)
+// then presses New chat;
+// E2E_FAILOVER=<agentId> kills the first agent mid-task, continues with <agentId>
+// via the panel's "Continue with" card, then checks the Markdown export)
 import puppeteer from 'puppeteer-core';
 import http from 'node:http';
 import { existsSync, mkdtempSync, statSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
+import { readdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -100,11 +103,43 @@ if (process.env.E2E_MODEL) {
 if (process.env.E2E_RECORD) await panel.click('#record');
 await panel.type('#input', 'Fill this form: name "Ada Lovelace", color Blue, tick the agreement checkbox, then click Save and tell me the exact confirmation text shown.');
 await panel.click('#send');
+
+if (process.env.E2E_FAILOVER) {
+  // Kill the agent process (child of this test's native host) after its first browser action.
+  await panel.waitForSelector('.action', { timeout: 120000 });
+  const tree = execFileSync('ps', ['-eo', 'pid=,ppid=,args=']).toString().trim().split('\n').map((l) => {
+    const [pid, ppid, ...args] = l.trim().split(/\s+/);
+    return { pid: +pid, ppid: +ppid, args: args.join(' ') };
+  });
+  const descendants = (pid) => tree.filter((p) => p.ppid === pid).flatMap((c) => [c, ...descendants(c.pid)]);
+  const host = descendants(browser.process().pid).find((p) => p.args.includes('native-host.js'));
+  const agentProc = tree.find((p) => p.ppid === host.pid);
+  console.log('killing agent process:', agentProc.args.slice(0, 80));
+  process.kill(agentProc.pid, 'SIGKILL');
+  await panel.waitForFunction(() => /did not finish/.test(document.body.innerText), { timeout: 60000 });
+  const target = await panel.$$eval('.card .options button', (bs, id) => bs.findIndex((b) => b.textContent.toLowerCase().includes(id)), process.env.E2E_FAILOVER);
+  if (target < 0) throw new Error('No continue button for ' + process.env.E2E_FAILOVER);
+  await panel.evaluate((i) => document.querySelectorAll('.card .options button')[i].click(), target);
+  console.log('continuing with', process.env.E2E_FAILOVER);
+  await panel.waitForFunction(() => document.querySelectorAll('.msg.user').length === 2, { timeout: 90000 });
+}
 await panel.waitForFunction(() => document.querySelector('#send').textContent === 'Send' && document.querySelector('#status').dataset.state !== 'working', { timeout: 240000, polling: 1000 });
 
 const out = await page.$eval('#out', (e) => e.textContent);
 
 let extraOk = true;
+if (process.env.E2E_FAILOVER) {
+  const downloads = join(profile, 'downloads');
+  const session = await browser.target().createCDPSession();
+  await session.send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: downloads });
+  await panel.click('#export-menu summary');
+  await panel.click('[data-export="md"]');
+  await new Promise((r) => setTimeout(r, 1500));
+  const file = readdirSync(downloads).find((f) => f.endsWith('.md'));
+  const md = file ? readFileSync(join(downloads, file), 'utf8') : '';
+  console.log('--- export', file, `(${md.length} chars) ---\n${md.slice(0, 1800)}\n---`);
+  extraOk &&= /· You/.test(md) && /— actions/.test(md) && /Switched to/.test(md) && /Stopped before finishing/.test(md);
+}
 if (process.env.E2E_RECORD) {
   await panel.waitForFunction(() => /Saved to /.test(document.querySelector('.video')?.innerText || ''), { timeout: 60000 });
   const info = await panel.$eval('.video', (e) => e.innerText.replace(/\s+/g, ' '));

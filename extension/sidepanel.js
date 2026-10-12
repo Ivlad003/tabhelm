@@ -24,11 +24,16 @@ let agentText = '';
 let thoughtEl = null;
 let planEl = null;
 const toolCards = new Map();
-// Conversation kept so a newly selected agent can be told what happened so far.
-let transcript = []; // { role: 'user' | 'agent', name?, text }
-let turnText = ''; // everything the agent said in the current turn
-let pendingContext = null; // transcript handed to the next agent on its first message
+// Chronological record of this chat. It is handed to the next agent when you
+// switch (so it can continue) and is what Export writes out.
+let journal = []; // { ts, type, ...data }
+let turn = null; // { text, thought, actions } for the message being worked on
+let pendingContext = null; // conversation handed to the next agent with its first message
+let autoContinue = null; // message sent automatically once the next agent is ready
 let connectedAgent = null;
+let currentModel = null;
+let agentsList = [];
+const record = (type, data = {}) => journal.push({ ts: new Date().toISOString(), type, ...data });
 const emptyTemplate = $('empty').cloneNode(true);
 
 const port = chrome.runtime.connect({ name: `panel:${tabId}` });
@@ -98,11 +103,13 @@ function onMessage(msg) {
       onRecordingSaved(msg);
       break;
     case 'done':
-      endTurn(msg.stopReason === 'cancelled' ? 'Stopped' : null);
+      if (msg.stopReason === 'cancelled') endTurn('Stopped');
+      else if (msg.stopReason && msg.stopReason !== 'end_turn') endTurn(null, `stopped early (${msg.stopReason})`);
+      else endTurn();
       break;
     case 'error':
       notice(msg.message, true);
-      endTurn();
+      endTurn(null, busy ? msg.message : null);
       if (!connected) setStatus('error', 'Error');
       break;
     case 'host_disconnected':
@@ -116,6 +123,7 @@ function onMessage(msg) {
 }
 
 async function fillAgents(agents) {
+  agentsList = agents;
   const { lastAgent } = await chrome.storage.local.get('lastAgent');
   const installed = agents.filter((a) => a.installed);
   const preferred = installed.find((a) => a.id === lastAgent) || installed[0];
@@ -154,13 +162,20 @@ function onStatus(msg) {
   } else if (msg.state === 'ready') {
     connected = true;
     connectedAgent = msg.agent;
+    currentModel = null;
     restorePrefs = true;
     setStatus('ready', msg.agent.name);
+    record('agent_connected', { agent: msg.agent.name });
     notice(`${msg.agent.name} connected`);
     els.input.focus();
+    if (autoContinue) {
+      els.input.value = autoContinue;
+      autoContinue = null;
+      send();
+    }
   } else {
     connected = false;
-    endTurn();
+    endTurn(null, busy ? msg.detail || 'the agent exited' : null);
     els.config.hidden = true;
     els.config.replaceChildren();
     setStatus('idle', 'Not connected');
@@ -176,9 +191,10 @@ function onUpdate(u) {
       if (!agentBubble) {
         agentBubble = add('div', 'msg agent');
         agentText = '';
+        if (turn?.text) turn.text += '\n\n'; // separate answers split by tool calls
       }
       agentText += u.text;
-      turnText += u.text;
+      if (turn) turn.text += u.text;
       agentBubble.innerHTML = renderMarkdown(agentText);
       break;
     case 'agent_thought_chunk':
@@ -188,6 +204,7 @@ function onUpdate(u) {
         thoughtEl = d.querySelector('div');
       }
       thoughtEl.textContent += u.text;
+      if (turn) turn.thought += u.text;
       break;
     case 'tool_call':
     case 'tool_call_update':
@@ -278,6 +295,11 @@ async function renderConfig(options) {
       chrome.storage.local.set({ [prefsKey()]: { ...saved, [opt.id]: select.value } });
     };
     els.config.append(select);
+    if (opt.category === 'model') {
+      const model = select.selectedOptions[0]?.text;
+      if (model && model !== currentModel) record('model', { agent: connectedAgent?.name, model });
+      currentModel = model;
+    }
   }
   syncControls();
 }
@@ -300,6 +322,10 @@ function onToolCall(u) {
   }
   if (u.title) card.el.querySelector('.title').textContent = u.title;
   if (u.status) card.el.querySelector('.state').textContent = { pending: '…', in_progress: '…', completed: '✓', failed: '✗' }[u.status] || '';
+  if ((u.status === 'completed' || u.status === 'failed') && !card.recorded) {
+    card.recorded = true;
+    record('agent_tool', { agent: connectedAgent?.name, title: card.el.querySelector('.title').textContent, ok: u.status === 'completed' });
+  }
   if (u.text) {
     const pre = card.el.querySelector('pre');
     pre.hidden = false;
@@ -314,7 +340,10 @@ function addAction({ tool, args, label: detail, ok, error }) {
   icon.className = 'icon';
   icon.textContent = ok ? '↳' : '✗';
   const label = document.createElement('span');
-  label.textContent = describeAction(tool, args, detail) + (error ? ` — ${error}` : '');
+  const desc = describeAction(tool, args, detail);
+  label.textContent = desc + (error ? ` — ${error}` : '');
+  record('action', { agent: connectedAgent?.name, tool, args, desc, ok, error });
+  turn?.actions.push(`${ok ? '' : '✗ '}${desc}${error ? ` (${error})` : ''}`);
   el.append(icon, label);
   scrollDown();
 }
@@ -394,6 +423,7 @@ function addConfirm(msg) {
     b.textContent = name;
     b.onclick = () => {
       port.postMessage({ type: 'confirm_response', id: msg.id, allow });
+      record('confirm', { title: msg.title, detail: msg.detail, answer: name });
       card.classList.add('resolved');
       options.replaceChildren(Object.assign(document.createElement('span'), { textContent: `→ ${name}` }));
     };
@@ -417,6 +447,7 @@ function addPermission(msg) {
     b.textContent = opt.name;
     b.onclick = () => {
       port.postMessage({ type: 'permission_response', id: msg.id, optionId: opt.optionId });
+      record('permission', { agent: connectedAgent?.name, title: msg.title, answer: opt.name });
       card.classList.add('resolved');
       options.replaceChildren(Object.assign(document.createElement('span'), { textContent: `→ ${opt.name}` }));
     };
@@ -428,39 +459,70 @@ function addPermission(msg) {
 
 // ---------- Controls ----------
 
-els.connect.onclick = () => {
+els.connect.onclick = async () => {
   if (connected) {
     port.postMessage({ type: 'stop' });
     return;
   }
   const agentId = els.agent.value;
   if (!agentId) return;
-  chrome.storage.local.set({ lastAgent: agentId });
   els.connect.disabled = true;
-  port.postMessage({ type: 'start', agentId, autoApprove: els.auto.checked });
+  await startAgent(agentId);
 };
 
-// Switching agents mid-chat starts a fresh session for the new agent and hands
-// it the conversation so far with the next message.
-els.agent.onchange = () => {
-  if (!connected || busy) return;
-  const agentId = els.agent.value;
+// Starts (or switches to) an agent. If this chat already has history, the new
+// agent receives it with its first message so it can continue the work.
+async function startAgent(agentId, continueText = null) {
   chrome.storage.local.set({ lastAgent: agentId });
-  pendingContext = buildContext();
-  const name = els.agent.selectedOptions[0]?.text;
-  notice(`Switching to ${name}${pendingContext ? '. It will get this conversation as context.' : '.'}`);
+  els.agent.value = agentId;
+  pendingContext = await buildContext();
+  autoContinue = continueText;
   connected = false;
   els.config.hidden = true;
   syncControls();
   port.postMessage({ type: 'start', agentId, autoApprove: els.auto.checked });
+}
+
+els.agent.onchange = () => {
+  if (!connected || busy) return;
+  const name = els.agent.selectedOptions[0]?.text;
+  const hasHistory = journal.some((e) => e.type === 'user');
+  notice(`Switching to ${name}${hasHistory ? '. It gets this conversation and the action log as context.' : '.'}`);
+  record('agent_switch', { to: name });
+  startAgent(els.agent.value);
 };
+
+// Shown when a turn fails: hand the task to another agent in one click.
+function offerContinue(reason) {
+  const others = agentsList.filter((a) => a.installed && a.id !== connectedAgent?.id);
+  if (!others.length) return;
+  const card = add('div', 'card');
+  const title = document.createElement('div');
+  title.className = 'title';
+  title.textContent = `${connectedAgent?.name || 'The agent'} did not finish (${truncate(reason, 120)}). Continue with:`;
+  const options = document.createElement('div');
+  options.className = 'options';
+  for (const a of others) {
+    const b = Object.assign(document.createElement('button'), { className: 'btn', textContent: a.name });
+    b.onclick = () => {
+      card.classList.add('resolved');
+      options.replaceChildren(Object.assign(document.createElement('span'), { textContent: `→ ${a.name}` }));
+      record('agent_switch', { to: a.name, reason });
+      startAgent(a.id, 'Continue the task from where the previous agent stopped.');
+    };
+    options.append(b);
+  }
+  card.append(title, options);
+  scrollDown();
+}
 
 els.newChat.onclick = () => {
   if (busy) stop();
   stopRecording(true);
-  transcript = [];
+  journal = [];
+  turn = null;
   pendingContext = null;
-  turnText = '';
+  autoContinue = null;
   busy = false;
   agentBubble = thoughtEl = planEl = null;
   toolCards.clear();
@@ -504,8 +566,8 @@ function send() {
   thoughtEl = null;
   planEl = null;
   busy = true;
-  turnText = '';
-  transcript.push({ role: 'user', text });
+  turn = { text: '', thought: '', actions: [] };
+  record('user', { text });
   setStatus('working', 'Working…');
   if (els.record.checked) startRecording();
   port.postMessage({ type: 'prompt', text, context: pendingContext });
@@ -518,27 +580,51 @@ function stop() {
   port.postMessage({ type: 'cancel' });
 }
 
-function endTurn(note) {
+// `failure` is set when the turn ended without the agent finishing its work.
+function endTurn(note, failure = null) {
   if (note) notice(note);
-  if (turnText.trim()) transcript.push({ role: 'agent', name: connectedAgent?.name || 'Agent', text: turnText.trim() });
-  turnText = '';
+  if (turn) {
+    record('agent', { agent: connectedAgent?.name, model: currentModel, text: turn.text.trim(), thought: turn.thought.trim(), failure });
+    turn = null;
+  }
   stopRecording();
+  const wasBusy = busy;
   busy = false;
   agentBubble = null;
   thoughtEl = null;
   if (connected) setStatus('ready', connectedAgent?.name || 'Connected');
   syncControls();
+  if (failure && wasBusy) offerContinue(failure);
 }
 
-// Last ~12k characters of the conversation, oldest first.
-function buildContext() {
-  const lines = transcript.map((t) => `${t.role === 'user' ? 'User' : t.name}: ${t.text}`);
-  let out = '';
-  for (let i = lines.length - 1; i >= 0; i--) {
-    if (out.length + lines[i].length > 12_000) break;
-    out = `${lines[i]}\n\n${out}`;
+// The conversation for the next agent: messages, the browser actions taken,
+// unfinished work and the current page. Keeps the most recent ~12k characters.
+async function buildContext() {
+  const blocks = [];
+  let actions = [];
+  const flush = (agent) => {
+    if (actions.length) blocks.push(`[${agent || 'Agent'} did in the browser] ${actions.join('; ')}`);
+    actions = [];
+  };
+  for (const e of journal) {
+    if (e.type === 'user') blocks.push(`User: ${e.text}`);
+    else if (e.type === 'action') actions.push(`${e.ok ? '' : 'FAILED '}${e.desc}${e.error ? ` (${e.error})` : ''}`);
+    else if (e.type === 'agent') {
+      flush(e.agent);
+      if (e.text) blocks.push(`${e.agent}: ${e.text}`);
+      if (e.failure) blocks.push(`(${e.agent} stopped before finishing: ${e.failure})`);
+    }
   }
-  return out.trim() || null;
+  flush(connectedAgent?.name);
+  if (!blocks.length) return null;
+  let out = '';
+  for (let i = blocks.length - 1; i >= 0; i--) {
+    if (out.length + blocks[i].length > 12_000) break;
+    out = `${blocks[i]}\n\n${out}`;
+  }
+  const tab = await chrome.tabs.get(targetTabId).catch(() => null);
+  if (tab) out += `Current tab: ${tab.title} — ${tab.url}\n`;
+  return out.trim();
 }
 
 function syncControls() {
@@ -549,6 +635,91 @@ function syncControls() {
   els.send.disabled = !connected;
   els.send.textContent = busy ? 'Stop' : 'Send';
   for (const select of els.config.querySelectorAll('select')) select.disabled = busy;
+}
+
+// ---------- Export ----------
+
+for (const b of document.querySelectorAll('[data-export]')) {
+  b.onclick = async () => {
+    $('export-menu').open = false;
+    const tab = await chrome.tabs.get(targetTabId).catch(() => null);
+    const stamp = new Date().toISOString().slice(0, 19).replace('T', '_').replaceAll(':', '-');
+    if (b.dataset.export === 'md') download(`tabhelm-chat-${stamp}.md`, exportMarkdown(tab), 'text/markdown');
+    else download(`tabhelm-log-${stamp}.json`, JSON.stringify({ exported: new Date().toISOString(), tab: tab && { title: tab.title, url: tab.url }, journal }, null, 2), 'application/json');
+  };
+}
+
+function download(filename, content, type) {
+  const url = URL.createObjectURL(new Blob([content], { type }));
+  Object.assign(document.createElement('a'), { href: url, download: filename }).click();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}
+
+function exportMarkdown(tab) {
+  const time = (ts) => new Date(ts).toLocaleTimeString();
+  const agents = [...new Set(journal.filter((e) => e.type === 'agent_connected').map((e) => e.agent))];
+  const out = [
+    '# TabHelm chat',
+    '',
+    `- Exported: ${new Date().toLocaleString()}`,
+    tab ? `- Tab: ${tab.title} — ${tab.url}` : null,
+    agents.length ? `- Agents: ${agents.join(' → ')}` : null,
+    '',
+  ].filter((l) => l !== null);
+
+  let inActions = false;
+  const section = (heading) => {
+    inActions = false;
+    out.push('', `### ${heading}`, '');
+  };
+  for (const e of journal) {
+    const t = time(e.ts);
+    switch (e.type) {
+      case 'user':
+        section(`${t} · You`);
+        out.push(e.text);
+        break;
+      case 'action':
+      case 'agent_tool':
+        if (!inActions) {
+          section(`${t} · ${e.agent || 'Agent'} — actions`);
+          inActions = true;
+        }
+        if (e.type === 'action') out.push(`- ${t} ${e.ok ? '✓' : '✗'} ${e.desc}${e.error ? ` — ${e.error}` : ''}`);
+        else out.push(`- ${t} ${e.ok ? '✓' : '✗'} (agent tool) ${e.title}`);
+        break;
+      case 'agent':
+        section(`${t} · ${e.agent || 'Agent'}${e.model ? ` (${e.model})` : ''}`);
+        if (e.thought) out.push('<details><summary>Thinking</summary>', '', e.thought, '', '</details>', '');
+        out.push(e.text || '_No answer._');
+        if (e.failure) out.push('', `> ⚠️ Stopped before finishing: ${e.failure}`);
+        break;
+      case 'permission':
+        out.push(`- ${t} 🔐 ${e.title} → ${e.answer}`);
+        break;
+      case 'confirm':
+        out.push(`- ${t} 🔐 ${e.title} → ${e.answer}${e.detail ? ` (${e.detail.replace(/\n/g, ', ')})` : ''}`);
+        break;
+      case 'video':
+        out.push(`- ${t} 🎥 Recording saved: \`${e.path}\``);
+        break;
+      case 'model':
+        out.push('', `> ${t} · ${e.agent}: model ${e.model}`);
+        break;
+      case 'agent_connected':
+        out.push('', `> ${t} · ${e.agent} connected`);
+        inActions = false;
+        break;
+      case 'agent_switch':
+        out.push('', `> ${t} · Switched to ${e.to}${e.reason ? ` (previous agent stopped: ${e.reason})` : ''}`);
+        inActions = false;
+        break;
+      case 'notice':
+        if (e.error) out.push('', `> ⚠️ ${t} · ${e.text}`);
+        break;
+    }
+  }
+  return `${out.join('\n')}\n`;
 }
 
 // ---------- Video recording ----------
@@ -653,6 +824,7 @@ async function addVideo(blob, durationMs) {
 }
 
 function onRecordingSaved({ id, path }) {
+  record('video', { path });
   const el = videoCards.get(id);
   if (el) el.textContent = `Saved to ${path}`;
   videoCards.delete(id);
@@ -683,6 +855,7 @@ function add(tag, className) {
 }
 
 function notice(text, isError = false) {
+  record('notice', { text, error: isError });
   add('div', `notice${isError ? ' error' : ''}`).textContent = text;
   scrollDown();
 }

@@ -469,3 +469,46 @@ select:focus,
 .rec[hidden] {
   display: none;
 }
+
+.menu {
+  position: relative;
+}
+
+.menu summary {
+  list-style: none;
+  display: inline-block;
+}
+
+.menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.menu-list {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 10;
+  min-width: 190px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+  display: grid;
+}
+
+.menu-list button {
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.menu-list button:hover {
+  background: var(--tool-bg);
+}

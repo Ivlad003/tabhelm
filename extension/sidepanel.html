@@ -12,6 +12,13 @@
         <span class="brand">TabHelm</span>
         <span id="rec-indicator" class="rec" hidden><span class="rec-dot"></span>REC</span>
         <span id="status" class="status" data-state="idle">Not connected</span>
+        <details class="menu" id="export-menu">
+          <summary class="btn small" title="Download this chat and the agent's action log">Export</summary>
+          <div class="menu-list">
+            <button type="button" data-export="md">Chat + action log (.md)</button>
+            <button type="button" data-export="json">Full log (.json)</button>
+          </div>
+        </details>
         <button id="new-chat" class="btn small" title="Clear the chat and start a fresh agent session">New chat</button>
       </div>
       <div class="bar-row">

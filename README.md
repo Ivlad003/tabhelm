@@ -50,6 +50,7 @@ To update, run the install command again.
 | **Auto-approve actions** | Lets the agent use tools without asking. Uploads, JavaScript and other tabs still ask (see below). |
 | **Send / Stop** | Sends a message; while the agent works, the button cancels the turn. |
 | **New chat** | Clears the chat and starts a fresh session with the same agent and model. |
+| **Export** | Downloads the chat with the agent's action log as Markdown, or the full event log as JSON. |
 | **Record video** | Records the tab while the agent works on each message (see below). |
 
 ### Approvals
@@ -59,9 +60,29 @@ There are two layers of confirmation:
 1. **Agent permissions** — the agent asks before using a tool (ACP `session/request_permission`). You answer with its own buttons (*Allow once*, *Always allow*, *Reject*). **Auto-approve** answers these for you.
 2. **TabHelm confirmations** — always shown, even with auto-approve: uploading local files, running JavaScript in the page (`browser_evaluate`), and controlling a tab the agent did not open.
 
-### Switching agents mid-chat
+### Switching agents and continuing after a failure
 
-Pick another agent in the list at any time between messages. TabHelm starts a fresh session for it and sends the conversation so far (your messages and the previous agent's answers, last ~12k characters) together with your next message, so the new agent knows what happened. The tab, approvals and the action log stay as they are. **New chat** drops this context.
+Pick another agent in the list at any time between messages. TabHelm starts a fresh session for it and hands over the conversation together with your next message: your messages, each agent's answers, **every browser action they took** (including failed ones), work that was left unfinished, and the current page. The new agent can pick up exactly where the previous one stopped. The tab, approvals and the action log stay as they are; **New chat** drops this context. Reconnecting after a disconnect also hands the history over.
+
+If an agent crashes, errors out or stops early in the middle of a task, the chat shows **"… did not finish. Continue with:"** and a button for every other installed agent. One click starts that agent and it continues the task automatically.
+
+```mermaid
+sequenceDiagram
+    participant P as Side panel
+    participant A1 as Agent 1
+    participant A2 as Agent 2
+    P->>A1: task
+    A1-->>P: actions (logged)
+    A1--xP: crash / error / stopped early
+    P->>P: "Continue with:" card
+    P->>A2: start + history, actions, current page
+    P->>A2: "Continue the task from where the previous agent stopped."
+    A2-->>P: finishes the task
+```
+
+### Exporting the chat
+
+**Export → Chat + action log (.md)** downloads a readable transcript: your messages, each agent's answers (with thinking collapsed), every action with its time and result, approvals, model and agent switches, failures and saved recordings. **Full log (.json)** contains the same events as structured data.
 
 ### Recording videos
 
@@ -266,6 +287,7 @@ Load `extension/` unpacked in Chrome. After editing extension files press ↻ on
 | `npm run e2e -- claude` | panel → agent → fills a real form in headless Chrome |
 | `E2E_MODEL=haiku npm run e2e -- claude` | same, plus model switching and restore |
 | `E2E_RECORD=1 E2E_SWITCH=opencode npm run e2e -- claude` | same, plus video recording, agent hand-over and New chat |
+| `E2E_FAILOVER=opencode npm run e2e -- claude` | kills the agent mid-task, continues with OpenCode, checks the Markdown export |
 | `TABHELM_RELEASE=../dist/tabhelm-x.y.z npm run e2e -- claude` | the built release |
 
 **Build:** `npm run build` (repo root) writes `dist/`: the unpacked release, `tabhelm-extension[-x.y.z].zip` and `tabhelm[-x.y.z].tar.gz` (without `node_modules`; the Claude/Codex adapters bundle agent binaries, ~750 MB installed).
