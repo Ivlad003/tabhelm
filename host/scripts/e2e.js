@@ -1,6 +1,7 @@
 // End-to-end test in headless Chrome: loads the extension, opens a form page,
 // drives the side panel and checks that the agent filled and saved the form.
-// Usage: node scripts/e2e.js [agentId]   (CHROME_PATH overrides the browser)
+// Usage: node scripts/e2e.js [agentId]   (CHROME_PATH overrides the browser;
+// TABHELM_RELEASE=<dist/tabhelm-x.y.z> tests a built release instead of the sources)
 import puppeteer from 'puppeteer-core';
 import http from 'node:http';
 import { mkdtempSync } from 'node:fs';
@@ -10,10 +11,12 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const agent = process.argv[2] || 'claude';
-const EXT = fileURLToPath(new URL('../../extension', import.meta.url));
+const release = process.env.TABHELM_RELEASE;
+const EXT = release ? join(release, 'extension') : fileURLToPath(new URL('../../extension', import.meta.url));
+const INSTALL = release ? join(release, 'host/scripts/install.js') : fileURLToPath(new URL('./install.js', import.meta.url));
 const CHROME = process.env.CHROME_PATH || '/usr/bin/google-chrome';
 const profile = mkdtempSync(join(tmpdir(), 'tabhelm-e2e-'));
-execFileSync(process.execPath, [fileURLToPath(new URL('./install.js', import.meta.url)), '--user-data-dir', profile], { stdio: 'inherit' });
+execFileSync(process.execPath, [INSTALL, '--user-data-dir', profile], { stdio: 'inherit' });
 
 const PAGE = `<!doctype html><title>Signup test</title>
 <h1>Newsletter signup</h1>

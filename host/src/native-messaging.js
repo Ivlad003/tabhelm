@@ -6,6 +6,14 @@ const MAX_TO_CHROME = 1024 * 1024; // Chrome rejects host->extension frames abov
 
 export function createNativeChannel({ input = process.stdin, output = process.stdout, onMessage, onClose }) {
   let buffer = Buffer.alloc(0);
+  let closed = false;
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    onClose?.();
+  };
+  // Chrome closes the pipe when the extension disconnects; late writes must not crash the host.
+  output.on('error', close);
 
   input.on('data', (chunk) => {
     buffer = Buffer.concat([buffer, chunk]);
@@ -21,10 +29,11 @@ export function createNativeChannel({ input = process.stdin, output = process.st
       }
     }
   });
-  input.on('end', () => onClose?.());
-  input.on('close', () => onClose?.());
+  input.on('end', close);
+  input.on('close', close);
 
   function send(message) {
+    if (closed) return;
     let json = JSON.stringify(message);
     if (Buffer.byteLength(json) > MAX_TO_CHROME) {
       json = JSON.stringify({

@@ -60,7 +60,7 @@ export class AgentSession {
       this.connection.initialize({
         protocolVersion: acp.PROTOCOL_VERSION,
         clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false },
-        clientInfo: { name: 'tabhelm', version: '0.1.0' },
+        clientInfo: { name: 'tabhelm', version: '0.2.0' },
       }),
       this.exited.then(() => {
         throw new Error(`${agent.name} exited during startup. Check that it is installed and logged in.`);
