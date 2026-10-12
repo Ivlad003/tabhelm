@@ -1,6 +1,20 @@
 {
   "news": [
     {
+      "id": "2026-10-free-agents",
+      "date": "2026-10-12",
+      "minVersion": "0.10.0",
+      "title": {
+        "en": "Kilo, Cline and CodeBuddy — with free tiers",
+        "uk": "Kilo, Cline і CodeBuddy — з безкоштовними тарифами"
+      },
+      "text": {
+        "en": "Three new agents with free usage. Kilo runs on free models out of the box. Install any agent from the ACP registry with npm run install-agent -- <name>.",
+        "uk": "Три нові агенти з безкоштовним використанням. Kilo одразу працює на безкоштовних моделях. Будь-якого агента з реєстру ACP можна встановити командою npm run install-agent -- <назва>."
+      },
+      "url": "https://github.com/Ivlad003/tabhelm#free-options"
+    },
+    {
       "id": "2026-10-skills",
       "date": "2026-10-12",
       "minVersion": "0.9.0",

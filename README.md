@@ -124,15 +124,38 @@ Each tab has its own panel and its own agent session. By default the agent only 
 | Claude Code | `claude-agent-acp` (bundled adapter) | [claude.com/claude-code](https://claude.com/claude-code) |
 | Codex | `codex-acp` (bundled adapter) | `npm i -g @openai/codex` |
 | Cursor Agent CLI | `agent acp` (or `cursor-agent acp`) | `curl https://cursor.com/install -fsS \| bash` |
-| Google Antigravity | Google's ACP server `agy_acp_server.par` | `npm run install-agent antigravity` (in `~/.tabhelm/app/host`) |
+| Google Antigravity | Google's ACP server `agy_acp_server.par` | `npm run install-agent -- antigravity` |
 | OpenCode | `opencode acp` | `curl -fsSL https://opencode.ai/install \| bash` |
-| Qoder CLI | `qodercli --acp` | `npm run install-agent qoder` or `curl -fsSL https://qoder.com/install \| bash` |
+| Qoder CLI | `qodercli --acp` | `npm run install-agent -- qoder` or `curl -fsSL https://qoder.com/install \| bash` |
+| Kilo Code | `kilo acp` | `npm run install-agent -- kilo` |
+| Cline | `cline --acp` | `npm run install-agent -- cline` |
+| CodeBuddy Code | `codebuddy --acp` | `npm run install-agent -- codebuddy` |
 | Grok (experimental) | `grok agent stdio` | from x.ai |
 | **OpenRouter (built-in)** | TabHelm's own agent → OpenRouter API | `npm run set-key -- openrouter` |
 | **Ollama (built-in, local)** | TabHelm's own agent → local Ollama | [ollama.com](https://ollama.com), then `ollama pull <model>` |
 | **OpenAI-compatible (built-in)** | TabHelm's own agent → any `/v1/chat/completions` API | `TABHELM_OPENAI_BASE_URL` (+ `TABHELM_OPENAI_API_KEY`, `TABHELM_OPENAI_MODEL`) in `~/.tabhelm/env` |
 
-`npm run install-agent -- --list` shows every agent in the official [ACP registry](https://agentclientprotocol.com). Agents are detected on `PATH`; the installer records your `PATH` because Chrome starts the host with a minimal environment — rerun the installer after installing a new CLI.
+`npm run install-agent -- <name>` (in `~/.tabhelm/app/host`) installs **any** agent from the official [ACP registry](https://agentclientprotocol.com) into `~/.tabhelm/agents/<name>` — TabHelm lists it automatically, no code changes. `npm run install-agent -- --list` shows all of them (40+). Agents are detected on `PATH`; the installer records your `PATH` because Chrome starts the host with a minimal environment — rerun the installer after installing a new CLI.
+
+### Free options
+
+Checked in October 2026 — free offers change often, so check the vendor's pricing page before relying on one.
+
+| Agent | What is free | Sign-in |
+|---|---|---|
+| **Kilo Code** | `kilo-auto/free` (TabHelm's default for Kilo) routes to free models; may hit rate limits. Worked without signing in in our test | Kilo account for more |
+| **Cline** | Rotating free models in the Cline provider | Cline account |
+| **CodeBuddy Code** | 100 credits a month + 250 sign-up bonus (14 days) | codebuddy.ai (Google/GitHub) |
+| **Qoder CLI** | 100 free credits a day, each batch valid 30 days | Qoder account |
+| **OpenRouter (built-in)** | `:free` models, 50 requests/day (1000/day after a one-time $10 top-up) | API key |
+| **Google Antigravity** | Personal Google account | Google |
+| **Ollama (built-in)** | Local models, no limits | — |
+| GitHub Copilot CLI (`install-agent -- copilot`) | Copilot Free includes the CLI; small, unpublished allowance | GitHub |
+| Mistral Vibe (`install-agent -- vibe`) | Free plan: limited coding sessions | Mistral account |
+| goose (`install-agent -- goose`) | $10 one-off credit via Tetrate on first sign-in | Tetrate |
+| Poolside (`install-agent -- poolside`) | Free platform login; limits not documented | Poolside account |
+
+Not free for CLI use: Codex on a free ChatGPT account (no CLI access), Factory Droid, Auggie (card-gated trial), GLM Agent, MiniMax Code, Kimi CLI, Amp (bring your own key; free credits paused), Qwen Code (free tier closed in April 2026).
 
 ### Built-in agent: OpenRouter, Ollama and free models
 
@@ -301,7 +324,7 @@ host/                          native host (Node 20+)
   src/tool-server.js           loopback HTTP endpoint with token
   src/mcp-bridge.js            stdio MCP server spawned by agents (24 tool definitions)
   scripts/install.js           registers the native host (Chrome, Chromium, Brave, Edge)
-  scripts/install-agent.js     installs agents from the ACP registry
+  scripts/install-agent.js     installs any ACP-registry agent and records how to launch it
   scripts/set-key.js           stores an API key in ~/.tabhelm/env without echoing it
   scripts/smoke.js | e2e.js | tools-test.js | icons.js
 scripts/build.js               release build → dist/

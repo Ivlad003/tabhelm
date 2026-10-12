@@ -124,15 +124,38 @@ sequenceDiagram
 | Claude Code | `claude-agent-acp` (адаптер у комплекті) | [claude.com/claude-code](https://claude.com/claude-code) |
 | Codex | `codex-acp` (адаптер у комплекті) | `npm i -g @openai/codex` |
 | Cursor Agent CLI | `agent acp` (або `cursor-agent acp`) | `curl https://cursor.com/install -fsS \| bash` |
-| Google Antigravity | ACP-сервер Google `agy_acp_server.par` | `npm run install-agent antigravity` (у `~/.tabhelm/app/host`) |
+| Google Antigravity | ACP-сервер Google `agy_acp_server.par` | `npm run install-agent -- antigravity` |
 | OpenCode | `opencode acp` | `curl -fsSL https://opencode.ai/install \| bash` |
-| Qoder CLI | `qodercli --acp` | `npm run install-agent qoder` або `curl -fsSL https://qoder.com/install \| bash` |
+| Qoder CLI | `qodercli --acp` | `npm run install-agent -- qoder` або `curl -fsSL https://qoder.com/install \| bash` |
+| Kilo Code | `kilo acp` | `npm run install-agent -- kilo` |
+| Cline | `cline --acp` | `npm run install-agent -- cline` |
+| CodeBuddy Code | `codebuddy --acp` | `npm run install-agent -- codebuddy` |
 | Grok (експериментально) | `grok agent stdio` | з x.ai |
 | **OpenRouter (вбудований)** | власний агент TabHelm → API OpenRouter | `npm run set-key -- openrouter` |
 | **Ollama (вбудований, локальний)** | власний агент TabHelm → локальний Ollama | [ollama.com](https://ollama.com), потім `ollama pull <модель>` |
 | **OpenAI-сумісний (вбудований)** | власний агент TabHelm → будь-який API `/v1/chat/completions` | `TABHELM_OPENAI_BASE_URL` (+ `TABHELM_OPENAI_API_KEY`, `TABHELM_OPENAI_MODEL`) у `~/.tabhelm/env` |
 
-`npm run install-agent -- --list` показує всіх агентів з офіційного [реєстру ACP](https://agentclientprotocol.com). Агенти шукаються в `PATH`. Інсталятор запам'ятовує ваш `PATH`, бо Chrome запускає хост із мінімальним оточенням, тож після встановлення нового CLI запустіть інсталятор ще раз.
+`npm run install-agent -- <назва>` (у `~/.tabhelm/app/host`) встановлює **будь-якого** агента з офіційного [реєстру ACP](https://agentclientprotocol.com) у `~/.tabhelm/agents/<назва>`, і TabHelm сам показує його в списку, без змін у коді. `npm run install-agent -- --list` показує їх усіх (понад 40). Агенти шукаються в `PATH`. Інсталятор запам'ятовує ваш `PATH`, бо Chrome запускає хост із мінімальним оточенням, тож після встановлення нового CLI запустіть інсталятор ще раз.
+
+### Безкоштовні варіанти
+
+Перевірено в жовтні 2026. Безкоштовні умови часто змінюються, тож перед тим як на них покладатися, перевірте сторінку цін провайдера.
+
+| Агент | Що безкоштовно | Вхід |
+|---|---|---|
+| **Kilo Code** | `kilo-auto/free` (у TabHelm це модель Kilo за замовчуванням) перемикається між безкоштовними моделями; можливі ліміти частоти. У нашому тесті працював без входу | акаунт Kilo для більшого |
+| **Cline** | Безкоштовні моделі, що змінюються, у провайдері Cline | акаунт Cline |
+| **CodeBuddy Code** | 100 кредитів на місяць + 250 бонусних при реєстрації (14 днів) | codebuddy.ai (Google/GitHub) |
+| **Qoder CLI** | 100 безкоштовних кредитів щодня, кожна порція діє 30 днів | акаунт Qoder |
+| **OpenRouter (вбудований)** | Моделі `:free`, 50 запитів на день (1000 після одноразового поповнення на $10) | API-ключ |
+| **Google Antigravity** | Особистий Google-акаунт | Google |
+| **Ollama (вбудований)** | Локальні моделі без лімітів | — |
+| GitHub Copilot CLI (`install-agent -- copilot`) | Copilot Free включає CLI; невеликий ліміт без точних цифр | GitHub |
+| Mistral Vibe (`install-agent -- vibe`) | Безкоштовний план: обмежена кількість сесій | акаунт Mistral |
+| goose (`install-agent -- goose`) | Разові $10 через Tetrate при першому вході | Tetrate |
+| Poolside (`install-agent -- poolside`) | Безкоштовний вхід на платформу; ліміти не описані | акаунт Poolside |
+
+Не безкоштовні для CLI: Codex на безкоштовному ChatGPT (немає доступу до CLI), Factory Droid, Auggie (пробний період з карткою), GLM Agent, MiniMax Code, Kimi CLI, Amp (лише свій ключ; безкоштовні кредити призупинено), Qwen Code (безкоштовний тариф закрили у квітні 2026).
 
 ### Вбудований агент: OpenRouter, Ollama і безкоштовні моделі
 
@@ -301,7 +324,7 @@ host/                          native host (Node 20+)
   src/tool-server.js           локальний HTTP-ендпоінт із токеном
   src/mcp-bridge.js            stdio MCP-сервер, який запускають агенти (24 інструменти)
   scripts/install.js           реєстрація native host (Chrome, Chromium, Brave, Edge)
-  scripts/install-agent.js     встановлення агентів із реєстру ACP
+  scripts/install-agent.js     встановлює будь-якого агента з реєстру ACP і записує, як його запускати
   scripts/set-key.js           зберігає API-ключ у ~/.tabhelm/env без показу на екрані
   scripts/smoke.js | e2e.js | tools-test.js | icons.js
 scripts/build.js               збірка релізу → dist/

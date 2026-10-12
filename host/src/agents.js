@@ -1,4 +1,4 @@
-import { accessSync, constants, realpathSync } from 'node:fs';
+import { accessSync, constants, existsSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { delimiter, join, dirname, isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -7,8 +7,22 @@ const hostRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const localBin = (name) => join(hostRoot, 'node_modules', '.bin', name);
 const builtin = (provider) => ({ command: process.execPath, args: [join(hostRoot, 'src', 'builtin-agent.js'), '--provider', provider] });
 
-// Agents installed by `npm run install-agent <id>` live here.
+// Agents installed by `npm run install-agent <id>` live here, each with a
+// tabhelm.json that records how to launch it.
 export const AGENTS_DIR = join(homedir(), '.tabhelm', 'agents');
+
+function installedManifest(id) {
+  const file = join(AGENTS_DIR, id, 'tabhelm.json');
+  if (!existsSync(file)) return null;
+  try {
+    return JSON.parse(readFileSync(file, 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+// Launch candidate for an agent installed with install-agent (read at lookup time).
+const installed = (id) => () => installedManifest(id);
 
 // Every agent is launched as an ACP server over stdio. `launch` lists
 // candidates in priority order; the first whose command exists is used.
@@ -33,8 +47,8 @@ export const AGENTS = [
     id: 'antigravity',
     name: 'Google Antigravity',
     // Google's official ACP server (from the ACP registry), not the `agy` TUI.
-    launch: [{ command: join(AGENTS_DIR, 'antigravity', 'agy_acp_server.par'), args: process.platform === 'linux' ? ['--uid='] : [] }],
-    installHint: 'Run: npm run install-agent antigravity',
+    launch: [installed('antigravity'), { command: join(AGENTS_DIR, 'antigravity', 'agy_acp_server.par'), args: process.platform === 'linux' ? ['--uid='] : [] }],
+    installHint: 'Run: npm run install-agent -- antigravity',
   },
   {
     id: 'cursor',
@@ -58,9 +72,32 @@ export const AGENTS = [
     name: 'Qoder CLI',
     launch: [
       { command: 'qodercli', args: ['--acp'] },
+      installed('qoder'),
       { command: join(AGENTS_DIR, 'qoder', 'node_modules', '.bin', 'qodercli'), args: ['--acp'] },
     ],
-    installHint: 'Run: npm run install-agent qoder (or curl -fsSL https://qoder.com/install | bash)',
+    installHint: 'Run: npm run install-agent -- qoder (or curl -fsSL https://qoder.com/install | bash)',
+  },
+  {
+    id: 'kilo',
+    name: 'Kilo Code',
+    // Free tier: the kilo-auto/free model routes to free models (Kilo account, no card).
+    launch: [{ command: 'kilo', args: ['acp'] }, installed('kilo')],
+    defaultModel: 'kilo/kilo-auto/free',
+    installHint: 'Run: npm run install-agent -- kilo',
+  },
+  {
+    id: 'cline',
+    name: 'Cline',
+    // Free tier: rotating free models with the Cline provider (sign in, no API key).
+    launch: [{ command: 'cline', args: ['--acp'] }, installed('cline')],
+    installHint: 'Run: npm run install-agent -- cline',
+  },
+  {
+    id: 'codebuddy',
+    name: 'CodeBuddy Code',
+    // Free tier: 250 credits every two weeks (Tencent CodeBuddy international).
+    launch: [{ command: 'codebuddy', args: ['--acp'] }, installed('codebuddy')],
+    installHint: 'Run: npm run install-agent -- codebuddy',
   },
   {
     id: 'openrouter',
@@ -105,7 +142,9 @@ function findExecutable(command) {
 function resolveLaunch(agent) {
   if (agent.requires && !findExecutable(agent.requires)) return null;
   if (agent.requiresEnv && !process.env[agent.requiresEnv]) return null;
-  for (const candidate of agent.launch) {
+  for (const entry of agent.launch) {
+    const candidate = typeof entry === 'function' ? entry() : entry;
+    if (!candidate) continue;
     const path = findExecutable(candidate.command);
     if (!path) continue;
     if (candidate.pathIncludes && !realpathSync(path).toLowerCase().includes(candidate.pathIncludes)) continue;
@@ -114,15 +153,28 @@ function resolveLaunch(agent) {
   return null;
 }
 
+// Registry agents installed with install-agent that TabHelm has no entry for.
+function extraAgents() {
+  if (!existsSync(AGENTS_DIR)) return [];
+  const known = new Set(AGENTS.map((a) => a.id));
+  return readdirSync(AGENTS_DIR)
+    .filter((id) => !known.has(id))
+    .map((id) => ({ id, manifest: installedManifest(id) }))
+    .filter((x) => x.manifest)
+    .map(({ id, manifest }) => ({ id, name: manifest.name || id, launch: [installed(id)], installHint: `Run: npm run install-agent -- ${id}` }));
+}
+
+const allAgents = () => [...AGENTS, ...extraAgents()];
+
 // All known agents; the panel shows uninstalled ones disabled with a hint.
 export function listAgents() {
-  return AGENTS.map((a) => ({ id: a.id, name: a.name, installed: Boolean(resolveLaunch(a)), installHint: a.installHint }));
+  return allAgents().map((a) => ({ id: a.id, name: a.name, installed: Boolean(resolveLaunch(a)), installHint: a.installHint }));
 }
 
 export function getAgent(id) {
-  const agent = AGENTS.find((a) => a.id === id);
+  const agent = allAgents().find((a) => a.id === id);
   if (!agent) return null;
   const launch = resolveLaunch(agent);
   if (!launch) throw new Error(`${agent.name} is not installed. ${agent.installHint}`);
-  return { id: agent.id, name: agent.name, ...launch };
+  return { id: agent.id, name: agent.name, defaultModel: agent.defaultModel, ...launch };
 }

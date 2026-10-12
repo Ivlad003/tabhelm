@@ -72,7 +72,7 @@ export class AgentSession {
       this.connection.initialize({
         protocolVersion: acp.PROTOCOL_VERSION,
         clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false },
-        clientInfo: { name: 'tabhelm', version: '0.9.0' },
+        clientInfo: { name: 'tabhelm', version: '0.10.0' },
       }),
       this.exited.then(() => {
         throw new Error(`${agent.name} exited during startup. Check that it is installed and logged in.`);
@@ -105,6 +105,7 @@ export class AgentSession {
       const session = await this.connection.newSession({ cwd: this.workspace, mcpServers: this.mcpServers });
       this.sessionId = session.sessionId;
       this.configOptions = session.configOptions || [];
+      await this.applyDefaultModel();
     } catch (err) {
       if (err?.code === -32000 && this.authMethods.length) {
         this.emit({
@@ -118,6 +119,22 @@ export class AgentSession {
     }
     this.emit({ type: 'status', state: 'ready', agent: { id: agent.id, name: agent.name } });
     this.emitConfig();
+  }
+
+  // Agents with a free tier start on their free model; the panel's saved choice
+  // (sent right after "ready") still wins.
+  async applyDefaultModel() {
+    const wanted = this.agent.defaultModel;
+    const option = this.configOptions.find((o) => o.category === 'model' && o.type === 'select');
+    if (!wanted || !option || option.currentValue === wanted) return;
+    const exists = option.options.some((x) => (x.options || [x]).some((o) => o.value === wanted));
+    if (!exists) return;
+    try {
+      const res = await this.connection.setSessionConfigOption({ sessionId: this.sessionId, configId: option.id, value: wanted });
+      this.configOptions = res.configOptions || this.configOptions;
+    } catch (err) {
+      this.log(`default model ${wanted} not applied: ${err.message}`);
+    }
   }
 
   async authenticate(methodId) {

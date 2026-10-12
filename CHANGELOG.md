@@ -2,6 +2,13 @@
 
 All notable changes to TabHelm. The newest release is at the top; the panel's update banner links here.
 
+## [0.10.0] - 2026-10-12
+
+### Added
+- **Kilo Code**, **Cline** and **CodeBuddy Code** agents — all three have free tiers. Kilo starts on `kilo-auto/free` and completed the browser test without signing in.
+- `npm run install-agent -- <name>` installs **any** agent from the ACP registry; TabHelm lists installed agents automatically.
+- README section "Free options" with the free tiers checked in October 2026.
+
 ## [0.9.0] - 2026-10-12
 
 ### Added
@@ -64,6 +71,7 @@ All notable changes to TabHelm. The newest release is at the top; the panel's up
 ### Added
 - First version: side-panel chat that drives terminal agents over ACP, with browser tools over MCP.
 
+[0.10.0]: https://github.com/Ivlad003/tabhelm/releases/tag/v0.10.0
 [0.9.0]: https://github.com/Ivlad003/tabhelm/releases/tag/v0.9.0
 [0.8.1]: https://github.com/Ivlad003/tabhelm/releases/tag/v0.8.1
 [0.8.0]: https://github.com/Ivlad003/tabhelm/releases/tag/v0.8.0
