@@ -1,6 +1,20 @@
 {
   "news": [
     {
+      "id": "2026-10-tab-groups",
+      "date": "2026-10-12",
+      "minVersion": "0.14.0",
+      "title": {
+        "en": "Work across several tabs",
+        "uk": "Робота з кількома вкладками"
+      },
+      "text": {
+        "en": "Press Group tabs and drag tabs into the green TabHelm group: the agent can read one tab and type into another, or search all of them.",
+        "uk": "Натисніть Group tabs і перетягніть вкладки в зелену групу TabHelm: агент читає одну вкладку й пише в іншу або шукає в усіх одразу."
+      },
+      "url": "https://github.com/Ivlad003/tabhelm#several-tabs"
+    },
+    {
       "id": "2026-10-history-design",
       "date": "2026-10-12",
       "minVersion": "0.13.0",

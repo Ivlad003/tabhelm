@@ -42,7 +42,10 @@
       </form>
       <div id="folder-error" class="notice error" hidden></div>
       <div id="folder-warning" class="notice error" hidden>Auto-approve is on: the agent can edit files and run commands in this folder without asking.</div>
-      <div id="tab" class="tab-line" title="The tab this chat controls"></div>
+      <div class="bar-row tabs-row">
+        <div id="tab" class="tab-line" title="The tab this chat controls"></div>
+        <button id="group-tabs" class="btn small" type="button" title="Put this tab in a Chrome tab group; drag other tabs into the group to let the agent use them">Group tabs</button>
+      </div>
     </header>
 
     <div id="news" class="news" hidden></div>

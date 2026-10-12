@@ -10,7 +10,7 @@ import { z } from 'zod';
 const { TABHELM_URL, TABHELM_TOKEN, TABHELM_TAB } = process.env;
 const tabId = Number(TABHELM_TAB);
 
-const server = new McpServer({ name: 'tabhelm-browser', version: '0.13.0' });
+const server = new McpServer({ name: 'tabhelm-browser', version: '0.14.0' });
 
 async function call(tool, args = {}) {
   try {
@@ -116,6 +116,11 @@ const tools = {
     description: 'Reload the current tab.',
     inputSchema: { bypassCache: z.boolean().optional() },
   },
+  browser_search_tabs: {
+    description:
+      'Search for text in every tab you can use (the chat tab, tabs you opened and tabs the user shared through the chat\'s tab group). Returns matches per tab with refs; use them with that tab\'s tabId.',
+    inputSchema: { text: z.string() },
+  },
   browser_tabs: {
     description:
       'Work with tabs. list: tabs you may control (all: true lists every tab). new: open a URL in a new background tab and act on it. switch: act on another tab (tabs you did not open need user approval). close: close a tab you opened. The user keeps seeing the chat tab.',
@@ -163,6 +168,15 @@ const tools = {
     inputSchema: { expression: z.string() },
   },
 };
+
+// Every page tool can act on another tab directly (no switching) via tabId.
+const tabIdParam = z
+  .number()
+  .optional()
+  .describe('Act on this tab instead of the current one (ids from browser_tabs list or browser_search_tabs)');
+for (const [name, def] of Object.entries(tools)) {
+  if (name.startsWith('browser_') && !['browser_tabs', 'browser_search_tabs'].includes(name)) def.inputSchema = { ...def.inputSchema, tabId: tabIdParam };
+}
 
 for (const [name, def] of Object.entries(tools)) {
   server.registerTool(name, def, (args) => call(name, args));

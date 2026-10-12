@@ -13,7 +13,8 @@
 // E2E_SKILLS=1 adds a skill in Settings and checks the agent reads and follows it;
 // E2E_ATTACH=1 attaches an image and a CSV and checks the agent reads both;
 // E2E_FOLDER=1 binds a project folder (AGENTS.md + skill) and checks the agent works in it;
-// E2E_HISTORY=1 checks the steps block, saved history, replay, continuing and reopening)
+// E2E_HISTORY=1 checks the steps block, saved history, replay, continuing and reopening;
+// E2E_TABS=1 shares a second tab through the chat's tab group and asks the agent to move data between tabs)
 import puppeteer from 'puppeteer-core';
 import http from 'node:http';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
@@ -54,6 +55,7 @@ const server = http
     if (q.url === '/news.json') return r.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(NEWS));
     if (q.url === '/skills/signup-secret/SKILL.md') return r.writeHead(200, { 'content-type': 'text/markdown' }).end(SKILL);
     if (q.url.startsWith('/skills/')) return r.writeHead(404).end('not found');
+    if (q.url === '/contacts') return r.writeHead(200, { 'content-type': 'text/html' }).end('<title>Contacts</title><h1>Contacts</h1><p>Name: Grace Hopper</p><p>Email: grace@navy.example</p>');
     r.writeHead(200, { 'content-type': 'text/html' }).end(PAGE);
   })
   .listen(0, '127.0.0.1');
@@ -71,7 +73,7 @@ const browser = await puppeteer.launch({
   env: { ...process.env, TABHELM_RECORDINGS_DIR: join(profile, 'videos') },
   protocolTimeout: 300_000,
 });
-const page = await browser.newPage();
+const page = (await browser.pages())[0] || (await browser.newPage());
 await page.goto(url);
 
 const swTarget = await browser.waitForTarget((t) => t.type() === 'service_worker' && t.url().endsWith('background.js'));
@@ -85,11 +87,54 @@ if (process.env.E2E_NEWS) await sw.evaluate((u) => chrome.storage.local.set({ ne
 // Open the panel in its own window so the test page stays the visible tab in
 // its window (like the real side panel); background tabs render no frames.
 const panelUrl = `chrome-extension://${extId}/sidepanel.html?tabId=${tabId}`;
-await sw.evaluate((url) => chrome.windows.create({ url, type: 'popup', width: 420, height: 800 }), panelUrl);
+// For the tab-group test the panel is a background tab of the same window: in
+// headless Chrome a popup window disables tab grouping in the other windows.
+if (process.env.E2E_TABS) await sw.evaluate((url) => chrome.tabs.create({ url, active: true }), panelUrl);
+else await sw.evaluate((url) => chrome.windows.create({ url, type: 'popup', width: 420, height: 800 }), panelUrl);
 const panel = await (await browser.waitForTarget((t) => t.url() === panelUrl)).page();
 panel.on('console', (m) => console.log('[panel]', m.text()));
 if (process.env.E2E_DARK) await panel.emulateMediaFeatures([{ name: 'prefers-color-scheme', value: 'dark' }]);
 await panel.waitForSelector('#agent');
+
+if (process.env.E2E_TABS) {
+  const contacts = await browser.newPage();
+  await contacts.goto(`${url}contacts`);
+  const contactsId = await sw.evaluate(async (u) => (await chrome.tabs.query({ url: `${u}contacts` }))[0].id, url);
+  // Clicks in a background tab never complete in headless Chrome; keep the panel in front.
+  await panel.bringToFront();
+  await panel.click('#group-tabs');
+  try {
+    await panel.waitForFunction(() => /Group · 1 tab/.test(document.querySelector('#group-tabs').textContent), { timeout: 10000 });
+  } catch (err) {
+    console.log('group failed; notices:', await panel.$$eval('.notice', (n) => n.map((x) => x.innerText).join(' / ')));
+    throw err;
+  }
+  // The user drags the contacts tab into the group.
+  await sw.evaluate(async (chat, id) => chrome.tabs.group({ groupId: (await chrome.tabs.get(chat)).groupId, tabIds: [id] }), tabId, contactsId);
+  await panel.waitForFunction(() => /Group · 2 tabs/.test(document.querySelector('#group-tabs').textContent), { timeout: 10000 });
+  console.log('group button:', await panel.$eval('#group-tabs', (e) => e.textContent));
+
+  await panel.waitForFunction((id) => [...document.querySelectorAll('#agent option')].some((o) => o.value === id && !o.disabled), { timeout: 20000 }, agent);
+  await panel.select('#agent', agent);
+  await panel.click('#auto');
+  await panel.click('#connect');
+  await panel.waitForFunction(() => document.querySelector('#status').dataset.state === 'ready', { timeout: 90000 });
+  await panel.type('#input', "Another tab in this chat's tab group shows a contact. Find that person's email address there, type it into the Name field of the form on this tab, click Save, and tell me the email.");
+  await panel.click('#send');
+  await panel.waitForFunction(() => document.querySelector('#send').textContent === 'Send' && document.querySelector('#status').dataset.state !== 'working', { timeout: 300000, polling: 1000 });
+  const out = await page.$eval('#out', (e) => e.textContent);
+  const answer = (await panel.$$eval('.msg.agent', (m) => m.map((x) => x.innerText).join(' '))).replace(/\s+/g, ' ');
+  const actions = await panel.$$eval('.action', (a) => a.map((x) => x.innerText.replace(/\s+/g, ' ')));
+  const confirms = await panel.$$eval('.card', (c) => c.length);
+  console.log('actions:', actions.join(' | '));
+  console.log('answer:', answer.slice(0, 160));
+  console.log('page result:', out, '| confirmation cards:', confirms);
+  const ok = /grace@navy\.example/.test(out) && confirms === 0;
+  console.log(ok ? 'E2E PASS' : 'E2E FAIL');
+  await browser.close();
+  server.close();
+  process.exit(ok ? 0 : 1);
+}
 
 if (process.env.E2E_FOLDER) {
   const project = join(profile, 'demo-project');

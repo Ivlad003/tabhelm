@@ -142,6 +142,9 @@ function onMessage(msg) {
     case 'frame':
       onFrame(msg);
       break;
+    case 'group':
+      showGroup(msg);
+      break;
     case 'record_error':
       notice(`Recording failed: ${msg.message}`, true);
       stopRecording(true);
@@ -324,6 +327,24 @@ function addAuth(msg) {
   scrollDown();
 }
 
+// ---------- Tab group ----------
+// The chat's Chrome tab group: tabs dragged into it are shared with the agent.
+
+function showGroup({ grouped, count }) {
+  const b = $('group-tabs');
+  b.classList.toggle('grouped', grouped);
+  b.textContent = grouped ? `Group · ${count} tab${count === 1 ? '' : 's'}` : 'Group tabs';
+  b.title = grouped
+    ? 'Drag tabs into the green "TabHelm" group to let the agent use them; drag them out to stop sharing.'
+    : 'Put this tab in a Chrome tab group; drag other tabs into the group to let the agent use them';
+}
+
+$('group-tabs').onclick = () => {
+  port.postMessage({ type: 'group_tabs' });
+  record('group', {});
+};
+port.postMessage({ type: 'group_info' });
+
 // ---------- Model & effort ----------
 
 const prefsKey = () => `prefs:${els.agent.value}`;
@@ -457,7 +478,7 @@ function actionRow(desc, ok, error) {
 
 function addAction({ tool, args, label: detail, ok, error }) {
   agentBubble = null;
-  const desc = describeAction(tool, args, detail);
+  const desc = describeAction(tool, args, detail) + (args?.tabId != null && tool !== 'browser_tabs' ? ` · tab ${args.tabId}` : '');
   record('action', { agent: connectedAgent?.name, tool, args, desc, ok, error });
   turn?.actions.push(`${ok ? '' : '✗ '}${desc}${error ? ` (${error})` : ''}`);
   addToActivity(actionRow(desc, ok, error));
@@ -504,6 +525,8 @@ function describeAction(tool, a = {}, detail) {
       return 'Reload';
     case 'browser_tabs':
       return { list: 'List tabs', new: `New tab ${a.url || ''}`, switch: `Switch to tab ${a.tabId}`, close: `Close tab ${a.tabId}` }[a.action] || 'Tabs';
+    case 'browser_search_tabs':
+      return `Search tabs for ${detail || `“${truncate(a.text, 30)}”`}`;
     case 'browser_wait':
       return a.text ? `Wait for “${truncate(a.text, 30)}”` : `Wait ${a.seconds || 1}s`;
     case 'browser_handle_dialog':

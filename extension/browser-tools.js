@@ -11,7 +11,7 @@ const chats = new Map(); // chatTabId -> { chatTabId, current, owned: Set, notes
 function chatState(chatTabId) {
   let c = chats.get(chatTabId);
   if (!c) {
-    c = { chatTabId, current: chatTabId, owned: new Set([chatTabId]), notes: [] };
+    c = { chatTabId, current: chatTabId, owned: new Set([chatTabId]), notes: [], groupId: null };
     chats.set(chatTabId, c);
   }
   return c;
@@ -25,14 +25,99 @@ export function releaseChat(chatTabId) {
   for (const t of c?.owned || [chatTabId]) if (!stillUsed.has(t)) detach(t);
 }
 
+// Only tabs opened while the agent is acting (a popup after its click) are
+// handed to it; tabs the user opens from the same page are not.
 chrome.tabs.onCreated.addListener((tab) => {
   for (const c of chats.values()) {
-    if (tab.openerTabId != null && c.owned.has(tab.openerTabId)) {
+    if (tab.openerTabId != null && c.owned.has(tab.openerTabId) && Date.now() < (c.actingUntil || 0)) {
       c.owned.add(tab.id);
-      c.notes.push(`The page opened a new tab ${tab.id} (${tab.pendingUrl || tab.url || 'loading'}). Use browser_tabs to switch to it.`);
+      addToGroup(c, tab.id);
+      c.notes.push(`The page opened a new tab ${tab.id} (${tab.pendingUrl || tab.url || 'loading'}). Use it with tabId ${tab.id} or browser_tabs.`);
     }
   }
 });
+
+// ---------- tab groups ----------
+// A chat can own a Chrome tab group: every tab in it is available to the agent
+// without asking, so the user shares tabs by dragging them into the group.
+
+// For tests: what a chat can reach.
+export function chatDebugState(chatTabId) {
+  const c = chats.get(chatTabId);
+  return c ? { current: c.current, owned: [...c.owned], groupId: c.groupId } : null;
+}
+
+// The chat whose group a tab belongs to (synchronous, for the action click).
+export function chatForGroupTab(tab) {
+  if (tab.groupId == null || tab.groupId === -1) return null;
+  for (const c of chats.values()) if (c.groupId === tab.groupId && c.chatTabId !== tab.id) return c.chatTabId;
+  return null;
+}
+
+// Creates the chat's group (or adopts the group the chat tab is already in).
+export async function ensureGroup(chatTabId) {
+  const c = chatState(chatTabId);
+  const tab = await chrome.tabs.get(chatTabId);
+  if (tab.groupId !== -1) {
+    c.groupId = tab.groupId;
+  } else {
+    c.groupId = await chrome.tabs.group({ tabIds: [chatTabId] });
+    await chrome.tabGroups.update(c.groupId, { title: 'TabHelm', color: 'green' });
+  }
+  return groupInfo(chatTabId);
+}
+
+export async function groupInfo(chatTabId) {
+  const c = chatState(chatTabId);
+  if (c.groupId == null) {
+    // Adopt a group the user made themselves.
+    const tab = await chrome.tabs.get(chatTabId).catch(() => null);
+    if (tab && tab.groupId !== -1) c.groupId = tab.groupId;
+  }
+  if (c.groupId == null) return { grouped: false, count: 1 };
+  const tabs = await chrome.tabs.query({ groupId: c.groupId }).catch(() => []);
+  if (!tabs.length) {
+    c.groupId = null;
+    return { grouped: false, count: 1 };
+  }
+  return { grouped: true, count: tabs.length, groupId: c.groupId };
+}
+
+async function addToGroup(c, tabId) {
+  if (c.groupId == null) return;
+  await chrome.tabs.group({ groupId: c.groupId, tabIds: [tabId] }).catch(() => {});
+}
+
+async function inGroup(c, tabId) {
+  if (c.groupId == null) await groupInfo(c.chatTabId);
+  if (c.groupId == null) return false;
+  const tab = await chrome.tabs.get(tabId).catch(() => null);
+  return tab?.groupId === c.groupId;
+}
+
+// Tabs the agent may use: the chat tab, tabs it opened or was allowed, and the group.
+async function chatTabs(c) {
+  const ids = new Set(c.owned);
+  if (c.groupId != null || (await groupInfo(c.chatTabId)).grouped) {
+    for (const t of await chrome.tabs.query({ groupId: c.groupId })) ids.add(t.id);
+  }
+  return (await Promise.all([...ids].map((id) => chrome.tabs.get(id).catch(() => null)))).filter(Boolean);
+}
+
+// Resolves the tab a page tool acts on: tabId from the call, else the current tab.
+async function targetTab(c, requested, ui) {
+  if (requested == null) return c.current;
+  const id = Number(requested);
+  const tab = await chrome.tabs.get(id).catch(() => null);
+  if (!tab) throw new Error(`No tab ${requested}. Use browser_tabs list.`);
+  if (!c.owned.has(id) && !(await inGroup(c, id))) {
+    const ok = await ui.confirm(c.chatTabId, 'Let the agent use another tab?', `${tab.title}\n${tab.url}`);
+    if (!ok) throw new Error('The user did not allow using that tab.');
+    c.owned.add(id);
+    await addToGroup(c, id);
+  }
+  return id;
+}
 
 chrome.tabs.onRemoved.addListener((tabId) => {
   for (const c of chats.values()) {
@@ -346,20 +431,21 @@ async function screenshot(tabId, args) {
 // ---------- tabs ----------
 
 async function tabsTool(c, args, ui) {
+  const mine = new Set((await chatTabs(c)).map((t) => t.id));
   const describe = (t) =>
-    `${t.id}${t.id === c.current ? ' (current)' : ''}${t.id === c.chatTabId ? ' (chat tab)' : ''}${c.owned.has(t.id) ? '' : ' (needs user approval)'}: ${t.title || ''} — ${t.url || t.pendingUrl || ''}`;
+    `${t.id}${t.id === c.current ? ' (current)' : ''}${t.id === c.chatTabId ? ' (chat tab)' : ''}${mine.has(t.id) ? '' : ' (needs user approval)'}: ${t.title || ''} — ${t.url || t.pendingUrl || ''}`;
 
   switch (args.action) {
     case 'list': {
-      const tabs = args.all
-        ? await chrome.tabs.query({})
-        : (await Promise.all([...c.owned].map((id) => chrome.tabs.get(id).catch(() => null)))).filter(Boolean);
-      return { content: text(tabs.map(describe).join('\n') || 'No tabs.') };
+      const tabs = args.all ? await chrome.tabs.query({}) : await chatTabs(c);
+      const note = c.groupId != null ? '\nTabs in the chat\'s tab group are shared by the user. Pass tabId to any page tool to act on a tab without switching.' : '\nPass tabId to any page tool to act on a tab without switching.';
+      return { content: text((tabs.map(describe).join('\n') || 'No tabs.') + note) };
     }
     case 'new': {
       // Opened in the background so the user keeps seeing the chat tab and panel.
       const tab = await chrome.tabs.create({ url: normalizeUrl(args.url || 'about:blank'), active: false, openerTabId: c.chatTabId });
       c.owned.add(tab.id);
+      await addToGroup(c, tab.id);
       c.current = tab.id;
       const loaded = await waitForLoad(tab.id);
       await followTarget(c);
@@ -370,10 +456,11 @@ async function tabsTool(c, args, ui) {
       const id = Number(args.tabId);
       const tab = await chrome.tabs.get(id).catch(() => null);
       if (!tab) throw new Error(`No tab ${args.tabId}.`);
-      if (!c.owned.has(id)) {
+      if (!c.owned.has(id) && !(await inGroup(c, id))) {
         const ok = await ui.confirm(c.chatTabId, 'Let the agent control another tab?', `${tab.title}\n${tab.url}`);
         if (!ok) throw new Error('The user did not allow controlling that tab.');
         c.owned.add(id);
+        await addToGroup(c, id);
       }
       c.current = id;
       await followTarget(c);
@@ -383,7 +470,7 @@ async function tabsTool(c, args, ui) {
     case 'close': {
       const id = Number(args.tabId);
       if (id === c.chatTabId) throw new Error('The chat tab cannot be closed by the agent.');
-      if (!c.owned.has(id)) throw new Error('Only tabs the agent opened or was allowed to control can be closed.');
+      if (!c.owned.has(id)) throw new Error('Only tabs the agent opened or was allowed to control can be closed (not tabs you shared).');
       await chrome.tabs.remove(id);
       return { content: text(`Closed tab ${id}.`) };
     }
@@ -398,17 +485,37 @@ export async function runTool(chatTabId, tool, args, ui) {
   const c = chatState(chatTabId);
   let result;
   if (tool === 'browser_tabs') result = await tabsTool(c, args, ui);
-  else if (tool === 'browser_handle_dialog') result = await handleDialog(c.current, args);
+  else if (tool === 'browser_search_tabs') result = await searchTabs(c, args);
+  else if (tool === 'browser_handle_dialog') result = await handleDialog(await targetTab(c, args.tabId, ui), args);
   else {
-    const tabId = c.current;
+    const tabId = await targetTab(c, args.tabId, ui);
     const tab = await assertControllable(tabId);
     await attach(tabId);
-    result = await runPageTool(tabId, tab, tool, args, ui, chatTabId);
+    c.actingUntil = Infinity;
+    try {
+      result = await runPageTool(tabId, tab, tool, args, ui, chatTabId);
+    } finally {
+      // Popups may open a moment after the action finished.
+      c.actingUntil = Date.now() + 3000;
+    }
   }
   if (c.notes.length) {
     result.content = [...result.content, { type: 'text', text: `\n${c.notes.splice(0).join('\n')}` }];
   }
   return result;
+}
+
+// Finds text in every tab the chat can use; refs are per tab (use them with tabId).
+async function searchTabs(c, args) {
+  const out = [];
+  for (const tab of await chatTabs(c)) {
+    if (/^(chrome|chrome-extension|edge|brave|about|devtools|view-source):/.test(tab.url || '')) continue;
+    const frames = await injectAll(tab.id, P.findInPage, [args.text, 15]).catch(() => []);
+    const lines = frames.flatMap((f) => (f.frameId === 0 ? f.result.lines : f.result.lines.map((l) => l.replace(/^\[(e\d+)\]/, `[f${f.frameId}:$1]`))));
+    out.push(`tab ${tab.id}${tab.id === c.chatTabId ? ' (chat tab)' : ''} "${tab.title}" — ${lines.length ? `${lines.length} match(es)` : 'no matches'}`);
+    out.push(...lines.map((l) => `  ${l}`));
+  }
+  return { content: text(out.join('\n') || 'No tabs to search.'), label: `"${args.text}"` };
 }
 
 async function runPageTool(tabId, tab, tool, args, ui, chatTabId) {

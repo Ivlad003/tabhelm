@@ -2,6 +2,15 @@
 
 All notable changes to TabHelm. The newest release is at the top; the panel's update banner links here.
 
+## [0.14.0] - 2026-10-12
+
+### Added
+- **Several tabs per chat.** *Group tabs* puts the chat's tab in a Chrome tab group; tabs dragged into the group are shared with the agent without approval, tabs dragged out stop being shared. Agent-opened tabs join the group; the TabHelm icon on a grouped tab opens the chat.
+- Every page tool accepts `tabId` to act on another tab without switching; new `browser_search_tabs` searches all tabs the agent can use. Moving data between tabs and searching across tabs work in one task.
+
+### Changed
+- Pop-ups are handed to the agent only when they open while it is acting; tabs the user opens from the same page stay the user's.
+
 ## [0.13.0] - 2026-10-12
 
 ### Added
@@ -96,6 +105,7 @@ All notable changes to TabHelm. The newest release is at the top; the panel's up
 ### Added
 - First version: side-panel chat that drives terminal agents over ACP, with browser tools over MCP.
 
+[0.14.0]: https://github.com/Ivlad003/tabhelm/releases/tag/v0.14.0
 [0.13.0]: https://github.com/Ivlad003/tabhelm/releases/tag/v0.13.0
 [0.12.0]: https://github.com/Ivlad003/tabhelm/releases/tag/v0.12.0
 [0.11.0]: https://github.com/Ivlad003/tabhelm/releases/tag/v0.11.0

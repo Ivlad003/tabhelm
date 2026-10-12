@@ -66,6 +66,8 @@ const server = http.createServer((req, res) => {
   if (req.url === '/inner') return html(INNER);
   if (req.url === '/popup') return html('<title>Popup page</title><h1>Popup content</h1>');
   if (req.url === '/page2') return html('<title>Page two</title><h1>Second page</h1>');
+  if (req.url === '/contacts') return html('<title>Contacts</title><h1>Contacts</h1><p>Name: Grace Hopper</p><p>Email: grace@navy.example</p>');
+  if (req.url === '/private') return html('<title>Private</title><h1>Private page</h1>');
   if (req.url === '/api/ping') return res.writeHead(200, { 'content-type': 'application/json' }).end('{"ok":true}');
   res.writeHead(404).end('not found');
 });
@@ -90,10 +92,10 @@ const swTarget = await browser.waitForTarget((t) => t.type() === 'service_worker
 const sw = await swTarget.worker();
 const tabId = await sw.evaluate(async (u) => (await chrome.tabs.query({ url: `${u}*` }))[0].id, url);
 
-async function tool(name, args = {}) {
+async function tool(name, args = {}, { allow = true } = {}) {
   return sw.evaluate(
-    async (tabId, name, args) => {
-      const ui = { confirm: async () => true, onTarget() {} };
+    async (tabId, name, args, allow) => {
+      const ui = { confirm: async () => allow, onTarget() {} };
       try {
         const r = await self.tabhelmDebug.runTool(tabId, name, args, ui);
         return { ok: true, text: r.content.filter((c) => c.type === 'text').map((c) => c.text).join('\n'), images: r.content.filter((c) => c.type === 'image').length, label: r.label };
@@ -104,6 +106,7 @@ async function tool(name, args = {}) {
     tabId,
     name,
     args,
+    allow,
   );
 }
 
@@ -258,6 +261,35 @@ r = await tool('browser_tabs', { action: 'switch', tabId });
 check('switch back to chat tab', r.ok, r.text);
 r = await tool('browser_tabs', { action: 'close', tabId });
 check('chat tab cannot be closed', !r.ok, r.text);
+
+// --- Several tabs: a shared tab group, tabId on any tool, search across tabs
+// Tabs opened within ~3 s of an agent action count as its popups; these are the user's.
+await new Promise((x) => setTimeout(x, 3500));
+const contacts = await browser.newPage();
+await contacts.goto(`${url}contacts`);
+const contactsId = await sw.evaluate(async (u) => (await chrome.tabs.query({ url: `${u}contacts` }))[0].id, url);
+const other = await browser.newPage();
+await other.goto(`${url}private`);
+const otherId = await sw.evaluate(async (u) => (await chrome.tabs.query({ url: `${u}private` }))[0].id, url);
+await page.bringToFront();
+
+const group = await sw.evaluate(async (chat) => self.tabhelmDebug.ensureGroup(chat), tabId);
+check('chat tab put into a tab group', group.grouped && group.count === 1, JSON.stringify(group));
+// The user drags the contacts tab into the group.
+await sw.evaluate(async (groupId, id) => chrome.tabs.group({ groupId, tabIds: [id] }), group.groupId, contactsId);
+r = await tool('browser_get_text', { tabId: contactsId }, { allow: false });
+check('grouped tab readable via tabId without asking', r.ok && r.text.includes('grace@navy.example'), r.text);
+r = await tool('browser_search_tabs', { text: 'grace@navy' }, { allow: false });
+check('search across tabs finds the match in the grouped tab', r.ok && new RegExp(`tab ${contactsId} "Contacts" — 1 match`).test(r.text), r.text);
+r = await tool('browser_get_text', { tabId: otherId }, { allow: false });
+check('tab outside the group needs approval', !r.ok && /did not allow/.test(r.text), r.text);
+r = await tool('browser_tabs', { action: 'list' }, { allow: false });
+check('tab list includes shared group tabs', r.text.includes(`${contactsId}: Contacts`) && !r.text.includes(`${otherId}:`), r.text);
+await sw.evaluate(async (id) => chrome.tabs.ungroup([id]), contactsId);
+r = await tool('browser_get_text', { tabId: contactsId }, { allow: false });
+check('tab dragged out of the group needs approval again', !r.ok, r.text);
+await contacts.close();
+await other.close();
 
 // --- Navigation
 r = await tool('browser_navigate', { url: `${url}page2` });

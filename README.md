@@ -55,6 +55,7 @@ To update, run the install command again.
 | **Auto-approve actions** | Lets the agent use tools without asking. Uploads, JavaScript and other tabs still ask (see below). |
 | **Send / Stop** | Sends a message; while the agent works, the button cancels the turn. |
 | **History** | Saved chats — open one to continue it; its page opens too. |
+| **Group tabs** | Puts the chat's tab in a Chrome tab group; tabs you drag into the group are shared with the agent (see *Several tabs*). |
 | **Folder…** | Optional working folder (project) for the chat — see below. |
 | **Attach** | Adds images and text files (txt, md, csv, tsv, json, log) to the message. You can also drop files on the panel or paste an image. |
 | **New chat** | Clears the chat and starts a fresh session with the same agent and model. |
@@ -144,9 +145,15 @@ If an agent needs a login, the panel shows its sign-in options as buttons. Click
 - **Google Antigravity** offers *Log in with Google*, Gemini Enterprise, a Gemini API key or Agent Platform right in the panel.
 - **Qoder CLI** reuses an existing login: run `qodercli login` once (for an agent installed with `install-agent`: `~/.tabhelm/agents/qoder/node_modules/.bin/qodercli login`).
 
-### Tabs
+### Several tabs
 
-Each tab has its own panel and its own agent session. By default the agent only works on that tab. It can open new tabs in the background (`browser_tabs` → `new`); pop-ups opened by the page are added automatically. Switching to any other tab requires your approval.
+Each tab has its own panel and its own agent session, and by default the agent works on that tab only. To let it work across tabs — move data from one page to another, compare pages, search several pages at once:
+
+- press **Group tabs**: the chat's tab goes into a green Chrome tab group named *TabHelm*. **Drag any tab into that group** and the agent can use it without asking; drag it out to stop sharing. The button shows how many tabs are in the group, and the TabHelm icon on a grouped tab opens the chat.
+- the agent can also open tabs itself (`browser_tabs` → `new`, added to the group); pop-ups opened while it acts are added automatically; any other tab still needs your approval.
+- every page tool takes a `tabId`, so the agent reads one tab and types into another without switching; `browser_search_tabs` finds text in all the tabs it can use.
+
+Example: with a contact card in one tab and a form in the chat's tab, "copy the email from the other tab into this form" works in a few steps.
 
 ## Supported agents
 
@@ -204,14 +211,14 @@ Besides the CLIs, TabHelm ships its own small agent (`host/src/builtin-agent.js`
 
 ## Browser tools
 
-The agent sees 24 MCP tools, all scoped to the chat's tab:
+The agent sees 25 MCP tools, scoped to the chat's tab and the tabs shared with it (every page tool also accepts `tabId`):
 
 | Group | Tools |
 |---|---|
 | Read | `browser_snapshot`, `browser_find`, `browser_get_text`, `browser_screenshot` (viewport / full page / element) |
 | Mouse | `browser_click` (left/right/middle, double, modifiers), `browser_click_xy`, `browser_hover`, `browser_drag` |
 | Keyboard & forms | `browser_type`, `browser_select_option`, `browser_press_key` (`Enter`, `F5`, `Control+A`…), `browser_upload_file`, `browser_scroll` |
-| Navigation & tabs | `browser_navigate`, `browser_go_back`, `browser_go_forward`, `browser_reload`, `browser_tabs` |
+| Navigation & tabs | `browser_navigate`, `browser_go_back`, `browser_go_forward`, `browser_reload`, `browser_tabs`, `browser_search_tabs` |
 | Waiting & dialogs | `browser_wait`, `browser_handle_dialog` |
 | Diagnostics | `browser_console`, `browser_network`, `browser_evaluate` |
 
@@ -392,6 +399,7 @@ Load `extension/` unpacked in Chrome. After editing extension files press ↻ on
 | `E2E_RECORD=1 E2E_SWITCH=opencode npm run e2e -- claude` | same, plus video recording, agent hand-over and New chat |
 | `E2E_FAILOVER=opencode npm run e2e -- claude` | kills the agent mid-task, continues with OpenCode, checks the Markdown export |
 | `E2E_NEWS=1 npm run e2e` | update and news banners against a local feed |
+| `E2E_TABS=1 npm run e2e -- claude` | shares a second tab through the tab group and asks the agent to move data between tabs |
 | `E2E_HISTORY=1 npm run e2e -- claude` | steps block, saved history, reopening a chat (tab goes back to its page), continuing it, restore after reopening the panel |
 | `E2E_FOLDER=1 npm run e2e -- claude` | binds a project folder (AGENTS.md + skill) and checks the agent follows it and creates a file there |
 | `E2E_ATTACH=1 npm run e2e -- claude` | attaches an image and a CSV and checks the agent reads both |

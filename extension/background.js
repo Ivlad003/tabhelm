@@ -1,4 +1,4 @@
-import { runTool, releaseChat, startRecording, stopRecording } from './browser-tools.js';
+import { runTool, releaseChat, startRecording, stopRecording, ensureGroup, groupInfo, chatForGroupTab, chatDebugState } from './browser-tools.js';
 
 const HOST_NAME = 'com.tabhelm.host';
 const panels = new Map(); // chat tabId -> side panel port
@@ -7,14 +7,33 @@ let nextConfirmId = 1;
 let nativePort = null;
 
 // Dev hook for scripts/tools-test.js: lets the test call tools directly from the service worker.
-self.tabhelmDebug = { runTool };
+self.tabhelmDebug = { runTool, ensureGroup, chatDebugState };
 
 // Each tab gets its own side panel instance, bound to that tab's id.
 chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: false }).catch(() => {});
 chrome.action.onClicked.addListener((tab) => {
+  // On a tab shared through a chat's tab group, go to that chat instead.
+  const chatTabId = panels.size ? chatForGroupTab(tab) : null;
+  if (chatTabId != null && panels.has(chatTabId)) {
+    chrome.sidePanel.open({ tabId: chatTabId });
+    chrome.tabs.update(chatTabId, { active: true });
+    return;
+  }
   // Both calls must happen synchronously inside the click gesture.
   chrome.sidePanel.setOptions({ tabId: tab.id, path: `sidepanel.html?tabId=${tab.id}`, enabled: true });
   chrome.sidePanel.open({ tabId: tab.id });
+});
+
+// Keep each panel's "N tabs in group" up to date when tabs join or leave.
+async function postGroupInfo(chatTabId) {
+  const port = panels.get(chatTabId);
+  if (port) port.postMessage({ type: 'group', ...(await groupInfo(chatTabId).catch(() => ({ grouped: false, count: 1 }))) });
+}
+chrome.tabs.onUpdated.addListener((_id, info) => {
+  if ('groupId' in info) for (const id of panels.keys()) postGroupInfo(id);
+});
+chrome.tabs.onRemoved.addListener(() => {
+  for (const id of panels.keys()) postGroupInfo(id);
 });
 
 // UI hooks the browser tools use to ask the user or report the active tab.
@@ -83,6 +102,14 @@ chrome.runtime.onConnect.addListener((port) => {
     }
     if (msg.type === 'record_stop') {
       stopRecording(tabId);
+      return;
+    }
+    if (msg.type === 'group_tabs') {
+      ensureGroup(tabId).then(() => postGroupInfo(tabId), (err) => port.postMessage({ type: 'error', message: err.message }));
+      return;
+    }
+    if (msg.type === 'group_info') {
+      postGroupInfo(tabId);
       return;
     }
     try {

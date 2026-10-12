@@ -1042,3 +1042,14 @@ input[type='checkbox'] {
 .history-item .banner-close {
   margin-top: 8px;
 }
+
+.tabs-row .tab-line {
+  flex: 1;
+  min-width: 0;
+}
+
+#group-tabs.grouped {
+  border-color: var(--accent);
+  color: var(--th-accent-strong);
+  background: var(--th-accent-softer);
+}
