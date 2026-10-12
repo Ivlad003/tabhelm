@@ -112,7 +112,12 @@ if (process.env.E2E_EXPECT_AUTH) {
   server.close();
   process.exit(buttons.length ? 0 : 1);
 }
-await panel.waitForFunction(() => document.querySelector('#status').dataset.state === 'ready', { timeout: 60000 });
+try {
+  await panel.waitForFunction(() => document.querySelector('#status').dataset.state === 'ready', { timeout: 60000 });
+} catch (err) {
+  console.log('agent did not become ready; panel says:', await panel.$eval('body', (b) => b.innerText.replace(/\s+/g, ' ').slice(0, 1500)));
+  throw err;
+}
 await panel.waitForSelector('#config select.model', { timeout: 30000 });
 const models = await panel.$$eval('#config select.model option', (o) => o.map((x) => x.value));
 console.log(`models (${models.length}):`, models.slice(0, 8).join(', '), models.length > 8 ? '…' : '');

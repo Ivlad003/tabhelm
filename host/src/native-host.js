@@ -16,8 +16,12 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { createNativeChannel } from './native-messaging.js';
 import { listAgents, getAgent } from './agents.js';
+import { loadEnvFile } from './env.js';
 import { startToolServer } from './tool-server.js';
 import { AgentSession } from './session.js';
+
+// API keys and endpoints from ~/.tabhelm/env reach every agent the host starts.
+loadEnvFile();
 
 const home = join(homedir(), '.tabhelm');
 const workspace = join(home, 'workspace');

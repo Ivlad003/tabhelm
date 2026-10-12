@@ -32,6 +32,7 @@ const jsFiles = [
   ...readdirSync(join(root, 'host/src')).map((f) => join(root, 'host/src', f)),
   join(root, 'host/scripts/install.js'),
   join(root, 'host/scripts/install-agent.js'),
+  join(root, 'host/scripts/set-key.js'),
 ];
 for (const file of jsFiles) run(process.execPath, ['--check', file]);
 
@@ -51,10 +52,10 @@ writeFileSync(bgPath, stripped);
 step('Copying host and installing production dependencies');
 mkdirSync(join(out, 'host/scripts'), { recursive: true });
 cpSync(join(root, 'host/src'), join(out, 'host/src'), { recursive: true });
-for (const f of ['install.js', 'install-agent.js']) cpSync(join(root, 'host/scripts', f), join(out, 'host/scripts', f));
+for (const f of ['install.js', 'install-agent.js', 'set-key.js']) cpSync(join(root, 'host/scripts', f), join(out, 'host/scripts', f));
 for (const f of ['package.json', 'package-lock.json']) cpSync(join(root, 'host', f), join(out, 'host', f));
 const pkg = JSON.parse(readFileSync(join(out, 'host/package.json'), 'utf8'));
-pkg.scripts = { 'install-host': pkg.scripts['install-host'], 'install-agent': pkg.scripts['install-agent'] };
+pkg.scripts = { 'install-host': pkg.scripts['install-host'], 'install-agent': pkg.scripts['install-agent'], 'set-key': pkg.scripts['set-key'] };
 delete pkg.devDependencies;
 writeFileSync(join(out, 'host/package.json'), `${JSON.stringify(pkg, null, 2)}\n`);
 run('npm', ['ci', '--omit=dev', '--no-audit', '--no-fund', '--loglevel=error'], join(out, 'host'));

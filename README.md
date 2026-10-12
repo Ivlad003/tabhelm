@@ -115,8 +115,25 @@ Each tab has its own panel and its own agent session. By default the agent only 
 | OpenCode | `opencode acp` | `curl -fsSL https://opencode.ai/install \| bash` |
 | Qoder CLI | `qodercli --acp` | `npm run install-agent qoder` or `curl -fsSL https://qoder.com/install \| bash` |
 | Grok (experimental) | `grok agent stdio` | from x.ai |
+| **OpenRouter (built-in)** | TabHelm's own agent → OpenRouter API | `npm run set-key -- openrouter` |
+| **Ollama (built-in, local)** | TabHelm's own agent → local Ollama | [ollama.com](https://ollama.com), then `ollama pull <model>` |
+| **OpenAI-compatible (built-in)** | TabHelm's own agent → any `/v1/chat/completions` API | `TABHELM_OPENAI_BASE_URL` (+ `TABHELM_OPENAI_API_KEY`, `TABHELM_OPENAI_MODEL`) in `~/.tabhelm/env` |
 
 `npm run install-agent -- --list` shows every agent in the official [ACP registry](https://agentclientprotocol.com). Agents are detected on `PATH`; the installer records your `PATH` because Chrome starts the host with a minimal environment — rerun the installer after installing a new CLI.
+
+### Built-in agent: OpenRouter, Ollama and free models
+
+Besides the CLIs, TabHelm ships its own small agent (`host/src/builtin-agent.js`) that talks to any OpenAI-compatible API directly — no extra CLI needed. It runs the same loop as the others (model → browser tool → result), streams answers and reasoning, asks before actions that change the page (read-only tools run without asking), retries rate limits, and shortens old page snapshots to save tokens.
+
+- **OpenRouter** — the model list shows tool-calling models only, **free (`:free`) ones first**. Free models are limited to 20 requests/minute and 50/day (1000/day after a one-time $10 top-up); a browser task takes roughly 10–20 requests. Add the key once:
+  ```bash
+  cd ~/.tabhelm/app/host && npm run set-key -- openrouter
+  ```
+  The key is stored in `~/.tabhelm/env` (mode 600). If it is missing, the panel shows what to do.
+- **Ollama** — local and free; lists the models you have pulled. Small models (7–9B) struggle with multi-step browser tasks; 27–32B or 30B MoE models on a 24 GB GPU work much better (see `docs/research.md`).
+- **OpenAI-compatible** — any other provider (Groq, Google AI Studio, LM Studio, vLLM…) via `TABHELM_OPENAI_BASE_URL`.
+
+`~/.tabhelm/env` is loaded by the host for every agent, so it is also the place for keys that CLIs read from the environment (e.g. a Codex profile that uses OpenRouter).
 
 ## Browser tools
 
@@ -264,10 +281,13 @@ host/                          native host (Node 20+)
   src/native-messaging.js      4-byte length-prefixed framing, 1 MB guard
   src/session.js               one ACP session per tab: start, auth, prompt, permissions, config
   src/agents.js                agent registry, PATH detection, install hints
+  src/builtin-agent.js         TabHelm's own ACP agent for OpenRouter / Ollama / OpenAI-compatible APIs
+  src/env.js                   ~/.tabhelm/env (API keys) loading and saving
   src/tool-server.js           loopback HTTP endpoint with token
   src/mcp-bridge.js            stdio MCP server spawned by agents (24 tool definitions)
   scripts/install.js           registers the native host (Chrome, Chromium, Brave, Edge)
   scripts/install-agent.js     installs agents from the ACP registry
+  scripts/set-key.js           stores an API key in ~/.tabhelm/env without echoing it
   scripts/smoke.js | e2e.js | tools-test.js | icons.js
 scripts/build.js               release build → dist/
 scripts/news.js                builds news.json (site/news.json + latest release) for Pages
@@ -295,6 +315,7 @@ Load `extension/` unpacked in Chrome. After editing extension files press ↻ on
 | `E2E_RECORD=1 E2E_SWITCH=opencode npm run e2e -- claude` | same, plus video recording, agent hand-over and New chat |
 | `E2E_FAILOVER=opencode npm run e2e -- claude` | kills the agent mid-task, continues with OpenCode, checks the Markdown export |
 | `E2E_NEWS=1 npm run e2e` | update and news banners against a local feed |
+| `npm run test:builtin` | built-in agent against a mock OpenAI-compatible API (streaming, tool calls, 429 retry, missing key) |
 | `TABHELM_RELEASE=../dist/tabhelm-x.y.z npm run e2e -- claude` | the built release |
 
 **Build:** `npm run build` (repo root) writes `dist/`: the unpacked release, `tabhelm-extension[-x.y.z].zip` and `tabhelm[-x.y.z].tar.gz` (without `node_modules`; the Claude/Codex adapters bundle agent binaries, ~750 MB installed).

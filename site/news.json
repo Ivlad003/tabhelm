@@ -1,6 +1,20 @@
 {
   "news": [
     {
+      "id": "2026-10-openrouter-builtin",
+      "date": "2026-10-12",
+      "minVersion": "0.8.0",
+      "title": {
+        "en": "Free models via OpenRouter",
+        "uk": "Безкоштовні моделі через OpenRouter"
+      },
+      "text": {
+        "en": "Pick \"OpenRouter (built-in)\" to use free :free models directly, or Ollama for local models. Add your key with npm run set-key -- openrouter.",
+        "uk": "Оберіть «OpenRouter (built-in)», щоб користуватися безкоштовними моделями :free напряму, або Ollama для локальних моделей. Ключ додається командою npm run set-key -- openrouter."
+      },
+      "url": "https://github.com/Ivlad003/tabhelm#built-in-agent-openrouter-ollama-and-free-models"
+    },
+    {
       "id": "2026-10-failover-export",
       "date": "2026-10-12",
       "minVersion": "0.6.0",

@@ -5,13 +5,15 @@ import { fileURLToPath } from 'node:url';
 
 const hostRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const localBin = (name) => join(hostRoot, 'node_modules', '.bin', name);
+const builtin = (provider) => ({ command: process.execPath, args: [join(hostRoot, 'src', 'builtin-agent.js'), '--provider', provider] });
 
 // Agents installed by `npm run install-agent <id>` live here.
 export const AGENTS_DIR = join(homedir(), '.tabhelm', 'agents');
 
 // Every agent is launched as an ACP server over stdio. `launch` lists
 // candidates in priority order; the first whose command exists is used.
-// `requires` (optional) must also be on PATH, e.g. the CLI an adapter drives.
+// `requires` (optional) must also be on PATH, e.g. the CLI an adapter drives;
+// `requiresEnv` (optional) must be set (environment or ~/.tabhelm/env).
 export const AGENTS = [
   {
     id: 'claude',
@@ -67,6 +69,27 @@ export const AGENTS = [
     installHint: 'Run: npm run install-agent qoder (or curl -fsSL https://qoder.com/install | bash)',
   },
   {
+    id: 'openrouter',
+    name: 'OpenRouter (built-in)',
+    // TabHelm's own agent: calls the OpenRouter API directly, incl. free models.
+    launch: [builtin('openrouter')],
+    installHint: 'Add your key: npm run set-key -- openrouter (https://openrouter.ai/keys)',
+  },
+  {
+    id: 'ollama',
+    name: 'Ollama (built-in, local)',
+    requires: 'ollama',
+    launch: [builtin('ollama')],
+    installHint: 'Install Ollama (https://ollama.com) and pull a model, e.g. ollama pull qwen3:30b',
+  },
+  {
+    id: 'openai-compatible',
+    name: 'OpenAI-compatible (built-in)',
+    requiresEnv: 'TABHELM_OPENAI_BASE_URL',
+    launch: [builtin('openai')],
+    installHint: 'Set TABHELM_OPENAI_BASE_URL (and TABHELM_OPENAI_API_KEY) in ~/.tabhelm/env',
+  },
+  {
     id: 'grok',
     name: 'Grok (experimental)',
     launch: [{ command: 'grok', args: ['agent', 'stdio'] }],
@@ -87,6 +110,7 @@ function findExecutable(command) {
 
 function resolveLaunch(agent) {
   if (agent.requires && !findExecutable(agent.requires)) return null;
+  if (agent.requiresEnv && !process.env[agent.requiresEnv]) return null;
   for (const candidate of agent.launch) {
     const path = findExecutable(candidate.command);
     if (!path) continue;

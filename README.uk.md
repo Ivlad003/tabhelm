@@ -115,8 +115,25 @@ sequenceDiagram
 | OpenCode | `opencode acp` | `curl -fsSL https://opencode.ai/install \| bash` |
 | Qoder CLI | `qodercli --acp` | `npm run install-agent qoder` або `curl -fsSL https://qoder.com/install \| bash` |
 | Grok (експериментально) | `grok agent stdio` | з x.ai |
+| **OpenRouter (вбудований)** | власний агент TabHelm → API OpenRouter | `npm run set-key -- openrouter` |
+| **Ollama (вбудований, локальний)** | власний агент TabHelm → локальний Ollama | [ollama.com](https://ollama.com), потім `ollama pull <модель>` |
+| **OpenAI-сумісний (вбудований)** | власний агент TabHelm → будь-який API `/v1/chat/completions` | `TABHELM_OPENAI_BASE_URL` (+ `TABHELM_OPENAI_API_KEY`, `TABHELM_OPENAI_MODEL`) у `~/.tabhelm/env` |
 
 `npm run install-agent -- --list` показує всіх агентів з офіційного [реєстру ACP](https://agentclientprotocol.com). Агенти шукаються в `PATH`. Інсталятор запам'ятовує ваш `PATH`, бо Chrome запускає хост із мінімальним оточенням, тож після встановлення нового CLI запустіть інсталятор ще раз.
+
+### Вбудований агент: OpenRouter, Ollama і безкоштовні моделі
+
+Окрім CLI, TabHelm має власного невеликого агента (`host/src/builtin-agent.js`), який звертається до будь-якого OpenAI-сумісного API напряму, без додаткового CLI. Він виконує той самий цикл (модель → браузерний інструмент → результат), транслює відповіді й міркування, питає дозволу перед діями, що змінюють сторінку (інструменти лише для читання працюють без запиту), повторює запит при лімітах і скорочує старі знімки сторінки, щоб економити токени.
+
+- **OpenRouter** — у списку лише моделі з викликом інструментів, **безкоштовні (`:free`) — першими**. Безкоштовні моделі обмежені 20 запитами на хвилину і 50 на день (1000 на день після одноразового поповнення на $10); браузерне завдання — це приблизно 10–20 запитів. Додайте ключ один раз:
+  ```bash
+  cd ~/.tabhelm/app/host && npm run set-key -- openrouter
+  ```
+  Ключ зберігається в `~/.tabhelm/env` (права 600). Якщо ключа немає, панель підкаже, що робити.
+- **Ollama** — локально й безкоштовно; показує моделі, які ви завантажили. Малі моделі (7–9B) погано справляються з багатокроковими браузерними завданнями; моделі 27–32B або MoE 30B на GPU з 24 GB працюють значно краще (див. `docs/research.md`).
+- **OpenAI-сумісний** — будь-який інший провайдер (Groq, Google AI Studio, LM Studio, vLLM…) через `TABHELM_OPENAI_BASE_URL`.
+
+`~/.tabhelm/env` хост завантажує для всіх агентів, тож туди ж можна покласти ключі, які CLI читають зі змінних оточення (наприклад, профіль Codex з OpenRouter).
 
 ## Браузерні інструменти
 
@@ -264,10 +281,13 @@ host/                          native host (Node 20+)
   src/native-messaging.js      фрейми з 4-байтовою довжиною, захист від ліміту 1 MB
   src/session.js               одна ACP-сесія на вкладку: запуск, вхід, промпт, дозволи, налаштування
   src/agents.js                реєстр агентів, пошук у PATH, підказки для встановлення
+  src/builtin-agent.js         власний ACP-агент TabHelm для OpenRouter / Ollama / OpenAI-сумісних API
+  src/env.js                   читання й запис ~/.tabhelm/env (API-ключі)
   src/tool-server.js           локальний HTTP-ендпоінт із токеном
   src/mcp-bridge.js            stdio MCP-сервер, який запускають агенти (24 інструменти)
   scripts/install.js           реєстрація native host (Chrome, Chromium, Brave, Edge)
   scripts/install-agent.js     встановлення агентів із реєстру ACP
+  scripts/set-key.js           зберігає API-ключ у ~/.tabhelm/env без показу на екрані
   scripts/smoke.js | e2e.js | tools-test.js | icons.js
 scripts/build.js               збірка релізу → dist/
 scripts/news.js                збирає news.json (site/news.json + останній реліз) для Pages
@@ -295,6 +315,7 @@ npm run install-host           # зареєструвати хост для ці
 | `E2E_RECORD=1 E2E_SWITCH=opencode npm run e2e -- claude` | те саме, плюс запис відео, передача розмови іншому агенту і New chat |
 | `E2E_FAILOVER=opencode npm run e2e -- claude` | «вбиває» агента посеред завдання, продовжує з OpenCode, перевіряє Markdown-експорт |
 | `E2E_NEWS=1 npm run e2e` | банери оновлення й новин на локальному фіді |
+| `npm run test:builtin` | вбудований агент проти тестового OpenAI-сумісного API (стрімінг, виклики інструментів, повтор при 429, відсутній ключ) |
 | `TABHELM_RELEASE=../dist/tabhelm-x.y.z npm run e2e -- claude` | зібраний реліз |
 
 **Збірка:** `npm run build` (у корені репозиторію) створює `dist/`: розпакований реліз, `tabhelm-extension[-x.y.z].zip` і `tabhelm[-x.y.z].tar.gz` (без `node_modules`; адаптери Claude і Codex містять бінарники агентів, після встановлення це ~750 MB).
