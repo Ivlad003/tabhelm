@@ -92,7 +92,7 @@ chrome.debugger.onEvent.addListener(({ tabId }, method, params) => {
 
     case 'Network.requestWillBeSent': {
       const map = requests.get(tabId) || new Map();
-      map.set(params.requestId, { method: params.request.method, url: params.request.url, type: params.type || 'Other', status: null, failed: null });
+      map.set(params.requestId, { id: params.requestId, method: params.request.method, url: params.request.url, type: params.type || 'Other', status: null, failed: null, postData: params.request.postData || null, hasPostData: Boolean(params.request.hasPostData) });
       if (map.size > MAX_REQUESTS) map.delete(map.keys().next().value);
       requests.set(tabId, map);
       break;

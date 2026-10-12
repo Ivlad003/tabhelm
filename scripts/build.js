@@ -48,7 +48,7 @@ step('Copying extension (without the test hook)');
 cpSync(join(root, 'extension'), join(out, 'extension'), { recursive: true });
 const bgPath = join(out, 'extension/background.js');
 const bg = readFileSync(bgPath, 'utf8');
-const stripped = bg.replace(/\n\/\/ Dev hook for scripts\/tools-test\.js[^\n]*\nself\.tabhelmDebug = \{ runTool, ensureGroup, chatDebugState \};\n/, '\n');
+const stripped = bg.replace(/\n\/\/ Dev hook for scripts\/tools-test\.js[^\n]*\nself\.tabhelmDebug = \{ runTool, ensureGroup, chatDebugState, runSchedule: \(id\) => runScheduled\(id, scheduleDeps\) \};\n/, '\n');
 if (stripped === bg) throw new Error('Debug hook not found in background.js; update scripts/build.js');
 writeFileSync(bgPath, stripped);
 

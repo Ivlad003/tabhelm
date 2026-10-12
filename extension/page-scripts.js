@@ -422,3 +422,69 @@ export function showPointer(x, y, kind) {
   window.__tabhelmPointerTimer = setTimeout(() => (cursor.style.opacity = '0'), 4000);
   return {};
 }
+
+// Outlines ref'd elements with a label for a few seconds (browser_highlight).
+export function highlightRefs(refs, label) {
+  const ID = 'tabhelm-highlight';
+  document.getElementById(ID)?.remove();
+  const host = document.createElement('div');
+  host.id = ID;
+  host.setAttribute('data-tabhelm-overlay', '');
+  const root = host.attachShadow({ mode: 'open' });
+  const sheet = new CSSStyleSheet();
+  sheet.replaceSync(`
+    .box { position: fixed; border: 3px solid #2a9d76; border-radius: 4px; box-shadow: 0 0 0 3px rgba(42,157,118,.25); pointer-events: none; z-index: 2147483646; }
+    .tag { position: fixed; background: #1c7d5c; color: #fff; font: 600 12px system-ui, sans-serif; padding: 2px 6px; border-radius: 4px; pointer-events: none; z-index: 2147483647; }
+  `);
+  root.adoptedStyleSheets = [sheet];
+  let n = 0;
+  for (const ref of refs) {
+    const el = window.__tabhelm?.refs.get(ref);
+    if (!el || !el.isConnected) continue;
+    const r = el.getBoundingClientRect();
+    const box = document.createElement('div');
+    box.className = 'box';
+    Object.assign(box.style, { left: `${r.left - 3}px`, top: `${r.top - 3}px`, width: `${r.width + 6}px`, height: `${r.height + 6}px` });
+    const tag = document.createElement('div');
+    tag.className = 'tag';
+    tag.textContent = label ? `${label} · ${ref}` : ref;
+    Object.assign(tag.style, { left: `${r.left - 3}px`, top: `${Math.max(0, r.top - 24)}px` });
+    root.append(box, tag);
+    n++;
+  }
+  document.documentElement.append(host);
+  setTimeout(() => host.remove(), 6000);
+  return { count: n };
+}
+
+export function fieldKind(ref) {
+  const el = window.__tabhelm?.refs.get(ref);
+  if (!el || !el.isConnected) return { error: `Ref ${ref} is stale or unknown. Take a new browser_snapshot.` };
+  if (el.tagName === 'SELECT') return 'select';
+  if (el.tagName === 'INPUT' && (el.type === 'checkbox' || el.type === 'radio')) return el.type;
+  return 'text';
+}
+
+export function isChecked(ref) {
+  const el = window.__tabhelm?.refs.get(ref);
+  if (!el || !el.isConnected) return { error: `Ref ${ref} is stale or unknown.` };
+  return { checked: Boolean(el.checked) };
+}
+
+export function webStorage(kind, action, key, value) {
+  const store = kind === 'localStorage' ? localStorage : sessionStorage;
+  if (action === 'get') {
+    if (key) return { text: store.getItem(key) == null ? `${key}: (not set)` : `${key} = ${store.getItem(key)}` };
+    const lines = [];
+    for (let i = 0; i < store.length; i++) {
+      const k = store.key(i);
+      const v = store.getItem(k) || '';
+      lines.push(`${k} = ${v.length > 80 ? `${v.slice(0, 80)}…` : v}`);
+    }
+    return { text: lines.join('\n') || `${kind} is empty.` };
+  }
+  if (!key) return { error: 'key is required' };
+  if (action === 'set') store.setItem(key, value ?? '');
+  else store.removeItem(key);
+  return { text: `${kind}.${key} ${action === 'set' ? 'set' : 'removed'}.` };
+}

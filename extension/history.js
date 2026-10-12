@@ -47,7 +47,7 @@ export async function saveChat(chat) {
   const dropped = index.splice(MAX_CHATS);
   await chrome.storage.local.set({ chatIndex: index, [`chat:${chat.id}`]: { ...chat, updated: meta.updated } });
   if (dropped.length) await chrome.storage.local.remove(dropped.map((c) => `chat:${c.id}`));
-  if (!$('history').hidden) render();
+  if (typeof document !== 'undefined' && !$('history').hidden) render();
 }
 
 async function deleteChat(id) {
@@ -83,9 +83,18 @@ const ago = (t) => {
 };
 
 async function render() {
-  const { chatIndex = [] } = await chrome.storage.local.get('chatIndex');
+  const { chatIndex = [], features = {} } = await chrome.storage.local.get(['chatIndex', 'features']);
   const q = $('history-search').value.trim().toLowerCase();
-  const list = chatIndex.filter((c) => !q || `${c.title} ${c.url} ${c.pageTitle} ${c.agent}`.toLowerCase().includes(q));
+  // Action database flag: the search also looks through the steps of every chat.
+  const stepHits = new Map();
+  if (q.length >= 3 && features.actionDb) {
+    const all = await chrome.storage.local.get(chatIndex.map((c) => `chat:${c.id}`));
+    for (const c of chatIndex) {
+      const n = (all[`chat:${c.id}`]?.journal || []).filter((e) => e.type === 'action' && `${e.desc} ${e.error || ''}`.toLowerCase().includes(q)).length;
+      if (n) stepHits.set(c.id, n);
+    }
+  }
+  const list = chatIndex.filter((c) => !q || stepHits.has(c.id) || `${c.title} ${c.url} ${c.pageTitle} ${c.agent}`.toLowerCase().includes(q));
   // Which chats still have their tab open (decided before the click, so the
   // click handler can open that tab's side panel within the user gesture).
   const alive = new Set();
@@ -110,7 +119,7 @@ async function render() {
       } catch {}
       const meta = Object.assign(document.createElement('span'), {
         className: 'history-meta',
-        textContent: [host, c.agent, `${c.messages} msg`, ago(c.updated), alive.has(c.id) ? 'tab open' : null].filter(Boolean).join(' · '),
+        textContent: [host, c.agent, `${c.messages} msg`, ago(c.updated), alive.has(c.id) ? 'tab open' : null, stepHits.has(c.id) ? `${stepHits.get(c.id)} step(s) match` : null].filter(Boolean).join(' · '),
       });
       open.title = `${c.pageTitle || ''}\n${c.url || ''}${c.folder ? `\nFolder: ${c.folder}` : ''}`;
       open.append(title, meta);

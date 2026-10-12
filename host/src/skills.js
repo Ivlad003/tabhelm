@@ -101,6 +101,7 @@ export async function loadSkill(input, { force = false } = {}) {
 // Another file of a skill (references, scripts), relative to its SKILL.md.
 export async function loadSkillFile(skill, path) {
   if (/^[a-z]+:/i.test(path) || path.startsWith('/') || path.split('/').includes('..')) throw new Error('Use a path relative to the skill folder');
+  if (skill.inline) throw new Error('This skill was written in the panel and has no extra files.');
   // Project skills live on disk; the rest are fetched relative to their SKILL.md URL.
   if (skill.local) return readFileSync(joinPath(skill.base, path), 'utf8');
   return fetchText(new URL(path, skill.base).href);

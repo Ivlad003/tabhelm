@@ -81,6 +81,10 @@
       <p id="skills-empty" class="hint">No skills yet. Try: <span id="skill-examples"></span></p>
       <ul id="skill-list" class="skill-list"></ul>
 
+      <h3>Experimental</h3>
+      <p class="hint">New features, all off by default. Turn one on to see its settings.</p>
+      <ul id="features-list" class="feature-list"></ul>
+
       <h3>Version</h3>
       <div id="version-info" class="hint"></div>
       <div id="version-warning" class="notice error" hidden></div>
@@ -96,6 +100,7 @@
     </main>
 
     <footer class="composer">
+      <div id="slash-menu" class="slash-menu" hidden></div>
       <div id="attachments" class="attachments" hidden></div>
       <textarea id="input" rows="3" placeholder="Ask the agent to do something on this page… (drop or paste images and text files)" disabled></textarea>
       <input id="file-input" type="file" multiple hidden accept="image/*,.txt,.md,.markdown,.csv,.tsv,.json,.log,text/plain,text/markdown,text/csv" />
@@ -105,6 +110,7 @@
           <label class="auto"><input type="checkbox" id="auto" /> Auto-approve actions</label>
           <label class="auto" title="Record a video of the tab while the agent works on each message"><input type="checkbox" id="record" /> Record video</label>
         </div>
+        <button id="pause" class="btn small" type="button" hidden>Pause</button>
         <button id="send" class="btn primary" disabled>Send</button>
       </div>
     </footer>

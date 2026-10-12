@@ -2,6 +2,17 @@
 
 All notable changes to TabHelm. The newest release is at the top; the panel's update banner links here.
 
+## [0.15.0] - 2026-10-13
+
+### Added
+- **Settings → Experimental** — thirteen features, all off by default: action critic (second model vets each action), site rules (categories + deny/allow lists), sensitive-action gate, plan preview, take over (pause/resume + `browser_request_human`), scheduled tasks, developer tools (`browser_fill_form`, `browser_network_body`, `browser_storage`, `browser_emulate`, `browser_highlight`), secrets (`{{SECRET:name}}` placeholders), memory across chats (`memory_save` / `memory_search`, `~/.tabhelm/memory.json`), skill authoring with `/` slash commands, password-manager hand-off (`browser_request_login`: 1Password CLI or Chrome's passwords), action database (jump-to-step in recordings, step search in History), notifications (tab badge + system notification).
+- Policy layers run in the extension before a tool executes, so they cover every agent.
+- `npm run test:flags`: all features exercised with the built-in agent against a scripted mock model.
+
+### Changed
+- Only this extension's own pages may connect to the service worker (hardening).
+- Tool calls may wait up to 30 minutes (take-over pauses, human help).
+
 ## [0.14.0] - 2026-10-12
 
 ### Added
@@ -105,6 +116,7 @@ All notable changes to TabHelm. The newest release is at the top; the panel's up
 ### Added
 - First version: side-panel chat that drives terminal agents over ACP, with browser tools over MCP.
 
+[0.15.0]: https://github.com/Ivlad003/tabhelm/releases/tag/v0.15.0
 [0.14.0]: https://github.com/Ivlad003/tabhelm/releases/tag/v0.14.0
 [0.13.0]: https://github.com/Ivlad003/tabhelm/releases/tag/v0.13.0
 [0.12.0]: https://github.com/Ivlad003/tabhelm/releases/tag/v0.12.0

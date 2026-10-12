@@ -10,7 +10,7 @@ import { z } from 'zod';
 const { TABHELM_URL, TABHELM_TOKEN, TABHELM_TAB } = process.env;
 const tabId = Number(TABHELM_TAB);
 
-const server = new McpServer({ name: 'tabhelm-browser', version: '0.14.0' });
+const server = new McpServer({ name: 'tabhelm-browser', version: '0.15.0' });
 
 async function call(tool, args = {}) {
   try {
@@ -162,6 +162,60 @@ const tools = {
   skill_read_file: {
     description: "Read another file of a skill (e.g. references/forms.md) by its path relative to the skill's folder.",
     inputSchema: { name: z.string(), path: z.string() },
+  },
+  // Extra tools behind feature flags (the extension refuses them when the flag is off).
+  browser_fill_form: {
+    description: 'Fill several fields at once (Developer tools flag). Each field: ref + value; checkboxes take "true"/"false", selects take option value or label.',
+    inputSchema: { fields: z.array(z.object({ ref: z.string(), value: z.string() })).min(1), submit: z.boolean().optional().describe('Press Enter in the last field') },
+  },
+  browser_network_body: {
+    description: 'Request and response bodies of a captured network request (Developer tools flag). Use the URL substring from browser_network.',
+    inputSchema: { url: z.string().describe('Substring of the request URL'), maxChars: z.number().optional() },
+  },
+  browser_storage: {
+    description: 'Read or write cookies, localStorage or sessionStorage of the current tab (Developer tools flag).',
+    inputSchema: {
+      action: z.enum(['get', 'set', 'delete']),
+      kind: z.enum(['cookies', 'localStorage', 'sessionStorage']),
+      key: z.string().optional(),
+      value: z.string().optional(),
+    },
+  },
+  browser_emulate: {
+    description: 'Emulate a device or environment on the current tab (Developer tools flag): viewport, mobile, user agent, color scheme, geolocation, timezone, locale. Pass reset: true to undo.',
+    inputSchema: {
+      width: z.number().optional(),
+      height: z.number().optional(),
+      mobile: z.boolean().optional(),
+      deviceScaleFactor: z.number().optional(),
+      userAgent: z.string().optional(),
+      colorScheme: z.enum(['light', 'dark']).optional(),
+      latitude: z.number().optional(),
+      longitude: z.number().optional(),
+      timezone: z.string().optional(),
+      locale: z.string().optional(),
+      reset: z.boolean().optional(),
+    },
+  },
+  browser_highlight: {
+    description: 'Outline elements on the page for the user to see (Developer tools flag), e.g. to point at what you mean. Clears after a few seconds.',
+    inputSchema: { refs: z.array(z.string()).min(1), label: z.string().optional() },
+  },
+  browser_request_human: {
+    description: 'Ask the user to do something themselves in the browser (2FA code, captcha, payment choice) and wait until they say they are done (Take over flag). Explain exactly what you need.',
+    inputSchema: { message: z.string() },
+  },
+  browser_request_login: {
+    description: 'Ask the user to sign in on the current page (Password manager flag). Give the refs of the username/email and password fields if visible; the user picks an account from their password manager or signs in themselves. Returns when done.',
+    inputSchema: { usernameRef: z.string().optional(), passwordRef: z.string().optional(), note: z.string().optional() },
+  },
+  memory_save: {
+    description: 'Remember a short fact for future chats (Memory flag): the user\'s preferences, how a site works, decisions. scope "site" ties it to the current site, "global" applies everywhere.',
+    inputSchema: { text: z.string(), scope: z.enum(['site', 'global']).optional() },
+  },
+  memory_search: {
+    description: 'Search notes saved in earlier chats (Memory flag).',
+    inputSchema: { query: z.string().optional() },
   },
   browser_evaluate: {
     description: 'Run a JavaScript expression in the page and return its JSON result (awaits promises). The user must approve every call.',

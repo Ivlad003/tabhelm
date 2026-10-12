@@ -2,6 +2,7 @@
 // installed) and version / update checks.
 
 import { showNews } from './news.js';
+import { initExperimental, handleExperimentalMessage, authoredSkills, setAgentsForSchedules } from './experimental.js';
 
 const $ = (id) => document.getElementById(id);
 const EXAMPLES = [
@@ -37,6 +38,37 @@ export async function initSettings(panelPort) {
   }
   render();
   renderVersion();
+  await initExperimental(port, {
+    changed(id) {
+      port.postMessage({ type: 'set_features' });
+      if (id === 'skillAuthoring') pushSkills();
+      onFeatureChange(id);
+    },
+  });
+}
+
+let onFeatureChange = () => {};
+export function onFeaturesChanged(fn) {
+  onFeatureChange = fn;
+}
+
+export function setAgents(list) {
+  setAgentsForSchedules(list);
+}
+
+async function pushSkills() {
+  port.postMessage({ type: 'set_skills', skills: enabledSkillUrls(), inlineSkills: await authoredSkills() });
+}
+
+// Skills for the host: links plus skills written in the panel.
+export async function skillPayload() {
+  return { skills: enabledSkillUrls(), inlineSkills: await authoredSkills() };
+}
+
+// Names for the / menu.
+export async function slashSkills() {
+  const inline = await authoredSkills();
+  return [...inline.map((s) => ({ name: s.name, description: s.description })), ...skills.filter((s) => s.enabled).map((s) => ({ name: s.name, description: s.description }))];
 }
 
 // URLs of the enabled skills; sent to the host with every session start.
@@ -50,6 +82,7 @@ export function enabledSkillCount() {
 
 // Messages from the host that belong to the settings view.
 export function handleSettingsMessage(msg) {
+  if (handleExperimentalMessage(msg)) return true;
   if (msg.type === 'skill_info') {
     pending.get(msg.requestId)?.(msg);
     pending.delete(msg.requestId);
@@ -120,7 +153,7 @@ async function save() {
   await chrome.storage.local.set({ skills });
   render();
   // Applies to the running agent from its next message.
-  port.postMessage({ type: 'set_skills', skills: enabledSkillUrls() });
+  pushSkills();
 }
 
 function render() {

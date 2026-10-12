@@ -22,6 +22,11 @@ import { listAgents, getAgent } from './agents.js';
 import { loadEnvFile } from './env.js';
 import { loadSkill, runSkillTool } from './skills.js';
 import { folderInfo, pickFolder, projectInstructions, projectSkills } from './folders.js';
+import { reviewAction } from './critic.js';
+import { providerReady } from './llm.js';
+import { loadMemory, addNote, deleteNote, clearMemory, runMemoryTool } from './memory.js';
+import { onePasswordAvailable, onePasswordItems, onePasswordCredential } from './passwords.js';
+import { parseSkill } from './skills.js';
 import { startToolServer } from './tool-server.js';
 import { AgentSession } from './session.js';
 
@@ -57,6 +62,21 @@ const send = (message) => channel.send(message);
 const toolServer = await startToolServer({
   log,
   runTool: async (tabId, tool, args) => {
+    // memory_* tools are answered here when Memory is on.
+    if (tool.startsWith('memory_')) {
+      const session = sessions.get(tabId);
+      let result;
+      if (!session?.features?.memory) result = { ok: false, error: 'Memory is off. The user can enable it in Settings → Experimental → Memory.' };
+      else {
+        try {
+          result = { ok: true, content: runMemoryTool(tool, args, session.pageUrl) };
+        } catch (err) {
+          result = { ok: false, error: err.message };
+        }
+      }
+      send({ type: 'tool_activity', tabId, tool, args, label: args.text || args.query, ok: result.ok, error: result.error });
+      return result;
+    }
     // skill_* tools are answered here; everything else runs in the extension.
     if (tool.startsWith('skill_')) {
       const skills = sessions.get(tabId)?.skills || [];
@@ -99,7 +119,10 @@ async function handleMessage(msg) {
           session.folder = folderInfo(msg.folder).path;
           session.instructions = projectInstructions(session.folder);
         }
-        session.skills = await loadSkills(tabId, msg.skills, session.folder);
+        session.features = msg.features || {};
+        session.featureSettings = msg.featureSettings || {};
+        session.pageUrl = msg.pageUrl || null;
+        session.skills = await loadSkills(tabId, msg.skills, session.folder, msg.inlineSkills);
         sessions.set(tabId, session);
         try {
           await session.start();
@@ -132,7 +155,72 @@ async function handleMessage(msg) {
 
       case 'set_skills': {
         const session = sessions.get(tabId);
-        if (session) session.setSkills(await loadSkills(tabId, msg.skills, session.folder));
+        if (session) session.setSkills(await loadSkills(tabId, msg.skills, session.folder, msg.inlineSkills));
+        break;
+      }
+
+      case 'set_features': {
+        const session = sessions.get(tabId);
+        if (session) {
+          session.features = msg.features || {};
+          session.featureSettings = msg.featureSettings || {};
+        }
+        break;
+      }
+
+      case 'page_url': {
+        const session = sessions.get(tabId);
+        if (session) session.pageUrl = msg.url;
+        break;
+      }
+
+      // Action critic (extension asks before running a page-changing tool).
+      case 'critic': {
+        const s = msg.settings || {};
+        const verdict = await reviewAction({ provider: s.provider || 'openrouter', model: s.model, ...msg.action });
+        send({ type: 'critic_result', tabId, requestId: msg.requestId, ...verdict });
+        break;
+      }
+
+      case 'critic_status':
+        send({ type: 'critic_status', tabId, ready: providerReady(msg.provider || 'openrouter') });
+        break;
+
+      // Memory view in Settings.
+      case 'memory_list':
+        send({ type: 'memory_notes', tabId, notes: loadMemory() });
+        break;
+      case 'memory_add':
+        addNote({ text: msg.text, site: msg.site || null, source: 'user' });
+        send({ type: 'memory_notes', tabId, notes: loadMemory() });
+        break;
+      case 'memory_delete':
+        deleteNote(msg.id);
+        send({ type: 'memory_notes', tabId, notes: loadMemory() });
+        break;
+      case 'memory_clear':
+        clearMemory();
+        send({ type: 'memory_notes', tabId, notes: [] });
+        break;
+
+      // Password manager hand-off (1Password CLI). Passwords go only to the extension.
+      case 'password_status':
+        send({ type: 'password_status', tabId, onePassword: await onePasswordAvailable() });
+        break;
+      case 'password_items': {
+        try {
+          send({ type: 'password_items', tabId, requestId: msg.requestId, items: await onePasswordItems(msg.url) });
+        } catch (err) {
+          send({ type: 'password_items', tabId, requestId: msg.requestId, error: /not signed in|session/i.test(err.message) ? 'Run "op signin" in a terminal first.' : err.message });
+        }
+        break;
+      }
+      case 'password_credential': {
+        try {
+          send({ type: 'password_credential', tabId, requestId: msg.requestId, ...(await onePasswordCredential(msg.id)) });
+        } catch (err) {
+          send({ type: 'password_credential', tabId, requestId: msg.requestId, error: err.message });
+        }
         break;
       }
 
@@ -226,9 +314,9 @@ function saveRecordingChunk({ tabId, id, filename, seq, last, data }) {
   send({ type: 'recording_saved', tabId, id, path });
 }
 
-// Loads the enabled skills (plus the working folder's own skills); failures
-// are reported in the chat, not fatal.
-async function loadSkills(tabId, urls = [], folder = null) {
+// Loads the enabled skills (plus the working folder's own skills and skills
+// written in the panel); failures are reported in the chat, not fatal.
+async function loadSkills(tabId, urls = [], folder = null, inline = []) {
   const loaded = await Promise.all(
     urls.map((url) =>
       loadSkill(url).catch((err) => {
@@ -239,6 +327,10 @@ async function loadSkills(tabId, urls = [], folder = null) {
   );
   const skills = loaded.filter(Boolean);
   for (const s of folder ? projectSkills(folder) : []) if (!skills.some((x) => x.name === s.name)) skills.push(s);
+  for (const s of inline || []) {
+    const parsed = parseSkill(`---\nname: ${s.name}\ndescription: ${s.description}\n---\n${s.body}`, s.name);
+    if (!skills.some((x) => x.name === parsed.name)) skills.push({ ...parsed, url: 'panel', source: 'panel', base: null, inline: true });
+  }
   return skills;
 }
 

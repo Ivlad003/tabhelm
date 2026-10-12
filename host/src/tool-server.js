@@ -6,7 +6,7 @@ import { randomBytes, timingSafeEqual } from 'node:crypto';
 // so other local processes and web pages cannot drive the browser through it.
 
 // Generous: some tools wait for the user to approve in the side panel.
-const TOOL_TIMEOUT_MS = 5 * 60_000;
+const TOOL_TIMEOUT_MS = 30 * 60_000; // long: take-over pauses and human help can take a while
 
 export async function startToolServer({ runTool, log }) {
   const token = randomBytes(24).toString('hex');

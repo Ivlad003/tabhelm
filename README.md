@@ -132,6 +132,28 @@ Skills are `SKILL.md` files — a name, a description and instructions that make
 
 Only add skills you trust: their text becomes instructions for the agent.
 
+### Experimental features (all off by default)
+
+**Settings → Experimental** lists features that are switched off until you enable them. Each shows its own settings once on.
+
+| Feature | What it does | Needs |
+|---|---|---|
+| **Action critic** | A second model checks every page-changing action against your task and the recent steps: *allow*, *ask you* (a card with its reason) or *block*. Unreachable critic → asks you. | the built-in agent's provider: OpenRouter key or local Ollama |
+| **Site rules** | Categories (banking, government, health, adult, piracy) set to allow / ask / block, plus your own deny and allow lists. Checked for the page and for navigation targets. | — |
+| **Sensitive actions** | Clicks, Enter and navigations whose target contains a keyword (pay, buy, send, delete, sign in, submit…) always ask first, even with auto-approve. Keywords are editable. | — |
+| **Plan preview** | The agent first replies with a short plan and stops; **Start** sends it off, or tell it what to change. | — |
+| **Take over** | **Pause — I take over** holds the agent's next action until you press **Resume**; the agent can call `browser_request_human` to ask for a 2FA code, a captcha or a choice and waits for your **Done**. | — |
+| **Scheduled tasks** | Name, page, task, agent, interval. Runs in a background tab with Chrome open, auto-approves if you say so, saves the result to History and notifies you. Runs cannot ask you anything. | — |
+| **Developer tools** | `browser_fill_form` (many fields at once), `browser_network_body` (request/response bodies), `browser_storage` (cookies, localStorage, sessionStorage; writes ask first), `browser_emulate` (viewport, mobile, user agent, color scheme, geolocation, timezone, locale), `browser_highlight` (outline elements for you). | — |
+| **Secrets** | Named values the agent uses as `{{SECRET:name}}`; substituted on the page only. The model, the action log, history and exports see the placeholder. | — |
+| **Memory** | Notes that persist across chats in `~/.tabhelm/memory.json`: global or per site. Matching notes go to the agent with its first message; it can add notes with `memory_save` and look them up with `memory_search`. Manage them in Settings. | — |
+| **Skill authoring & slash commands** | Write skills (name, description, instructions) in the panel; they work like skills from links. Type `/` in the message box for a menu: `/name task` runs that skill; `/new`, `/export`, `/pause` are built in. | — |
+| **Password manager hand-off** | For sign-in forms the agent calls `browser_request_login`; you pick **Fill with 1Password** (host runs `op`, the extension types the values, the model never sees them) or **Chrome's passwords — I'll sign in** (you use Chrome's saved login, then press Done). | 1Password CLI (`op signin`) for the first path |
+| **Action database** | Steps keep timestamps; a recording lists its steps and clicking one jumps to that moment in the video; History search also searches steps. | — |
+| **Notifications** | Badge on the chat's tab (✓ done, ! stopped, ? needs you) and a system notification; clicking it opens the tab. | — |
+
+Security notes: the critic, site rules and the sensitive gate run in the extension before a tool executes, so they also cover agents that auto-approve their own tools. Secrets live in this browser profile's extension storage. Scheduled runs are unattended by design — give them narrow tasks.
+
 ### Updates and news
 
 The panel checks `https://ivlad003.github.io/tabhelm/news.json` (at most once an hour; **Settings → Check for updates** checks right away). When a newer release exists it shows **"TabHelm X is available"** with an **Update** button (the install command to copy, then ↻ on `chrome://extensions`) and a link to the release notes. Project news appears as a separate banner. Dismissed banners do not come back; the panel works normally when offline.
@@ -351,6 +373,10 @@ extension/                     Chrome extension (Manifest V3, no build step)
   sidepanel.html|css|js        chat UI, model picker, approvals, action log, new chat, agent hand-over, video recorder
   news.js                      update / news banner from the site's news.json
   settings.js                  Settings view: skills from links, versions, update check
+  experimental.js              Settings → Experimental: feature flags and their settings
+  features.js                  feature flags and settings storage (all off by default)
+  policy.js                    action policy: site rules, sensitive gate, critic bridge, secrets, pause
+  scheduler.js                 scheduled tasks (chrome.alarms, background runs)
   attachments.js               image / text attachments: picking, drop, paste, downscaling
   folder.js                    working folder: picker, typed path, recent folders, auto-approve warning
   history.js                   saved chats: storage, list, search, opening in the chat's tab
@@ -364,6 +390,8 @@ host/                          native host (Node 20+)
   src/env.js                   ~/.tabhelm/env (API keys) loading and saving
   src/skills.js                skills from links: URL resolution, SKILL.md parsing, cache, skill_* tools
   src/folders.js               working folder: native picker, AGENTS.md / project skills discovery
+  src/critic.js                action critic (second model) · src/llm.js  OpenAI-compatible helper
+  src/memory.js                memory notes across chats · src/passwords.js  1Password CLI hand-off
   src/tool-server.js           loopback HTTP endpoint with token
   src/mcp-bridge.js            stdio MCP server spawned by agents (24 tool definitions)
   scripts/install.js           registers the native host (Chrome, Chromium, Brave, Edge)
@@ -404,6 +432,7 @@ Load `extension/` unpacked in Chrome. After editing extension files press ↻ on
 | `E2E_FOLDER=1 npm run e2e -- claude` | binds a project folder (AGENTS.md + skill) and checks the agent follows it and creates a file there |
 | `E2E_ATTACH=1 npm run e2e -- claude` | attaches an image and a CSV and checks the agent reads both |
 | `E2E_SKILLS=1 npm run e2e -- claude` | adds a skill in Settings and checks the agent reads and follows it |
+| `npm run test:flags` | every experimental feature with the built-in agent against a scripted mock model (18 checks) |
 | `npm run test:builtin` | built-in agent against a mock OpenAI-compatible API (streaming, tool calls, 429 retry, missing key) |
 | `TABHELM_RELEASE=../dist/tabhelm-x.y.z npm run e2e -- claude` | the built release |
 

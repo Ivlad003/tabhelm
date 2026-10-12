@@ -1,6 +1,20 @@
 {
   "news": [
     {
+      "id": "2026-10-experimental",
+      "date": "2026-10-13",
+      "minVersion": "0.15.0",
+      "title": {
+        "en": "13 experimental features, off by default",
+        "uk": "13 експериментальних функцій, вимкнених за замовчуванням"
+      },
+      "text": {
+        "en": "Settings → Experimental: action critic, site rules, sensitive-action gate, plan preview, take over, scheduled tasks, developer tools, secrets, memory, skill authoring with / commands, password-manager hand-off, action database, notifications.",
+        "uk": "Settings → Experimental: критик дій, правила сайтів, чутливі дії, перегляд плану, перехоплення керування, заплановані задачі, інструменти розробника, секрети, пам'ять, авторинг скілів із /-командами, передача паролів, база дій, повідомлення."
+      },
+      "url": "https://github.com/Ivlad003/tabhelm#experimental-features-all-off-by-default"
+    },
+    {
       "id": "2026-10-tab-groups",
       "date": "2026-10-12",
       "minVersion": "0.14.0",

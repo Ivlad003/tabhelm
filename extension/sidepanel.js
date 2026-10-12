@@ -1,5 +1,6 @@
 import { showNews } from './news.js';
-import { initSettings, enabledSkillUrls, handleSettingsMessage, hostVersionMismatch } from './settings.js';
+import { initSettings, handleSettingsMessage, hostVersionMismatch, skillPayload, slashSkills, onFeaturesChanged, setAgents } from './settings.js';
+import { getFeatures } from './features.js';
 import { initAttachments, takeAttachments, hasAttachments, chip } from './attachments.js';
 import { initFolder, currentFolder, handleFolderMessage, updateFolderWarning, restoreFolder } from './folder.js';
 import { initHistory, saveChat, loadChat, newChatId, setCurrentChat, closeHistory } from './history.js';
@@ -104,6 +105,11 @@ chrome.tabs.onRemoved.addListener((id) => {
 let versionWarned = false;
 
 function onMessage(msg) {
+  if (msg.requestId != null && hostWaits.has(`${msg.type}:${msg.requestId}`)) {
+    hostWaits.get(`${msg.type}:${msg.requestId}`)(msg);
+    hostWaits.delete(`${msg.type}:${msg.requestId}`);
+    return;
+  }
   if (handleSettingsMessage(msg) || handleFolderMessage(msg)) return;
   switch (msg.type) {
     case 'agents':
@@ -125,6 +131,12 @@ function onMessage(msg) {
       break;
     case 'permission':
       addPermission(msg);
+      break;
+    case 'ask':
+      addAsk(msg);
+      break;
+    case 'paused':
+      setPaused(msg.paused);
       break;
     case 'confirm':
       addConfirm(msg);
@@ -182,6 +194,7 @@ function onMessage(msg) {
 
 async function fillAgents(agents) {
   agentsList = agents;
+  setAgents(agents);
   const { lastAgent } = await chrome.storage.local.get('lastAgent');
   const installed = agents.filter((a) => a.installed);
   const preferred = installed.find((a) => a.id === lastAgent) || installed[0];
@@ -537,6 +550,24 @@ function describeAction(tool, a = {}, detail) {
       return 'Read network log';
     case 'browser_evaluate':
       return `Run JS: ${truncate(a.expression, 50)}`;
+    case 'browser_fill_form':
+      return `Fill ${a.fields?.length || 0} field(s): ${(a.fields || []).map((f) => `${f.ref}=“${truncate(String(f.value), 25)}”`).join(', ')}`;
+    case 'browser_highlight':
+      return `Highlight ${(a.refs || []).join(', ')}${a.label ? ` (${a.label})` : ''}`;
+    case 'browser_storage':
+      return `${a.action === 'get' ? 'Read' : a.action === 'set' ? 'Set' : 'Delete'} ${a.kind}${a.key ? ` ${a.key}` : ''}`;
+    case 'browser_emulate':
+      return a.reset ? 'Reset emulation' : `Emulate ${[a.width && `${a.width}×${a.height || '?'}`, a.mobile && 'mobile', a.colorScheme, a.timezone, a.locale].filter(Boolean).join(', ')}`;
+    case 'browser_network_body':
+      return `Request body ${truncate(a.url, 40)}`;
+    case 'browser_request_human':
+      return `Asked you: ${truncate(a.message, 50)}`;
+    case 'browser_request_login':
+      return 'Asked you to sign in';
+    case 'memory_save':
+      return `Remember: ${truncate(a.text, 50)}`;
+    case 'memory_search':
+      return `Search memory ${a.query ? `“${truncate(a.query, 30)}”` : ''}`;
     case 'skill_list':
       return 'List skills';
     case 'skill_read':
@@ -626,7 +657,7 @@ async function startAgent(agentId, continueText = null) {
   connected = false;
   els.config.hidden = true;
   syncControls();
-  port.postMessage({ type: 'start', agentId, autoApprove: els.auto.checked, skills: enabledSkillUrls(), folder: currentFolder() });
+  port.postMessage({ type: 'start', agentId, autoApprove: els.auto.checked, ...(await skillPayload()), folder: currentFolder() });
 }
 
 els.agent.onchange = () => {
@@ -683,7 +714,7 @@ els.newChat.onclick = () => {
   if (connected) {
     connected = false;
     els.config.hidden = true;
-    port.postMessage({ type: 'start', agentId: els.agent.value, autoApprove: els.auto.checked, skills: enabledSkillUrls(), folder: currentFolder() });
+    skillPayload().then((p) => port.postMessage({ type: 'start', agentId: els.agent.value, autoApprove: els.auto.checked, ...p, folder: currentFolder() }));
   }
   syncControls();
 };
@@ -703,15 +734,93 @@ els.record.onchange = () => {
 
 els.send.onclick = () => (busy ? stop() : send());
 els.input.addEventListener('keydown', (e) => {
+  if (slashKey(e)) return;
   if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
     e.preventDefault();
     if (!busy) send();
   }
 });
+els.input.addEventListener('input', () => slashUpdate());
+
+// ---------- Slash commands (Skill authoring flag) ----------
+
+const slash = { items: [], active: 0 };
+const BUILTIN_SLASH = [
+  { name: 'new', description: 'New chat', run: () => els.newChat.click() },
+  { name: 'export', description: 'Export chat as Markdown', run: () => document.querySelector('[data-export="md"]').click() },
+  { name: 'pause', description: 'Pause the agent (Take over)', run: () => $('pause').click() },
+];
+
+async function slashUpdate() {
+  const menu = $('slash-menu');
+  const m = /^\/([\w-]*)$/.exec(els.input.value);
+  const features = await getFeatures();
+  if (!m || !features.skillAuthoring) {
+    menu.hidden = true;
+    return;
+  }
+  const q = m[1].toLowerCase();
+  const skillsList = await slashSkills();
+  slash.items = [...skillsList.map((s) => ({ ...s, skill: true })), ...BUILTIN_SLASH].filter((s) => s.name.toLowerCase().startsWith(q)).slice(0, 8);
+  slash.active = 0;
+  menu.replaceChildren(
+    ...slash.items.map((s, i) => {
+      const b = Object.assign(document.createElement('button'), { type: 'button', className: `slash-item${i === 0 ? ' active' : ''}` });
+      b.append(Object.assign(document.createElement('b'), { textContent: `/${s.name}` }), Object.assign(document.createElement('span'), { textContent: s.description }));
+      b.onclick = () => slashPick(s);
+      return b;
+    }),
+  );
+  menu.hidden = !slash.items.length;
+}
+
+function slashKey(e) {
+  const menu = $('slash-menu');
+  if (menu.hidden) return false;
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    slash.active = (slash.active + (e.key === 'ArrowDown' ? 1 : slash.items.length - 1)) % slash.items.length;
+    [...menu.children].forEach((c, i) => c.classList.toggle('active', i === slash.active));
+    return true;
+  }
+  if (e.key === 'Enter' || e.key === 'Tab') {
+    e.preventDefault();
+    slashPick(slash.items[slash.active]);
+    return true;
+  }
+  if (e.key === 'Escape') {
+    menu.hidden = true;
+    return true;
+  }
+  return false;
+}
+
+function slashPick(s) {
+  $('slash-menu').hidden = true;
+  if (!s) return;
+  if (s.run) {
+    els.input.value = '';
+    s.run();
+    return;
+  }
+  els.input.value = `/${s.name} `;
+  els.input.focus();
+}
+
+// "/name rest" → ask the agent to apply that skill.
+function expandSlash(text) {
+  const m = /^\/([\w-]+)\s*([\s\S]*)$/.exec(text);
+  if (!m) return text;
+  return `Use the skill "${m[1]}" (read it with skill_read first and follow it).${m[2] ? ` Task: ${m[2]}` : ''}`;
+}
 
 async function send() {
   let text = els.input.value.trim();
   if ((!text && !hasAttachments()) || !connected) return;
+  $('slash-menu').hidden = true;
+  if (text.startsWith('/')) text = expandSlash(text);
+  const features = await getFeatures();
+  awaitingPlan = Boolean(features.planPreview) && !text.startsWith('[plan approved]');
   breakActivity();
   const attachments = takeAttachments();
   if (!text) text = 'Please look at the attached file(s).';
@@ -752,6 +861,7 @@ function stop() {
 // `failure` is set when the turn ended without the agent finishing its work.
 function endTurn(note, failure = null) {
   if (note) notice(note);
+  lastTurnHadNoActions = !turn || turn.actions.length === 0;
   if (turn) {
     const stats = turnStats(turn);
     showStats(stats);
@@ -771,6 +881,148 @@ function endTurn(note, failure = null) {
   if (connected) setStatus('ready', connectedAgent?.name || 'Connected');
   syncControls();
   if (failure && wasBusy) offerContinue(failure);
+  else if (awaitingPlan && wasBusy && !failure && lastTurnHadNoActions) offerPlanStart();
+  awaitingPlan = false;
+}
+
+// ---------- Plan preview (flag) ----------
+
+let awaitingPlan = false;
+let lastTurnHadNoActions = false;
+
+function offerPlanStart() {
+  const card = add('div', 'card ask');
+  card.append(Object.assign(document.createElement('div'), { className: 'title', textContent: 'Start this plan?' }));
+  const options = document.createElement('div');
+  options.className = 'options';
+  const start = Object.assign(document.createElement('button'), { className: 'btn primary', textContent: 'Start' });
+  start.onclick = () => {
+    card.classList.add('resolved');
+    options.replaceChildren(Object.assign(document.createElement('span'), { textContent: '→ Started' }));
+    els.input.value = '[plan approved] proceed with the plan.';
+    send();
+  };
+  const revise = Object.assign(document.createElement('button'), { className: 'btn', textContent: 'Change the plan' });
+  revise.onclick = () => {
+    card.classList.add('resolved');
+    options.replaceChildren(Object.assign(document.createElement('span'), { textContent: '→ Tell the agent what to change' }));
+    els.input.focus();
+  };
+  options.append(start, revise);
+  card.append(options);
+  record('plan_offer', {});
+  scrollDown();
+}
+
+// ---------- Take over (flag) ----------
+
+let pausedNow = false;
+
+$('pause').onclick = () => {
+  if (pausedNow) {
+    port.postMessage({ type: 'resume' });
+    setPaused(false);
+  } else {
+    port.postMessage({ type: 'pause' });
+    setPaused(true);
+  }
+};
+
+function setPaused(on) {
+  pausedNow = on;
+  $('pause').textContent = on ? 'Resume agent' : 'Pause — I take over';
+  if (on) {
+    setStatus('paused', 'Paused — you have control');
+    notice('Paused. Do what you need on the page, then press “Resume agent”.');
+    record('pause', {});
+  } else if (busy) {
+    setStatus('working', 'Working…');
+    record('resume', {});
+  }
+}
+
+// Requests from the agent that the panel answers (Take over / Password manager flags).
+async function addAsk(msg) {
+  breakActivity();
+  agentBubble = null;
+  const card = add('div', 'card ask');
+  const title = Object.assign(document.createElement('div'), { className: 'title' });
+  const options = document.createElement('div');
+  options.className = 'options';
+  const reply = (r, label) => {
+    port.postMessage({ type: 'ask_response', id: msg.id, reply: r });
+    card.classList.add('resolved');
+    options.replaceChildren(Object.assign(document.createElement('span'), { textContent: `→ ${label}` }));
+    record('ask', { kind: msg.kind, answer: label });
+  };
+
+  if (msg.kind === 'human') {
+    title.textContent = `${connectedAgent?.name || 'The agent'} needs you: ${msg.message}`;
+    const note = Object.assign(document.createElement('input'), { className: 'note', placeholder: 'Optional note for the agent' });
+    const done = Object.assign(document.createElement('button'), { className: 'btn primary', textContent: "Done, continue" });
+    done.onclick = () => reply({ done: true, note: note.value.trim() }, 'Done');
+    const cancel = Object.assign(document.createElement('button'), { className: 'btn', textContent: 'Cancel task' });
+    cancel.onclick = () => reply({ done: false }, 'Cancelled');
+    options.append(done, cancel);
+    card.append(title, note, options);
+    record('ask', { kind: 'human', message: msg.message });
+  } else if (msg.kind === 'login') {
+    title.textContent = `Sign in needed on ${msg.tab?.title || 'this page'}${msg.note ? ` — ${msg.note}` : ''}`;
+    const { getSetting } = await import('./features.js');
+    const pm = await getSetting('passwordManager');
+    if (pm.onePassword !== false && msg.usernameRef && msg.passwordRef) {
+      const op = Object.assign(document.createElement('button'), { className: 'btn primary', textContent: 'Fill with 1Password' });
+      op.onclick = async () => {
+        op.disabled = true;
+        op.textContent = 'Looking up…';
+        const items = await hostRequest('password_items', { url: msg.tab?.url }, 'password_items');
+        if (items.error || !items.items?.length) {
+          op.disabled = false;
+          op.textContent = 'Fill with 1Password';
+          notice(items.error || 'No 1Password logins for this site.', true);
+          return;
+        }
+        const pick = document.createElement('select');
+        for (const it of items.items) pick.append(new Option(`${it.title}${it.username ? ` — ${it.username}` : ''}`, it.id));
+        const use = Object.assign(document.createElement('button'), { className: 'btn primary', textContent: 'Fill & submit' });
+        use.onclick = async () => {
+          const cred = await hostRequest('password_credential', { id: pick.value }, 'password_credential');
+          if (cred.error) return notice(cred.error, true);
+          reply({ done: true, credential: { username: cred.username, password: cred.password }, submit: true }, `Filled from 1Password (${pick.selectedOptions[0].text})`);
+        };
+        options.replaceChildren(pick, use);
+      };
+      options.append(op);
+    }
+    if (pm.chrome !== false) {
+      const chromePm = Object.assign(document.createElement('button'), { className: 'btn', textContent: "Chrome's passwords — I'll sign in" });
+      chromePm.onclick = () => {
+        notice('Click the username field on the page and pick your saved login from Chrome, then press “Done”.');
+        const done = Object.assign(document.createElement('button'), { className: 'btn primary', textContent: 'Done, signed in' });
+        done.onclick = () => reply({ done: true }, 'Signed in by the user');
+        options.replaceChildren(done);
+      };
+      options.append(chromePm);
+    }
+    const cancel = Object.assign(document.createElement('button'), { className: 'btn', textContent: 'Cancel' });
+    cancel.onclick = () => reply({ done: false }, 'Cancelled');
+    options.append(cancel);
+    card.append(title, options);
+    record('ask', { kind: 'login', site: msg.tab?.url });
+  }
+  scrollDown();
+}
+
+// One request/response pair with the host (password manager lookups).
+let nextHostReq = 1;
+const hostWaits = new Map();
+function hostRequest(type, data, replyType) {
+  return new Promise((resolve) => {
+    const requestId = nextHostReq++;
+    hostWaits.set(`${replyType}:${requestId}`, resolve);
+    port.postMessage({ type, requestId, ...data });
+    setTimeout(() => hostWaits.has(`${replyType}:${requestId}`) && (hostWaits.delete(`${replyType}:${requestId}`), resolve({ error: 'No answer from the host.' })), 30_000);
+  });
 }
 
 // Time, tokens and cost of one turn. Tokens and cost appear only for agents
@@ -847,6 +1099,7 @@ function syncControls() {
   $('attach').disabled = !connected;
   els.send.disabled = !connected;
   els.send.textContent = busy ? 'Stop' : 'Send';
+  getFeatures().then((f) => ($('pause').hidden = !(f.takeOver && busy)));
   for (const select of els.config.querySelectorAll('select')) select.disabled = busy;
 }
 
@@ -923,7 +1176,13 @@ function exportMarkdown(tab) {
       case 'permission':
         out.push(`- ${t} 🔐 ${e.title} → ${e.answer}`);
         break;
-      case 'confirm':
+      case 'ask':
+      addAsk(msg);
+      break;
+    case 'paused':
+      setPaused(msg.paused);
+      break;
+    case 'confirm':
         out.push(`- ${t} 🔐 ${e.title} → ${e.answer}${e.detail ? ` (${e.detail.replace(/\n/g, ', ')})` : ''}`);
         break;
       case 'video':
@@ -942,6 +1201,18 @@ function exportMarkdown(tab) {
       case 'folder':
         out.push('', `> ${t} · Working folder: ${e.path ? `\`${e.path}\`` : 'none'}`);
         inActions = false;
+        break;
+      case 'ask':
+        out.push(`- ${t} 🙋 ${e.kind === 'login' ? 'Sign-in requested' : e.message ? `Agent asked: ${e.message}` : `Answered: ${e.answer}`}`);
+        break;
+      case 'pause':
+        out.push('', `> ${t} · Paused — user took over`);
+        break;
+      case 'resume':
+        out.push('', `> ${t} · Resumed`);
+        break;
+      case 'plan_offer':
+        out.push('', `> ${t} · Plan shown, waiting for Start`);
         break;
       case 'agent_switch':
         out.push('', `> ${t} · Switched to ${e.to}${e.reason ? ` (previous agent stopped: ${e.reason})` : ''}`);
@@ -992,6 +1263,7 @@ async function onFrame({ data }) {
     rec.recorder.ondataavailable = (e) => e.data.size && rec.chunks.push(e.data);
     rec.recorder.start(1000);
     rec.started = Date.now();
+    rec.startedAt = new Date().toISOString();
     // Screencast only sends frames on change; repaint so the timeline stays continuous.
     rec.heartbeat = setInterval(paintFrame, 500);
   } else {
@@ -1049,6 +1321,27 @@ async function addVideo(blob, durationMs) {
   const saved = document.createElement('div');
   saved.textContent = 'Saving…';
   card.append(video, row, saved);
+  // Action database flag: the steps of this recording, clickable to seek.
+  const features = await getFeatures();
+  if (features.actionDb && rec.startedAt) {
+    const start = Date.parse(rec.startedAt);
+    const steps = journal.filter((e) => e.type === 'action' && Date.parse(e.ts) >= start - 500 && Date.parse(e.ts) <= start + durationMs + 500);
+    if (steps.length) {
+      const list = document.createElement('ol');
+      list.className = 'video-steps';
+      for (const e of steps) {
+        const offset = Math.max(0, (Date.parse(e.ts) - start) / 1000);
+        const b = Object.assign(document.createElement('button'), { type: 'button' });
+        b.append(Object.assign(document.createElement('time'), { textContent: `${Math.floor(offset / 60)}:${String(Math.floor(offset % 60)).padStart(2, '0')}` }), document.createTextNode(`${e.ok ? '' : '✗ '}${e.desc}`));
+        b.onclick = () => {
+          video.currentTime = offset;
+          video.play().catch(() => {});
+        };
+        list.append(b);
+      }
+      card.append(list);
+    }
+  }
   const entry = { saved, card, url, path: null };
   videoCards.set(id, entry);
   // Second click confirms, so a stray click doesn't lose the video.
@@ -1160,6 +1453,7 @@ syncControls();
 
 showNews($('news'));
 initSettings(port);
+onFeaturesChanged(() => syncControls());
 // Changing the folder restarts the agent there; the conversation is handed over.
 initFolder(port, tabId, {
   changed(folder) {
@@ -1268,7 +1562,13 @@ function replayChat(chat) {
         if (e.stats) showStats(e.stats);
         break;
       case 'permission':
-      case 'confirm':
+      case 'ask':
+      addAsk(msg);
+      break;
+    case 'paused':
+      setPaused(msg.paused);
+      break;
+    case 'confirm':
         notice(`🔐 ${e.title} → ${e.answer}`);
         break;
       case 'notice':

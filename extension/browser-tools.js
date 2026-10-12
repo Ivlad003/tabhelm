@@ -4,6 +4,7 @@
 // chrome.scripting; mouse and keyboard go through CDP Input.* (trusted events).
 
 import { cdp, attach, detach, dialogs, consoleLogs, requests, fileChoosers, dragData, screencastListeners } from './cdp.js';
+import { getFeatures } from './features.js';
 import * as P from './page-scripts.js';
 
 const chats = new Map(); // chatTabId -> { chatTabId, current, owned: Set, notes: [] }
@@ -479,6 +480,26 @@ async function tabsTool(c, args, ui) {
   }
 }
 
+// What a tool call is about to touch (element label, page) — for the policy
+// layers that must decide before the action runs. Never throws.
+export async function previewTarget(chatTabId, tool, args) {
+  try {
+    const c = chatState(chatTabId);
+    const tabId = args?.tabId != null ? Number(args.tabId) : c.current;
+    const tab = await chrome.tabs.get(tabId).catch(() => null);
+    const refs = [args?.ref, args?.fromRef, args?.toRef, ...(args?.fields || []).map((f) => f.ref)].filter(Boolean);
+    const labels = [];
+    for (const r of refs.slice(0, 6)) {
+      const { frameId, ref } = parseRef(r);
+      const res = await inject(tabId, P.elementCenter, [ref, false], frameId).catch(() => null);
+      if (res?.label) labels.push(res.label);
+    }
+    return { tab, labels };
+  } catch {
+    return { tab: null, labels: [] };
+  }
+}
+
 // ---------- dispatcher ----------
 
 export async function runTool(chatTabId, tool, args, ui) {
@@ -718,6 +739,153 @@ async function runPageTool(tabId, tab, tool, args, ui, chatTabId) {
       return { content: text(body || 'No requests captured yet (capture starts when the agent first touches the tab; reload to see page-load requests).') };
     }
 
+    // ---- Developer tools flag ----
+    case 'browser_fill_form': {
+      await requireFlag('devTools', 'Developer tools');
+      const done = [];
+      for (const [i, f] of args.fields.entries()) {
+        const loc = await locate(tabId, f.ref);
+        const kind = checked(await inject(tabId, P.fieldKind, [loc.ref], loc.frameId));
+        if (kind === 'select') checked(await inject(tabId, P.selectOption, [loc.ref, f.value], loc.frameId));
+        else if (kind === 'checkbox' || kind === 'radio') {
+          const want = /^(true|1|yes|on|checked)$/i.test(f.value);
+          const now = checked(await inject(tabId, P.isChecked, [loc.ref], loc.frameId)).checked;
+          if (want !== now) {
+            await pointer(tabId, loc.x, loc.y, 'click');
+            await mouseClick(tabId, loc.x, loc.y);
+          }
+        } else if (loc.exact) {
+          await pointer(tabId, loc.x, loc.y, 'click');
+          await mouseClick(tabId, loc.x, loc.y);
+          checked(await inject(tabId, P.prepareTyping, [loc.ref, true], loc.frameId));
+          await cdp(tabId, 'Input.insertText', { text: f.value });
+          if (args.submit && i === args.fields.length - 1) await pressKey(tabId, 'Enter');
+        } else checked(await inject(tabId, P.setValueFallback, [loc.ref, f.value, true], loc.frameId));
+        done.push(`${f.ref} "${loc.label}"`);
+      }
+      const nav = await settle(tabId, urlBefore);
+      return { content: text(`Filled ${done.length} field(s): ${done.join(', ')}.${nav}`), label: `${done.length} fields` };
+    }
+
+    case 'browser_network_body': {
+      await requireFlag('devTools', 'Developer tools');
+      const entry = [...(requests.get(tabId)?.values() || [])].reverse().find((r) => r.url.includes(args.url));
+      if (!entry) throw new Error(`No captured request containing "${args.url}". Call browser_network first (capture starts when the agent touches the tab).`);
+      const max = Math.min(args.maxChars || 20_000, 200_000);
+      let reqBody = entry.postData;
+      if (!reqBody && entry.hasPostData) reqBody = (await cdp(tabId, 'Network.getRequestPostData', { requestId: entry.id }).catch(() => ({}))).postData || null;
+      let resBody = null;
+      try {
+        const r = await cdp(tabId, 'Network.getResponseBody', { requestId: entry.id });
+        resBody = r.base64Encoded ? `[binary, ${Math.round((r.body.length * 3) / 4 / 1024)} KB base64]` : r.body;
+      } catch (err) {
+        resBody = `[unavailable: ${err.message}]`;
+      }
+      const cut = (s) => (s && s.length > max ? `${s.slice(0, max)}\n…(truncated)` : s);
+      return { content: text(`${entry.method} ${entry.status ?? ''} ${entry.url}\n\nRequest body:\n${cut(reqBody) || '(none)'}\n\nResponse body (${entry.mime || '?'}):\n${cut(resBody)}`), label: entry.url.slice(0, 60) };
+    }
+
+    case 'browser_storage': {
+      await requireFlag('devTools', 'Developer tools');
+      if (args.action !== 'get') {
+        const ok = await ui.confirm(chatTabId, `${args.action === 'set' ? 'Change' : 'Delete'} ${args.kind} on ${new URL(tab.url).host}?`, `${args.key || ''}${args.value ? ` = ${args.value.slice(0, 80)}` : ''}`);
+        if (!ok) throw new Error('The user declined changing storage.');
+      }
+      if (args.kind === 'cookies') {
+        if (args.action === 'get') {
+          const { cookies } = await cdp(tabId, 'Network.getCookies', { urls: [tab.url] });
+          const list = cookies.filter((c) => !args.key || c.name === args.key).map((c) => `${c.name}=${c.value.length > 60 ? `${c.value.slice(0, 60)}…` : c.value}${c.httpOnly ? ' [httpOnly]' : ''}${c.secure ? ' [secure]' : ''}`);
+          return { content: text(list.join('\n') || 'No cookies.') };
+        }
+        if (!args.key) throw new Error('key is required');
+        if (args.action === 'set') await cdp(tabId, 'Network.setCookie', { name: args.key, value: args.value || '', url: tab.url });
+        else await cdp(tabId, 'Network.deleteCookies', { name: args.key, url: tab.url });
+        return { content: text(`Cookie ${args.key} ${args.action === 'set' ? 'set' : 'deleted'}.`) };
+      }
+      const res = checked(await inject(tabId, P.webStorage, [args.kind, args.action, args.key || null, args.value ?? null]));
+      return { content: text(res.text) };
+    }
+
+    case 'browser_emulate': {
+      await requireFlag('devTools', 'Developer tools');
+      if (args.reset) {
+        await cdp(tabId, 'Emulation.clearDeviceMetricsOverride').catch(() => {});
+        await cdp(tabId, 'Emulation.clearGeolocationOverride').catch(() => {});
+        await cdp(tabId, 'Emulation.setUserAgentOverride', { userAgent: '' }).catch(() => {});
+        await cdp(tabId, 'Emulation.setEmulatedMedia', { features: [] }).catch(() => {});
+        await cdp(tabId, 'Emulation.setTimezoneOverride', { timezoneId: '' }).catch(() => {});
+        return { content: text('Emulation reset.') };
+      }
+      const applied = [];
+      if (args.width || args.height || args.mobile != null || args.deviceScaleFactor) {
+        await cdp(tabId, 'Emulation.setDeviceMetricsOverride', { width: args.width || 0, height: args.height || 0, deviceScaleFactor: args.deviceScaleFactor || 0, mobile: Boolean(args.mobile) });
+        applied.push(`viewport ${args.width || 'auto'}×${args.height || 'auto'}${args.mobile ? ' mobile' : ''}`);
+      }
+      if (args.userAgent) {
+        await cdp(tabId, 'Emulation.setUserAgentOverride', { userAgent: args.userAgent, ...(args.locale ? { acceptLanguage: args.locale } : {}) });
+        applied.push('user agent');
+      }
+      if (args.colorScheme) {
+        await cdp(tabId, 'Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: args.colorScheme }] });
+        applied.push(`${args.colorScheme} scheme`);
+      }
+      if (args.latitude != null && args.longitude != null) {
+        await cdp(tabId, 'Emulation.setGeolocationOverride', { latitude: args.latitude, longitude: args.longitude, accuracy: 50 });
+        applied.push(`geolocation ${args.latitude},${args.longitude}`);
+      }
+      if (args.timezone) {
+        await cdp(tabId, 'Emulation.setTimezoneOverride', { timezoneId: args.timezone });
+        applied.push(`timezone ${args.timezone}`);
+      }
+      if (args.locale) {
+        await cdp(tabId, 'Emulation.setLocaleOverride', { locale: args.locale }).catch(() => {});
+        applied.push(`locale ${args.locale}`);
+      }
+      return { content: text(applied.length ? `Emulating: ${applied.join(', ')}. Reload to apply fully; pass reset: true to undo.` : 'Nothing to emulate.') };
+    }
+
+    case 'browser_highlight': {
+      await requireFlag('devTools', 'Developer tools');
+      const byFrame = new Map();
+      for (const r of args.refs) {
+        const { frameId, ref } = parseRef(r);
+        byFrame.set(frameId, [...(byFrame.get(frameId) || []), ref]);
+      }
+      let count = 0;
+      for (const [frameId, refs] of byFrame) count += (await inject(tabId, P.highlightRefs, [refs, args.label || ''], frameId))?.count || 0;
+      return { content: text(`Highlighted ${count} element(s) for the user.`) };
+    }
+
+    // ---- Take over / password manager flags: the panel does the work ----
+    case 'browser_request_human': {
+      await requireFlag('takeOver', 'Take over');
+      const reply = await ui.ask(chatTabId, 'human', { message: args.message, tab: { title: tab.title, url: tab.url } });
+      if (!reply?.done) throw new Error('The user cancelled the task.');
+      return { content: text(`The user says they are done${reply.note ? `: ${reply.note}` : '.'} Take a new snapshot to see the page.`), label: args.message.slice(0, 60) };
+    }
+
+    case 'browser_request_login': {
+      await requireFlag('passwordManager', 'Password manager hand-off');
+      const reply = await ui.ask(chatTabId, 'login', { usernameRef: args.usernameRef, passwordRef: args.passwordRef, note: args.note, tab: { title: tab.title, url: tab.url } });
+      if (!reply?.done) throw new Error('The user cancelled signing in.');
+      if (reply.credential) {
+        // Typed here, straight from the password manager; the model only gets "done".
+        const fill = async (ref, value) => {
+          const loc = await locate(tabId, ref);
+          await pointer(tabId, loc.x, loc.y, 'click');
+          await mouseClick(tabId, loc.x, loc.y);
+          checked(await inject(tabId, P.prepareTyping, [loc.ref, true], loc.frameId));
+          await cdp(tabId, 'Input.insertText', { text: value });
+        };
+        if (args.usernameRef && reply.credential.username) await fill(args.usernameRef, reply.credential.username);
+        if (args.passwordRef && reply.credential.password) await fill(args.passwordRef, reply.credential.password);
+        if (reply.submit) await pressKey(tabId, 'Enter');
+        const nav = await settle(tabId, urlBefore);
+        return { content: text(`Credentials filled from the password manager${reply.submit ? ' and submitted' : ''}.${nav} Take a new snapshot.`), label: 'password manager' };
+      }
+      return { content: text('The user signed in themselves. Take a new snapshot to see the page.'), label: 'user signed in' };
+    }
+
     case 'browser_evaluate': {
       const host = new URL(tab.url).host;
       const ok = await ui.confirm(chatTabId, `Run JavaScript on ${host}?`, args.expression);
@@ -733,6 +901,11 @@ async function runPageTool(tabId, tab, tool, args, ui, chatTabId) {
     default:
       throw new Error(`Unknown tool ${tool}`);
   }
+}
+
+async function requireFlag(flag, name) {
+  const features = await getFeatures();
+  if (!features[flag]) throw new Error(`This tool needs the "${name}" feature, which is off. The user can enable it in TabHelm → Settings → Experimental.`);
 }
 
 // Dialogs block script injection, so this path skips assertControllable().
