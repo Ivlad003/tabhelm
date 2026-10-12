@@ -785,3 +785,56 @@ body.dropping .composer {
   outline: 2px dashed var(--accent);
   outline-offset: -4px;
 }
+
+.stats {
+  font-size: 11px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.video-buttons {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.folder-row {
+  font-size: 12px;
+}
+
+.folder-label {
+  flex: 1;
+  min-width: 0;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.folder-form {
+  display: flex;
+  gap: 6px;
+}
+
+.folder-form[hidden],
+#folder-error[hidden],
+#folder-warning[hidden] {
+  display: none;
+}
+
+.folder-form input {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-size: 12px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+}
+
+#folder-error,
+#folder-warning {
+  text-align: left;
+  font-size: 11px;
+}

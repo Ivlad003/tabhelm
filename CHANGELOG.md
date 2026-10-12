@@ -2,6 +2,14 @@
 
 All notable changes to TabHelm. The newest release is at the top; the panel's update banner links here.
 
+## [0.12.0] - 2026-10-12
+
+### Added
+- **Working folder** for a chat (optional): pick it with the system dialog or type a path. Agents start there, follow the project's AGENTS.md / CLAUDE.md, and can create files, write code and run scripts; the project's skills are added for every agent. Changing the folder restarts the agent with the conversation handed over.
+- **Task stats** under every answer: time, and tokens, cost and context use when the agent reports them. Totals in the Markdown export.
+- **Delete** button for recordings (removes the video from the chat and from disk).
+- The built-in agent reports tokens and OpenRouter cost.
+
 ## [0.11.0] - 2026-10-12
 
 ### Added
@@ -78,6 +86,7 @@ All notable changes to TabHelm. The newest release is at the top; the panel's up
 ### Added
 - First version: side-panel chat that drives terminal agents over ACP, with browser tools over MCP.
 
+[0.12.0]: https://github.com/Ivlad003/tabhelm/releases/tag/v0.12.0
 [0.11.0]: https://github.com/Ivlad003/tabhelm/releases/tag/v0.11.0
 [0.10.0]: https://github.com/Ivlad003/tabhelm/releases/tag/v0.10.0
 [0.9.0]: https://github.com/Ivlad003/tabhelm/releases/tag/v0.9.0

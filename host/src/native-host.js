@@ -6,7 +6,8 @@
 //                set_auto_approve {tabId, value} | set_config {tabId, configId, value} | authenticate {tabId, methodId}
 //                tool_result {id, ok, content|error}
 //                save_recording {tabId, id, filename, seq, last, data(base64)}
-//                set_skills {tabId, skills} | skill_preview {tabId, requestId, url}
+//                set_skills {tabId, skills} | skill_preview {tabId, requestId, url} | delete_recording {tabId, id, path}
+//                pick_folder {tabId, requestId} | folder_info {tabId, requestId, path}   (start may carry folder)
 //   host -> ext: agents {agents} | status {tabId, state} | update {tabId, update} | config {tabId, options}
 //                auth {tabId, agent, methods} | recording_saved {tabId, id, path}
 //                skill_info {tabId, requestId, name, description | error}
@@ -15,11 +16,12 @@
 
 import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { createNativeChannel } from './native-messaging.js';
 import { listAgents, getAgent } from './agents.js';
 import { loadEnvFile } from './env.js';
 import { loadSkill, runSkillTool } from './skills.js';
+import { folderInfo, pickFolder, projectInstructions, projectSkills } from './folders.js';
 import { startToolServer } from './tool-server.js';
 import { AgentSession } from './session.js';
 
@@ -93,7 +95,11 @@ async function handleMessage(msg) {
         send({ type: 'status', tabId, state: 'starting', agent: { id: agent.id, name: agent.name } });
         const session = new AgentSession({ tabId, agent, toolServer, workspace, send, log });
         session.autoApprove = Boolean(msg.autoApprove);
-        session.skills = await loadSkills(tabId, msg.skills);
+        if (msg.folder) {
+          session.folder = folderInfo(msg.folder).path;
+          session.instructions = projectInstructions(session.folder);
+        }
+        session.skills = await loadSkills(tabId, msg.skills, session.folder);
         sessions.set(tabId, session);
         try {
           await session.start();
@@ -126,7 +132,27 @@ async function handleMessage(msg) {
 
       case 'set_skills': {
         const session = sessions.get(tabId);
-        if (session) session.setSkills(await loadSkills(tabId, msg.skills));
+        if (session) session.setSkills(await loadSkills(tabId, msg.skills, session.folder));
+        break;
+      }
+
+      // Working folder: native picker and a summary of what the project contains.
+      case 'pick_folder': {
+        try {
+          const path = await pickFolder();
+          send({ type: 'folder_info', tabId, requestId: msg.requestId, ...(path ? folderInfo(path) : { cancelled: true }) });
+        } catch (err) {
+          send({ type: 'folder_info', tabId, requestId: msg.requestId, error: err.message });
+        }
+        break;
+      }
+
+      case 'folder_info': {
+        try {
+          send({ type: 'folder_info', tabId, requestId: msg.requestId, ...folderInfo(msg.path) });
+        } catch (err) {
+          send({ type: 'folder_info', tabId, requestId: msg.requestId, error: err.message });
+        }
         break;
       }
 
@@ -159,6 +185,16 @@ async function handleMessage(msg) {
         saveRecordingChunk(msg);
         break;
 
+      // Only files inside the recordings folder can be deleted this way.
+      case 'delete_recording': {
+        const path = resolve(String(msg.path || ''));
+        if (dirname(path) !== resolve(recordingsDir) || !/\.(webm|mp4)$/.test(path)) throw new Error('Not a TabHelm recording');
+        rmSync(path, { force: true });
+        log(`recording deleted: ${path}`);
+        send({ type: 'recording_deleted', tabId, id: msg.id, path });
+        break;
+      }
+
       case 'tool_result': {
         const resolve = pendingTools.get(msg.id);
         pendingTools.delete(msg.id);
@@ -190,8 +226,9 @@ function saveRecordingChunk({ tabId, id, filename, seq, last, data }) {
   send({ type: 'recording_saved', tabId, id, path });
 }
 
-// Loads the enabled skills; failures are reported in the chat, not fatal.
-async function loadSkills(tabId, urls = []) {
+// Loads the enabled skills (plus the working folder's own skills); failures
+// are reported in the chat, not fatal.
+async function loadSkills(tabId, urls = [], folder = null) {
   const loaded = await Promise.all(
     urls.map((url) =>
       loadSkill(url).catch((err) => {
@@ -200,7 +237,9 @@ async function loadSkills(tabId, urls = []) {
       }),
     ),
   );
-  return loaded.filter(Boolean);
+  const skills = loaded.filter(Boolean);
+  for (const s of folder ? projectSkills(folder) : []) if (!skills.some((x) => x.name === s.name)) skills.push(s);
+  return skills;
 }
 
 function requireSession(tabId) {

@@ -49,7 +49,7 @@ export class AgentSession {
   async start() {
     const { agent } = this;
     this.child = spawn(agent.command, agent.args, {
-      cwd: this.workspace,
+      cwd: this.folder || this.workspace,
       env: process.env,
       stdio: ['pipe', 'pipe', 'pipe'],
     });
@@ -74,7 +74,7 @@ export class AgentSession {
       this.connection.initialize({
         protocolVersion: acp.PROTOCOL_VERSION,
         clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false },
-        clientInfo: { name: 'tabhelm', version: '0.11.0' },
+        clientInfo: { name: 'tabhelm', version: '0.12.0' },
       }),
       this.exited.then(() => {
         throw new Error(`${agent.name} exited during startup. Check that it is installed and logged in.`);
@@ -105,7 +105,7 @@ export class AgentSession {
   async openSession() {
     const { agent } = this;
     try {
-      const session = await this.connection.newSession({ cwd: this.workspace, mcpServers: this.mcpServers });
+      const session = await this.connection.newSession({ cwd: this.folder || this.workspace, mcpServers: this.mcpServers });
       this.sessionId = session.sessionId;
       this.configOptions = session.configOptions || [];
       await this.applyDefaultModel();
@@ -187,6 +187,14 @@ export class AgentSession {
   }
 
   // `context` carries the conversation from a previous agent in this chat.
+  folderPreamble() {
+    if (!this.folder) return '';
+    let text = `Working folder: ${this.folder} (the user's project, also your current directory). When the user asks, you may read, create and edit files and run commands here. Follow the project's own instructions (AGENTS.md, CLAUDE.md and similar).\n\n`;
+    // The built-in agent cannot read files itself, so it gets the instructions inline.
+    if (this.agent.builtin && this.instructions) text += `Project instructions from ${this.instructions.file}:\n${this.instructions.text}\n\n`;
+    return text;
+  }
+
   // Turns chat attachments into ACP content blocks the agent can take: images and
   // embedded files when it supports them, otherwise a saved file / inline text.
   attachmentBlocks(attachments = []) {
@@ -222,7 +230,7 @@ export class AgentSession {
     this.busy = true;
     const history = context ? `Earlier in this chat (with another agent), for context:\n${context}\n\n` : '';
     let skills = '';
-    if (this.firstPrompt) skills = skillsPreamble(this.skills);
+    if (this.firstPrompt) skills = this.folderPreamble() + skillsPreamble(this.skills);
     else if (this.skillsChanged) skills = `[TabHelm] The user changed the enabled skills. ${skillsPreamble(this.skills) || 'No skills are enabled now.\n\n'}`;
     this.skillsChanged = false;
     const { blocks, notes } = this.attachmentBlocks(attachments);
@@ -235,7 +243,7 @@ export class AgentSession {
         sessionId: this.sessionId,
         prompt: [{ type: 'text', text: fullText }, ...blocks],
       });
-      this.emit({ type: 'done', stopReason: result.stopReason });
+      this.emit({ type: 'done', stopReason: result.stopReason, usage: result.usage || null });
     } finally {
       this.busy = false;
     }
@@ -295,6 +303,10 @@ export class AgentSession {
             text: summarizeToolContent(update.content),
           },
         });
+        break;
+      // Context window use and the session's running cost, when the agent reports them.
+      case 'usage_update':
+        this.emit({ type: 'usage', used: update.used, size: update.size, cost: update.cost || null });
         break;
       case 'config_option_update':
         this.configOptions = update.configOptions || this.configOptions;

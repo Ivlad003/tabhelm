@@ -45,6 +45,7 @@ const PROVIDERS = {
           name: m.name || m.id,
           free: m.id.endsWith(':free') || (Number(m.pricing?.prompt) === 0 && Number(m.pricing?.completion) === 0),
           vision: (m.architecture?.input_modalities || []).includes('image'),
+          context: m.context_length || 0,
         }));
     },
   },
@@ -111,7 +112,7 @@ class BuiltinAgent {
     return {
       protocolVersion: acp.PROTOCOL_VERSION,
       agentCapabilities: { mcpCapabilities: { http: false, sse: false }, promptCapabilities: { image: true, embeddedContext: true } },
-      agentInfo: { name: 'tabhelm-builtin', title: `TabHelm ${provider.name}`, version: '0.11.0' },
+      agentInfo: { name: 'tabhelm-builtin', title: `TabHelm ${provider.name}`, version: '0.12.0' },
       authMethods: provider.keyEnv ? [{ id: 'api-key', name: `Use ${provider.keyEnv}`, description: keyHelp(provider) }] : [],
     };
   }
@@ -142,7 +143,7 @@ class BuiltinAgent {
     const toolOwner = new Map();
     for (const server of params.mcpServers || []) {
       if (!('command' in server)) continue;
-      const client = new Client({ name: 'tabhelm-builtin', version: '0.11.0' });
+      const client = new Client({ name: 'tabhelm-builtin', version: '0.12.0' });
       const env = { ...process.env, ...Object.fromEntries((server.env || []).map((e) => [e.name, e.value])) };
       await client.connect(new StdioClientTransport({ command: server.command, args: server.args, env, stderr: 'ignore' }));
       mcpClients.push(client);
@@ -153,7 +154,7 @@ class BuiltinAgent {
     }
 
     const sessionId = crypto.randomUUID();
-    const session = { id: sessionId, models, model: pick, messages: [{ role: 'system', content: SYSTEM_PROMPT }], tools, toolOwner, mcpClients, allowAlways: new Set(), abort: null };
+    const session = { id: sessionId, models, model: pick, messages: [{ role: 'system', content: SYSTEM_PROMPT }], tools, toolOwner, mcpClients, allowAlways: new Set(), abort: null, cost: 0, costKnown: false };
     this.sessions.set(sessionId, session);
     return { sessionId, configOptions: this.configOptions(session) };
   }
@@ -193,6 +194,11 @@ class BuiltinAgent {
   async prompt({ sessionId, prompt }) {
     const session = this.require(sessionId);
     session.abort = new AbortController();
+    session.turnUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0, thoughtTokens: 0, cachedReadTokens: 0 };
+    const finish = async (stopReason) => {
+      await this.reportUsage(session);
+      return { stopReason, usage: session.turnUsage };
+    };
     // Text, attached files (embedded resources) and images from the chat.
     const parts = [];
     for (const p of prompt) {
@@ -214,7 +220,7 @@ class BuiltinAgent {
         compactHistory(session.messages);
         const reply = await this.complete(session);
         session.messages.push({ role: 'assistant', content: reply.text || null, ...(reply.toolCalls.length ? { tool_calls: reply.toolCalls } : {}) });
-        if (!reply.toolCalls.length) return { stopReason: reply.finish === 'length' ? 'max_tokens' : 'end_turn' };
+        if (!reply.toolCalls.length) return finish(reply.finish === 'length' ? 'max_tokens' : 'end_turn');
 
         const images = [];
         for (const call of reply.toolCalls) {
@@ -231,16 +237,18 @@ class BuiltinAgent {
           });
         }
       }
-      return { stopReason: 'max_turn_requests' };
+      return finish('max_turn_requests');
     } catch (err) {
-      if (session.abort.signal.aborted) return { stopReason: 'cancelled' };
+      if (session.abort.signal.aborted) return finish('cancelled');
       throw err;
     }
   }
 
   // One streamed chat completion; forwards text and reasoning to the panel.
   async complete(session) {
-    const body = { model: session.model, messages: session.messages, tools: session.tools, stream: true, temperature: 0.2 };
+    // Ask for token usage (and, on OpenRouter, the cost) in the last stream chunk.
+    const body = { model: session.model, messages: session.messages, tools: session.tools, stream: true, temperature: 0.2, stream_options: { include_usage: true } };
+    if (providerId === 'openrouter') body.usage = { include: true };
     let res;
     for (let attempt = 0; ; attempt++) {
       res = await fetch(`${provider.baseUrl()}/chat/completions`, {
@@ -251,6 +259,11 @@ class BuiltinAgent {
       });
       if (res.ok) break;
       const detail = (await res.text()).slice(0, 400);
+      // Some OpenAI-compatible servers reject stream_options; retry without it.
+      if (res.status === 400 && /stream_options/.test(detail) && body.stream_options) {
+        delete body.stream_options;
+        continue;
+      }
       // Free models are often briefly rate limited upstream; retry twice.
       if ((res.status === 429 || res.status >= 500) && attempt < 2) {
         await sleep(attempt ? 6000 : 2500, session.abort.signal);
@@ -264,6 +277,7 @@ class BuiltinAgent {
     const calls = [];
     for await (const event of sse(res.body)) {
       if (event.error) throw fail(friendlyError(event.error.code, event.error.message || JSON.stringify(event.error), session.model));
+      if (event.usage) addUsage(session, event.usage);
       const choice = event.choices?.[0];
       if (!choice) continue;
       const delta = choice.delta || {};
@@ -284,6 +298,17 @@ class BuiltinAgent {
     }
     const toolCalls = calls.filter(Boolean).map((c, i) => ({ ...c, id: c.id || `call_${Date.now()}_${i}` }));
     return { text, toolCalls, finish };
+  }
+
+  // Context use for the panel and, when the provider prices requests, the session cost.
+  async reportUsage(session) {
+    const size = session.models.find((m) => m.id === session.model)?.context || 0;
+    await this.update(session.id, {
+      sessionUpdate: 'usage_update',
+      used: session.lastContext || 0,
+      size,
+      ...(session.costKnown ? { cost: { amount: session.cost, currency: 'USD' } } : {}),
+    });
   }
 
   async runTool(session, call) {
@@ -339,6 +364,20 @@ class BuiltinAgent {
       content: [{ type: 'content', content: { type: 'text', text: textOut.slice(0, 2000) } }],
     });
     return { text: textOut, images };
+  }
+}
+
+function addUsage(session, u) {
+  const t = session.turnUsage;
+  t.inputTokens += u.prompt_tokens || 0;
+  t.outputTokens += u.completion_tokens || 0;
+  t.totalTokens += u.total_tokens || (u.prompt_tokens || 0) + (u.completion_tokens || 0);
+  t.thoughtTokens += u.completion_tokens_details?.reasoning_tokens || 0;
+  t.cachedReadTokens += u.prompt_tokens_details?.cached_tokens || 0;
+  session.lastContext = (u.prompt_tokens || 0) + (u.completion_tokens || 0);
+  if (typeof u.cost === 'number') {
+    session.cost += u.cost;
+    session.costKnown = true;
   }
 }
 

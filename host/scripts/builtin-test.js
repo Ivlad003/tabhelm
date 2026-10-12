@@ -18,6 +18,8 @@ const stats = { modelsCalls: 0, completions: 0, rateLimited: 0, badAuth: 0, tool
 function stream(res, chunks) {
   res.writeHead(200, { 'content-type': 'text/event-stream' });
   for (const c of chunks) res.write(`data: ${JSON.stringify({ choices: [{ index: 0, ...c }] })}\n\n`);
+  // Final usage chunk, as OpenRouter sends it with usage.include (cost in USD).
+  res.write(`data: ${JSON.stringify({ choices: [], usage: { prompt_tokens: 1000, completion_tokens: 50, total_tokens: 1050, cost: 0.0005 } })}\n\n`);
   res.end('data: [DONE]\n\n');
 }
 
@@ -119,6 +121,7 @@ const check = (name, ok, info = '') => {
 const out = await run({ TABHELM_OPENROUTER_BASE_URL: base, OPENROUTER_API_KEY: 'test-key' });
 check('built-in agent fills and saves the form', /E2E PASS/.test(out), out);
 check('agent answer streamed to the panel', /The page shows: Saved: Ada Lovelace/.test(out), out);
+check('tokens and cost shown for the task', /stats: ⏱ [\d.]+ s · [\d.]+k tokens · \$0\.00\d+/.test(out), out.match(/stats:.*/)?.[0] || out.slice(-600));
 check('free tool-calling models listed first, no-tools model hidden', /models \(2\): mock\/helper:free, mock\/pro/.test(out), out.match(/models.*/)?.[0]);
 check('browser tools offered to the model', stats.toolsOffered >= 4, JSON.stringify(stats));
 check('429 retried', stats.rateLimited === 1 && stats.completions >= 5, JSON.stringify(stats));

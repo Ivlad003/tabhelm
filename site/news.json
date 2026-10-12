@@ -1,6 +1,20 @@
 {
   "news": [
     {
+      "id": "2026-10-folder-stats",
+      "date": "2026-10-12",
+      "minVersion": "0.12.0",
+      "title": {
+        "en": "Work in your project, see what each task cost",
+        "uk": "Робота у вашому проєкті й вартість кожного завдання"
+      },
+      "text": {
+        "en": "Bind a chat to a project folder: agents follow its AGENTS.md and skills and can write code there. Every answer now shows time, tokens and cost.",
+        "uk": "Прив'яжіть чат до папки проєкту: агенти дотримуються її AGENTS.md і скілів і можуть писати там код. Під кожною відповіддю тепер видно час, токени й вартість."
+      },
+      "url": "https://github.com/Ivlad003/tabhelm#working-folder-project"
+    },
+    {
       "id": "2026-10-attachments",
       "date": "2026-10-12",
       "minVersion": "0.11.0",

@@ -54,6 +54,7 @@ To update, run the install command again.
 | Chat | Agent replies, collapsible *Thinking*, plans, and an action log (`↳ Click "Save"`, `↳ Type "…" into "Email"`). |
 | **Auto-approve actions** | Lets the agent use tools without asking. Uploads, JavaScript and other tabs still ask (see below). |
 | **Send / Stop** | Sends a message; while the agent works, the button cancels the turn. |
+| **Folder…** | Optional working folder (project) for the chat — see below. |
 | **Attach** | Adds images and text files (txt, md, csv, tsv, json, log) to the message. You can also drop files on the panel or paste an image. |
 | **New chat** | Clears the chat and starts a fresh session with the same agent and model. |
 | **Export** | Downloads the chat with the agent's action log as Markdown, or the full event log as JSON. |
@@ -93,7 +94,22 @@ sequenceDiagram
 
 ### Recording videos
 
-Turn on **Record video** and every message you send is recorded until the agent finishes: the tab's frames (CDP screencast) are encoded in the panel with MediaRecorder (MP4/H.264, WebM fallback). An *agent cursor* with a click ripple is drawn on the page so the video shows where the agent pointed and clicked. Each video appears in the chat with a player and a **Download** button and is saved automatically to `~/Videos/TabHelm/` (or `~/.tabhelm/recordings/` if there is no `~/Videos`). Only the visible tab renders frames, so tabs the agent opens in the background are not captured.
+Turn on **Record video** and every message you send is recorded until the agent finishes: the tab's frames (CDP screencast) are encoded in the panel with MediaRecorder (MP4/H.264, WebM fallback). An *agent cursor* with a click ripple is drawn on the page so the video shows where the agent pointed and clicked. Each video appears in the chat with a player, **Download** and **Delete** (click twice; removes it from the chat and from disk) and is saved automatically to `~/Videos/TabHelm/` (or `~/.tabhelm/recordings/` if there is no `~/Videos`). Only the visible tab renders frames, so tabs the agent opens in the background are not captured.
+
+### Working folder (project)
+
+By default agents run in an empty `~/.tabhelm/workspace`. Press **Folder…** (system folder dialog) or **Path** (type or pick a recent path) to bind the chat to a project folder:
+
+- agents start in that folder, so they pick up the project's own **AGENTS.md / CLAUDE.md / rules** and can **create and edit files, write code and run scripts** there when you ask — for example with documentation open in the tab and your code in the folder;
+- the project's skills (`.claude/skills`, `.agents/skills`, `.opencode/skills`, `.cursor/skills`, `skills/` — each `*/SKILL.md`) are added for every agent and read with `skill_read`;
+- the built-in agent (OpenRouter/Ollama) gets the AGENTS.md text in its first message; it has browser tools only, no file tools;
+- changing the folder restarts the agent there and hands the conversation over; the folder is remembered while the browser runs, and recent folders are suggested.
+
+With **Auto-approve** on, the agent edits files and runs commands in the folder without asking — the panel shows a warning. Agents' own permission prompts apply otherwise.
+
+### Task stats
+
+Under every answer the panel shows the time the task took and, when the agent reports them, tokens, cost and context use — e.g. `⏱ 11.9 s · 117k tokens · $0.17 · context 39k / 1.0M` (hover for input/output/cached tokens). Claude Code, OpenCode, Kilo and the built-in OpenRouter agent report tokens and cost; Codex reports tokens; Cursor and Grok only get the time. Totals are in the Markdown export.
 
 ### Attachments
 
@@ -319,6 +335,7 @@ extension/                     Chrome extension (Manifest V3, no build step)
   news.js                      update / news banner from the site's news.json
   settings.js                  Settings view: skills from links, versions, update check
   attachments.js               image / text attachments: picking, drop, paste, downscaling
+  folder.js                    working folder: picker, typed path, recent folders, auto-approve warning
 host/                          native host (Node 20+)
   src/native-host.js           entry point launched by Chrome; routes messages, saves recordings
   src/native-messaging.js      4-byte length-prefixed framing, 1 MB guard
@@ -327,6 +344,7 @@ host/                          native host (Node 20+)
   src/builtin-agent.js         TabHelm's own ACP agent for OpenRouter / Ollama / OpenAI-compatible APIs
   src/env.js                   ~/.tabhelm/env (API keys) loading and saving
   src/skills.js                skills from links: URL resolution, SKILL.md parsing, cache, skill_* tools
+  src/folders.js               working folder: native picker, AGENTS.md / project skills discovery
   src/tool-server.js           loopback HTTP endpoint with token
   src/mcp-bridge.js            stdio MCP server spawned by agents (24 tool definitions)
   scripts/install.js           registers the native host (Chrome, Chromium, Brave, Edge)
@@ -360,6 +378,7 @@ Load `extension/` unpacked in Chrome. After editing extension files press ↻ on
 | `E2E_RECORD=1 E2E_SWITCH=opencode npm run e2e -- claude` | same, plus video recording, agent hand-over and New chat |
 | `E2E_FAILOVER=opencode npm run e2e -- claude` | kills the agent mid-task, continues with OpenCode, checks the Markdown export |
 | `E2E_NEWS=1 npm run e2e` | update and news banners against a local feed |
+| `E2E_FOLDER=1 npm run e2e -- claude` | binds a project folder (AGENTS.md + skill) and checks the agent follows it and creates a file there |
 | `E2E_ATTACH=1 npm run e2e -- claude` | attaches an image and a CSV and checks the agent reads both |
 | `E2E_SKILLS=1 npm run e2e -- claude` | adds a skill in Settings and checks the agent reads and follows it |
 | `npm run test:builtin` | built-in agent against a mock OpenAI-compatible API (streaming, tool calls, 429 retry, missing key) |

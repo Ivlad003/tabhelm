@@ -176,5 +176,5 @@ export function getAgent(id) {
   if (!agent) return null;
   const launch = resolveLaunch(agent);
   if (!launch) throw new Error(`${agent.name} is not installed. ${agent.installHint}`);
-  return { id: agent.id, name: agent.name, defaultModel: agent.defaultModel, ...launch };
+  return { id: agent.id, name: agent.name, defaultModel: agent.defaultModel, builtin: agent.launch.some((l) => l.args?.[0]?.endsWith('builtin-agent.js')), ...launch };
 }

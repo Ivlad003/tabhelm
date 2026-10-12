@@ -27,6 +27,19 @@
         <button id="connect" class="btn">Connect</button>
       </div>
       <div id="config" class="bar-row config" hidden></div>
+      <div class="bar-row folder-row">
+        <span id="folder-label" class="folder-label">No working folder</span>
+        <button id="folder-pick" class="btn small" type="button" title="Choose a project folder for the agent">Folder…</button>
+        <button id="folder-type" class="btn small" type="button" title="Type a folder path">Path</button>
+        <button id="folder-clear" class="btn small" type="button" title="Stop using this folder" hidden>×</button>
+      </div>
+      <form id="folder-form" class="folder-form" hidden>
+        <input id="folder-path" list="folder-recent" placeholder="/home/you/projects/app" aria-label="Folder path" />
+        <datalist id="folder-recent"></datalist>
+        <button class="btn small primary" type="submit">Use</button>
+      </form>
+      <div id="folder-error" class="notice error" hidden></div>
+      <div id="folder-warning" class="notice error" hidden>Auto-approve is on: the agent can edit files and run commands in this folder without asking.</div>
       <div id="tab" class="tab-line" title="The tab this chat controls"></div>
     </header>
 

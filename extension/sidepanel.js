@@ -1,6 +1,7 @@
 import { showNews } from './news.js';
 import { initSettings, enabledSkillUrls, handleSettingsMessage, hostVersionMismatch } from './settings.js';
 import { initAttachments, takeAttachments, hasAttachments, chip } from './attachments.js';
+import { initFolder, currentFolder, handleFolderMessage, updateFolderWarning } from './folder.js';
 
 const tabId = Number(new URLSearchParams(location.search).get('tabId'));
 const $ = (id) => document.getElementById(id);
@@ -38,6 +39,8 @@ let connectedAgent = null;
 let currentModel = null;
 let agentsList = [];
 const record = (type, data = {}) => journal.push({ ts: new Date().toISOString(), type, ...data });
+// Usage reported by the agent: running session cost and context window use.
+const usage = { cost: null, currency: 'USD', context: null, lastTurn: null };
 const emptyTemplate = $('empty').cloneNode(true);
 
 const port = chrome.runtime.connect({ name: `panel:${tabId}` });
@@ -69,7 +72,7 @@ chrome.tabs.onRemoved.addListener((id) => {
 let versionWarned = false;
 
 function onMessage(msg) {
-  if (handleSettingsMessage(msg)) return;
+  if (handleSettingsMessage(msg) || handleFolderMessage(msg)) return;
   switch (msg.type) {
     case 'agents':
       fillAgents(msg.agents);
@@ -114,7 +117,15 @@ function onMessage(msg) {
     case 'recording_saved':
       onRecordingSaved(msg);
       break;
+    case 'recording_deleted':
+      finishDelete(msg.id);
+      break;
+    case 'usage':
+      if (msg.cost) Object.assign(usage, { cost: msg.cost.amount, currency: msg.cost.currency || 'USD' });
+      if (msg.size) usage.context = { used: msg.used, size: msg.size };
+      break;
     case 'done':
+      usage.lastTurn = msg.usage || null;
       if (msg.stopReason === 'cancelled') endTurn('Stopped');
       else if (msg.stopReason && msg.stopReason !== 'end_turn') endTurn(null, `stopped early (${msg.stopReason})`);
       else endTurn();
@@ -175,6 +186,7 @@ function onStatus(msg) {
     connected = true;
     connectedAgent = msg.agent;
     currentModel = null;
+    Object.assign(usage, { cost: null, context: null, lastTurn: null });
     restorePrefs = true;
     setStatus('ready', msg.agent.name);
     record('agent_connected', { agent: msg.agent.name });
@@ -498,7 +510,7 @@ async function startAgent(agentId, continueText = null) {
   connected = false;
   els.config.hidden = true;
   syncControls();
-  port.postMessage({ type: 'start', agentId, autoApprove: els.auto.checked, skills: enabledSkillUrls() });
+  port.postMessage({ type: 'start', agentId, autoApprove: els.auto.checked, skills: enabledSkillUrls(), folder: currentFolder() });
 }
 
 els.agent.onchange = () => {
@@ -552,12 +564,15 @@ els.newChat.onclick = () => {
   if (connected) {
     connected = false;
     els.config.hidden = true;
-    port.postMessage({ type: 'start', agentId: els.agent.value, autoApprove: els.auto.checked, skills: enabledSkillUrls() });
+    port.postMessage({ type: 'start', agentId: els.agent.value, autoApprove: els.auto.checked, skills: enabledSkillUrls(), folder: currentFolder() });
   }
   syncControls();
 };
 
-els.auto.onchange = () => port.postMessage({ type: 'set_auto_approve', value: els.auto.checked });
+els.auto.onchange = () => {
+  port.postMessage({ type: 'set_auto_approve', value: els.auto.checked });
+  updateFolderWarning(els.auto.checked);
+};
 
 chrome.storage.local.get('recordVideo').then(({ recordVideo }) => (els.record.checked = Boolean(recordVideo)));
 els.record.onchange = () => {
@@ -593,7 +608,8 @@ function send() {
   thoughtEl = null;
   planEl = null;
   busy = true;
-  turn = { text: '', thought: '', actions: [] };
+  turn = { text: '', thought: '', actions: [], started: Date.now(), costStart: usage.cost };
+  usage.lastTurn = null;
   record('user', { text, attachments: attachments.map((a) => ({ name: a.name, kind: a.kind, size: a.size })) });
   setStatus('working', 'Working…');
   if (els.record.checked) startRecording();
@@ -616,7 +632,9 @@ function stop() {
 function endTurn(note, failure = null) {
   if (note) notice(note);
   if (turn) {
-    record('agent', { agent: connectedAgent?.name, model: currentModel, text: turn.text.trim(), thought: turn.thought.trim(), failure });
+    const stats = turnStats(turn);
+    showStats(stats);
+    record('agent', { agent: connectedAgent?.name, model: currentModel, text: turn.text.trim(), thought: turn.thought.trim(), failure, stats });
     turn = null;
   }
   stopRecording();
@@ -627,6 +645,42 @@ function endTurn(note, failure = null) {
   if (connected) setStatus('ready', connectedAgent?.name || 'Connected');
   syncControls();
   if (failure && wasBusy) offerContinue(failure);
+}
+
+// Time, tokens and cost of one turn. Tokens and cost appear only for agents
+// that report them (Claude Code, OpenCode, Codex tokens, the built-in agent…).
+function turnStats(t) {
+  const u = usage.lastTurn;
+  const cost = usage.cost != null ? usage.cost - (t.costStart ?? 0) : null;
+  return {
+    ms: Date.now() - t.started,
+    tokens: u ? { total: u.totalTokens, input: u.inputTokens, output: u.outputTokens, cached: (u.cachedReadTokens || 0) + (u.cachedWriteTokens || 0), thought: u.thoughtTokens || 0 } : null,
+    cost: cost != null && cost >= 0 ? { amount: cost, currency: usage.currency } : null,
+    context: usage.context,
+  };
+}
+
+const fmtTokens = (n) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1000 ? `${(n / 1000).toFixed(n >= 1e4 ? 0 : 1)}k` : String(n));
+const fmtCost = (c) => `${c.currency === 'USD' ? '$' : `${c.currency} `}${c.amount < 0.01 ? c.amount.toFixed(4) : c.amount.toFixed(2)}`;
+const fmtTime = (ms) => (ms < 60_000 ? `${(ms / 1000).toFixed(1)} s` : `${Math.floor(ms / 60_000)} min ${Math.round((ms % 60_000) / 1000)} s`);
+
+function statsText(s) {
+  const parts = [`⏱ ${fmtTime(s.ms)}`];
+  if (s.tokens) parts.push(`${fmtTokens(s.tokens.total)} tokens`);
+  if (s.cost) parts.push(fmtCost(s.cost));
+  if (s.context?.size) parts.push(`context ${fmtTokens(s.context.used)} / ${fmtTokens(s.context.size)}`);
+  return parts.join(' · ');
+}
+
+function showStats(s) {
+  const el = add('div', 'stats');
+  el.textContent = statsText(s);
+  if (s.tokens) {
+    el.title = `input ${s.tokens.input} · output ${s.tokens.output} · cached ${s.tokens.cached}${s.tokens.thought ? ` · reasoning ${s.tokens.thought}` : ''}${s.cost ? '' : '\nThis agent does not report cost.'}`;
+  } else {
+    el.title = 'This agent does not report tokens or cost.';
+  }
+  scrollDown();
 }
 
 // The conversation for the next agent: messages, the browser actions taken,
@@ -688,6 +742,16 @@ function download(filename, content, type) {
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 
+function totalsLine() {
+  const turns = journal.filter((e) => e.type === 'agent' && e.stats);
+  if (!turns.length) return null;
+  const ms = turns.reduce((a, e) => a + e.stats.ms, 0);
+  const tokens = turns.reduce((a, e) => a + (e.stats.tokens?.total || 0), 0);
+  const costs = turns.filter((e) => e.stats.cost);
+  const cost = costs.reduce((a, e) => a + e.stats.cost.amount, 0);
+  return `- Totals: ${turns.length} tasks · ${fmtTime(ms)}${tokens ? ` · ${fmtTokens(tokens)} tokens` : ''}${costs.length ? ` · ${fmtCost({ amount: cost, currency: costs[0].stats.cost.currency })}` : ''}`;
+}
+
 function exportMarkdown(tab) {
   const time = (ts) => new Date(ts).toLocaleTimeString();
   const agents = [...new Set(journal.filter((e) => e.type === 'agent_connected').map((e) => e.agent))];
@@ -697,6 +761,7 @@ function exportMarkdown(tab) {
     `- Exported: ${new Date().toLocaleString()}`,
     tab ? `- Tab: ${tab.title} — ${tab.url}` : null,
     agents.length ? `- Agents: ${agents.join(' → ')}` : null,
+    totalsLine(),
     '',
   ].filter((l) => l !== null);
 
@@ -727,6 +792,7 @@ function exportMarkdown(tab) {
         if (e.thought) out.push('<details><summary>Thinking</summary>', '', e.thought, '', '</details>', '');
         out.push(e.text || '_No answer._');
         if (e.failure) out.push('', `> ⚠️ Stopped before finishing: ${e.failure}`);
+        if (e.stats) out.push('', `_${statsText(e.stats)}_`);
         break;
       case 'permission':
         out.push(`- ${t} 🔐 ${e.title} → ${e.answer}`);
@@ -737,11 +803,18 @@ function exportMarkdown(tab) {
       case 'video':
         out.push(`- ${t} 🎥 Recording saved: \`${e.path}\``);
         break;
+      case 'video_deleted':
+        out.push(`- ${t} 🗑 Recording deleted${e.path ? `: \`${e.path}\`` : ''}`);
+        break;
       case 'model':
         out.push('', `> ${t} · ${e.agent}: model ${e.model}`);
         break;
       case 'agent_connected':
         out.push('', `> ${t} · ${e.agent} connected`);
+        inActions = false;
+        break;
+      case 'folder':
+        out.push('', `> ${t} · Working folder: ${e.path ? `\`${e.path}\`` : 'none'}`);
         inActions = false;
         break;
       case 'agent_switch':
@@ -824,7 +897,7 @@ function stopRecording(discard = false) {
   setTimeout(() => recorder.stop(), 150);
 }
 
-const videoCards = new Map(); // recording id -> status element
+const videoCards = new Map(); // recording id -> { saved, card, url, path }
 
 async function addVideo(blob, durationMs) {
   if (!blob.size) return;
@@ -842,11 +915,30 @@ async function addVideo(blob, durationMs) {
   const secs = Math.round(durationMs / 1000);
   info.textContent = `Recording · ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')} · ${(blob.size / 1048576).toFixed(1)} MB`;
   const download = Object.assign(document.createElement('a'), { className: 'btn small', href: url, download: filename, textContent: 'Download' });
-  row.append(info, download);
+  const remove = Object.assign(document.createElement('button'), { className: 'btn small', type: 'button', textContent: 'Delete', title: 'Delete this recording from the chat and from disk' });
+  const buttons = document.createElement('span');
+  buttons.className = 'video-buttons';
+  buttons.append(download, remove);
+  row.append(info, buttons);
   const saved = document.createElement('div');
   saved.textContent = 'Saving…';
   card.append(video, row, saved);
-  videoCards.set(id, saved);
+  const entry = { saved, card, url, path: null };
+  videoCards.set(id, entry);
+  // Second click confirms, so a stray click doesn't lose the video.
+  remove.onclick = () => {
+    if (remove.dataset.armed !== '1') {
+      remove.dataset.armed = '1';
+      remove.textContent = 'Delete?';
+      setTimeout(() => {
+        remove.dataset.armed = '';
+        remove.textContent = 'Delete';
+      }, 3000);
+      return;
+    }
+    if (entry.path) port.postMessage({ type: 'delete_recording', id, path: entry.path });
+    else finishDelete(id);
+  };
   scrollDown();
 
   // Send to the host in chunks; it writes the file to ~/Videos/TabHelm.
@@ -859,9 +951,20 @@ async function addVideo(blob, durationMs) {
 
 function onRecordingSaved({ id, path }) {
   record('video', { path });
-  const el = videoCards.get(id);
-  if (el) el.textContent = `Saved to ${path}`;
+  const entry = videoCards.get(id);
+  if (!entry) return;
+  entry.path = path;
+  entry.saved.textContent = `Saved to ${path}`;
+}
+
+function finishDelete(id) {
+  const entry = videoCards.get(id);
+  if (!entry) return;
   videoCards.delete(id);
+  URL.revokeObjectURL(entry.url);
+  entry.card.remove();
+  record('video_deleted', { path: entry.path });
+  notice(entry.path ? `Recording deleted: ${entry.path}` : 'Recording removed.');
 }
 
 function blobToBase64(blob) {
@@ -931,6 +1034,15 @@ syncControls();
 
 showNews($('news'));
 initSettings(port);
+// Changing the folder restarts the agent there; the conversation is handed over.
+initFolder(port, tabId, {
+  changed(folder) {
+    record('folder', { path: folder?.path || null });
+    if (!connected || busy) return;
+    notice(folder ? `Restarting ${connectedAgent?.name} in ${folder.path}…` : `Restarting ${connectedAgent?.name} without a working folder…`);
+    startAgent(els.agent.value);
+  },
+});
 initAttachments({
   list: $('attachments'),
   button: $('attach'),

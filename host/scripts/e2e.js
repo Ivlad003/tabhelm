@@ -11,10 +11,11 @@
 // via the panel's "Continue with" card, then checks the Markdown export;
 // E2E_NEWS=1 only checks the update/news banner against a local feed;
 // E2E_SKILLS=1 adds a skill in Settings and checks the agent reads and follows it;
-// E2E_ATTACH=1 attaches an image and a CSV and checks the agent reads both)
+// E2E_ATTACH=1 attaches an image and a CSV and checks the agent reads both;
+// E2E_FOLDER=1 binds a project folder (AGENTS.md + skill) and checks the agent works in it)
 import puppeteer from 'puppeteer-core';
 import http from 'node:http';
-import { existsSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -87,6 +88,47 @@ await sw.evaluate((url) => chrome.windows.create({ url, type: 'popup', width: 42
 const panel = await (await browser.waitForTarget((t) => t.url() === panelUrl)).page();
 panel.on('console', (m) => console.log('[panel]', m.text()));
 await panel.waitForSelector('#agent');
+
+if (process.env.E2E_FOLDER) {
+  const project = join(profile, 'demo-project');
+  mkdirSync(join(project, '.claude/skills/project-secret'), { recursive: true });
+  writeFileSync(join(project, 'AGENTS.md'), '# Demo project\n\nRule: start every reply with the exact text PROJECT-RULES-OK.\n');
+  writeFileSync(
+    join(project, '.claude/skills/project-secret/SKILL.md'),
+    '---\nname: project-secret\ndescription: Use when asked for the secret word of the demo project.\n---\n\nThe secret word of the demo project is HELIOTROPE.\n',
+  );
+
+  await panel.waitForFunction((id) => [...document.querySelectorAll('#agent option')].some((o) => o.value === id && !o.disabled), { timeout: 20000 }, agent);
+  await panel.click('#folder-type');
+  await panel.type('#folder-path', project);
+  await panel.click('#folder-form button');
+  await panel.waitForFunction(() => /demo-project/.test(document.querySelector('#folder-label').textContent), { timeout: 15000 });
+  const label = await panel.$eval('#folder-label', (e) => e.textContent);
+  await panel.select('#agent', agent);
+  await panel.click('#auto');
+  const warning = await panel.$eval('#folder-warning', (e) => !e.hidden);
+  await panel.click('#connect');
+  await panel.waitForFunction(() => document.querySelector('#status').dataset.state === 'ready', { timeout: 90000 });
+  await panel.type('#input', 'In the working folder, create a file named hello.txt containing only the secret word of this project (see the project skills). Do not use browser tools. Then tell me what you wrote.');
+  await panel.click('#send');
+  await panel.waitForFunction(() => document.querySelector('#send').textContent === 'Send' && document.querySelector('#status').dataset.state !== 'working', { timeout: 300000, polling: 1000 });
+  const answer = (await panel.$$eval('.msg.agent', (m) => m.map((x) => x.innerText).join(' '))).replace(/\s+/g, ' ');
+  const stats = await panel.$$eval('.stats', (s) => s.map((x) => x.textContent));
+  const file = join(project, 'hello.txt');
+  const content = existsSync(file) ? readFileSync(file, 'utf8').trim() : '(missing)';
+  console.log('folder label:', label);
+  console.log('auto-approve warning shown:', warning);
+  console.log('answer:', answer.slice(0, 200));
+  console.log('hello.txt:', content);
+  console.log('stats:', stats.join(' | '));
+  await panel.screenshot({ path: join(profile, 'panel.png') });
+  console.log('panel screenshot:', join(profile, 'panel.png'));
+  const ok = /AGENTS\.md/.test(label) && /1 skill/.test(label) && warning && /HELIOTROPE/i.test(content) && /PROJECT-RULES-OK/.test(answer) && stats.length > 0;
+  console.log(ok ? 'E2E PASS' : 'E2E FAIL');
+  await browser.close();
+  server.close();
+  process.exit(ok ? 0 : 1);
+}
 
 if (process.env.E2E_ATTACH) {
   // An image with a word only readable from the picture, and a CSV to sum.
@@ -282,6 +324,13 @@ if (process.env.E2E_RECORD) {
   const size = existsSync(path) ? statSync(path).size : 0;
   console.log('video:', info, '| file bytes:', size);
   extraOk &&= size > 10_000;
+  // Delete needs two clicks; the card and the file must both go.
+  await panel.$$eval('.video .video-buttons button', (b) => b[0].click());
+  await panel.$$eval('.video .video-buttons button', (b) => b[0].click());
+  await panel.waitForFunction(() => !document.querySelector('.video'), { timeout: 10000 });
+  const deleted = !existsSync(path);
+  console.log('video deleted from chat and disk:', deleted);
+  extraOk &&= deleted;
 }
 if (process.env.E2E_SWITCH) {
   await panel.select('#agent', process.env.E2E_SWITCH);
