@@ -7,7 +7,7 @@
   <a href="README.md">English</a> · <b>Українська</b> · <a href="https://ivlad003.github.io/tabhelm/">Сайт</a>
 </p>
 
-Оберіть у бічній панелі **Claude Code, Codex, Cursor Agent CLI, Gemini CLI, Google Antigravity, OpenCode, Qoder CLI або Grok**, виберіть модель і опишіть завдання. Агент працює на вашому комп'ютері зі своїм логіном і читає, клікає та вводить текст на поточній вкладці вашого звичайного Chrome, де ви вже залогінені. Headless-браузер не потрібен.
+Оберіть у бічній панелі **Claude Code, Codex, Cursor Agent CLI, Google Antigravity, OpenCode, Qoder CLI або Grok**, виберіть модель і опишіть завдання. Агент працює на вашому комп'ютері зі своїм логіном і читає, клікає та вводить текст на поточній вкладці вашого звичайного Chrome, де ви вже залогінені. Headless-браузер не потрібен.
 
 ## Зміст
 
@@ -110,7 +110,6 @@ sequenceDiagram
 | Claude Code | `claude-agent-acp` (адаптер у комплекті) | [claude.com/claude-code](https://claude.com/claude-code) |
 | Codex | `codex-acp` (адаптер у комплекті) | `npm i -g @openai/codex` |
 | Cursor Agent CLI | `agent acp` (або `cursor-agent acp`) | `curl https://cursor.com/install -fsS \| bash` |
-| Gemini CLI | `gemini --acp` | `npm i -g @google/gemini-cli` |
 | Google Antigravity | ACP-сервер Google `agy_acp_server.par` | `npm run install-agent antigravity` (у `~/.tabhelm/app/host`) |
 | OpenCode | `opencode acp` | `curl -fsSL https://opencode.ai/install \| bash` |
 | Qoder CLI | `qodercli --acp` | `npm run install-agent qoder` або `curl -fsSL https://qoder.com/install \| bash` |
@@ -175,7 +174,7 @@ flowchart LR
     end
 
     subgraph Agent["Процес агента"]
-        A["Claude Code / Codex / Cursor /<br/>Gemini / Antigravity / OpenCode /<br/>Qoder / Grok"]
+        A["Claude Code / Codex / Cursor /<br/>Antigravity / OpenCode / Qoder /<br/>Grok / вбудований"]
         MB["mcp-bridge.js<br/>stdio MCP-сервер"]
         A -- "MCP" --> MB
     end

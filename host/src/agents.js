@@ -30,12 +30,6 @@ export const AGENTS = [
     installHint: 'Install Codex CLI: npm i -g @openai/codex',
   },
   {
-    id: 'gemini',
-    name: 'Gemini CLI',
-    launch: [{ command: 'gemini', args: ['--acp'] }],
-    installHint: 'Install Gemini CLI: npm i -g @google/gemini-cli',
-  },
-  {
     id: 'antigravity',
     name: 'Google Antigravity',
     // Google's official ACP server (from the ACP registry), not the `agy` TUI.
