@@ -27,6 +27,8 @@ npm run install-host   # реєструє native host для Chrome/Chromium/Bra
 2. Натисніть **Load unpacked** і виберіть папку `extension/`. Ключ у manifest фіксує ID розширення: `gcedfnedpmpfkbbgkdihdbkhhohkjjnn`.
 3. На будь-якій сторінці натисніть іконку TabHelm, виберіть агента, натисніть **Connect** і напишіть завдання.
 
+Після підключення під списком агентів з'являються **модель** і **рівень reasoning** (effort). Список моделей бере сам агент через ACP: Claude Code (opus, sonnet, haiku…), Codex, Cursor (зокрема Grok, Claude і Composer), OpenCode (усі налаштовані провайдери) і Grok. Модель можна змінити посеред розмови, а останній вибір запам'ятовується окремо для кожного агента. Якщо модель недоступна на вашому тарифі, про це повідомить сам агент.
+
 Агенти використовують свою звичайну авторизацію. Достатньо, щоб `claude`, `codex`, `cursor-agent`, `opencode`, `grok` чи `gemini` були встановлені й залогінені в терміналі. У списку з'являються лише ті, що знайдені в `PATH`.
 
 `install-host` запам'ятовує поточний `PATH`, бо Chrome запускає хост з мінімальним оточенням. Якщо встановите нового агента, запустіть `install-host` ще раз.
@@ -71,6 +73,7 @@ npm run build
 cd host
 npm run smoke -- claude     # хост + агент без Chrome (фейкова сторінка); також codex|cursor|opencode|grok|gemini
 npm run e2e -- claude       # повний тест у headless Chrome: панель → агент → заповнення форми
+E2E_MODEL=haiku npm run e2e -- claude   # те саме з перемиканням і відновленням моделі
 npm run test:tools          # кожен інструмент окремо (46 перевірок) у headless Chrome, без агента
 ```
 

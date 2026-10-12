@@ -3,8 +3,9 @@
 // Extension <-> host protocol (JSON messages):
 //   ext -> host: list_agents | start {tabId, agentId} | prompt {tabId, text}
 //                cancel {tabId} | stop {tabId} | permission_response {tabId, id, optionId}
-//                set_auto_approve {tabId, value} | tool_result {id, ok, content|error}
-//   host -> ext: agents {agents} | status {tabId, state} | update {tabId, update}
+//                set_auto_approve {tabId, value} | set_config {tabId, configId, value}
+//                tool_result {id, ok, content|error}
+//   host -> ext: agents {agents} | status {tabId, state} | update {tabId, update} | config {tabId, options}
 //                permission {tabId, id, ...} | done {tabId} | error {tabId, message}
 //                tool_call {id, tabId, tool, args}
 
@@ -99,6 +100,10 @@ async function handleMessage(msg) {
         if (session) session.autoApprove = Boolean(msg.value);
         break;
       }
+
+      case 'set_config':
+        await requireSession(tabId).setConfigOption(msg.configId, msg.value);
+        break;
 
       case 'tool_result': {
         const resolve = pendingTools.get(msg.id);

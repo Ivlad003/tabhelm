@@ -5,6 +5,7 @@ const els = {
   connect: $('connect'),
   status: $('status'),
   tab: $('tab'),
+  config: $('config'),
   log: $('log'),
   empty: $('empty'),
   input: $('input'),
@@ -13,6 +14,7 @@ const els = {
 };
 
 let connected = false;
+let restorePrefs = false; // apply the saved model/effort once per connection
 let busy = false;
 let agentBubble = null; // current streaming agent message
 let agentText = '';
@@ -66,6 +68,9 @@ function onMessage(msg) {
     case 'confirm':
       addConfirm(msg);
       break;
+    case 'config':
+      renderConfig(msg.options);
+      break;
     case 'target':
       targetTabId = msg.tabId;
       showTab();
@@ -106,12 +111,15 @@ function onStatus(msg) {
     setStatus('starting', `Starting ${msg.agent.name}…`);
   } else if (msg.state === 'ready') {
     connected = true;
+    restorePrefs = true;
     setStatus('ready', msg.agent.name);
     notice(`${msg.agent.name} connected`);
     els.input.focus();
   } else {
     connected = false;
     endTurn();
+    els.config.hidden = true;
+    els.config.replaceChildren();
     setStatus('idle', 'Not connected');
     if (msg.detail) notice(msg.detail, true);
   }
@@ -154,6 +162,51 @@ function onUpdate(u) {
       break;
   }
   scrollDown();
+}
+
+// ---------- Model & effort ----------
+
+const prefsKey = () => `prefs:${els.agent.value}`;
+
+async function renderConfig(options) {
+  els.config.replaceChildren();
+  els.config.hidden = !options.length;
+
+  if (restorePrefs) {
+    restorePrefs = false;
+    const saved = (await chrome.storage.local.get(prefsKey()))[prefsKey()] || {};
+    let changed = false;
+    for (const opt of options) {
+      const want = saved[opt.id];
+      const exists = opt.groups.some((g) => g.options.some((o) => o.value === want));
+      if (want && want !== opt.currentValue && exists) {
+        port.postMessage({ type: 'set_config', configId: opt.id, value: want });
+        changed = true;
+      }
+    }
+    // The host answers each change with a fresh config message.
+    if (changed) return;
+  }
+
+  for (const opt of options) {
+    const select = document.createElement('select');
+    select.className = opt.category;
+    select.title = opt.name;
+    select.setAttribute('aria-label', opt.name);
+    for (const group of opt.groups) {
+      const parent = group.name ? Object.assign(document.createElement('optgroup'), { label: group.name }) : select;
+      for (const o of group.options) parent.append(new Option(o.name, o.value, false, o.value === opt.currentValue));
+      if (parent !== select) select.append(parent);
+    }
+    select.onchange = async () => {
+      select.disabled = true;
+      port.postMessage({ type: 'set_config', configId: opt.id, value: select.value });
+      const saved = (await chrome.storage.local.get(prefsKey()))[prefsKey()] || {};
+      chrome.storage.local.set({ [prefsKey()]: { ...saved, [opt.id]: select.value } });
+    };
+    els.config.append(select);
+  }
+  syncControls();
 }
 
 // Browser tool calls are shown from the extension's own action log
@@ -359,6 +412,7 @@ function syncControls() {
   els.input.disabled = !connected;
   els.send.disabled = !connected;
   els.send.textContent = busy ? 'Stop' : 'Send';
+  for (const select of els.config.querySelectorAll('select')) select.disabled = busy;
 }
 
 function setStatus(state, label) {

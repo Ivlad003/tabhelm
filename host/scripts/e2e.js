@@ -1,7 +1,8 @@
 // End-to-end test in headless Chrome: loads the extension, opens a form page,
 // drives the side panel and checks that the agent filled and saved the form.
 // Usage: node scripts/e2e.js [agentId]   (CHROME_PATH overrides the browser;
-// TABHELM_RELEASE=<dist/tabhelm-x.y.z> tests a built release instead of the sources)
+// TABHELM_RELEASE=<dist/tabhelm-x.y.z> tests a built release instead of the sources;
+// E2E_MODEL=<model value> switches the model in the panel before the task)
 import puppeteer from 'puppeteer-core';
 import http from 'node:http';
 import { mkdtempSync } from 'node:fs';
@@ -55,6 +56,28 @@ await panel.select('#agent', agent);
 await panel.click('#auto');
 await panel.click('#connect');
 await panel.waitForFunction(() => document.querySelector('#status').dataset.state === 'ready', { timeout: 60000 });
+await panel.waitForSelector('#config select.model', { timeout: 30000 });
+const models = await panel.$$eval('#config select.model option', (o) => o.map((x) => x.value));
+console.log(`models (${models.length}):`, models.slice(0, 8).join(', '), models.length > 8 ? '…' : '');
+if (process.env.E2E_MODEL) {
+  if (!models.includes(process.env.E2E_MODEL)) throw new Error(`Model ${process.env.E2E_MODEL} not offered`);
+  await panel.select('#config select.model', process.env.E2E_MODEL);
+  await panel.waitForFunction((m) => {
+    const s = document.querySelector('#config select.model');
+    return s && !s.disabled && s.value === m;
+  }, { timeout: 30000 }, process.env.E2E_MODEL);
+  console.log('model switched to', process.env.E2E_MODEL);
+
+  // Reconnect: the panel should restore the saved model for this agent.
+  await panel.click('#connect');
+  await panel.waitForFunction(() => document.querySelector('#status').dataset.state === 'idle', { timeout: 30000 });
+  await panel.click('#connect');
+  await panel.waitForFunction((m) => {
+    const s = document.querySelector('#config select.model');
+    return document.querySelector('#status').dataset.state === 'ready' && s && s.value === m;
+  }, { timeout: 60000 }, process.env.E2E_MODEL);
+  console.log('model restored after reconnect');
+}
 await panel.type('#input', 'Fill this form: name "Ada Lovelace", color Blue, tick the agreement checkbox, then click Save and tell me the exact confirmation text shown.');
 await panel.click('#send');
 await panel.waitForFunction(() => document.querySelector('#send').textContent === 'Send' && document.querySelector('#status').dataset.state !== 'working', { timeout: 240000, polling: 1000 });

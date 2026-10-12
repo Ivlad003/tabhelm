@@ -17,6 +17,10 @@ User request:
 
 const MAX_TEXT = 4000;
 
+// Session settings shown in the panel. Agents also expose modes (plan,
+// bypassPermissions, ...) but those change the permission model, so they stay hidden.
+const PANEL_CATEGORIES = ['model', 'thought_level'];
+
 // One ACP agent process per side-panel tab.
 export class AgentSession {
   constructor({ tabId, agent, toolServer, workspace, send, log }) {
@@ -60,7 +64,7 @@ export class AgentSession {
       this.connection.initialize({
         protocolVersion: acp.PROTOCOL_VERSION,
         clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false },
-        clientInfo: { name: 'tabhelm', version: '0.2.0' },
+        clientInfo: { name: 'tabhelm', version: '0.3.0' },
       }),
       this.exited.then(() => {
         throw new Error(`${agent.name} exited during startup. Check that it is installed and logged in.`);
@@ -83,12 +87,41 @@ export class AgentSession {
     try {
       const session = await this.connection.newSession({ cwd: this.workspace, mcpServers });
       this.sessionId = session.sessionId;
+      this.configOptions = session.configOptions || [];
     } catch (err) {
       const methods = (init.authMethods || []).map((m) => m.name).join(', ');
       const hint = methods ? ` The agent asks for authentication (${methods}); log in once in a terminal and retry.` : '';
       throw new Error(`${err.message || err}.${hint}`);
     }
     this.emit({ type: 'status', state: 'ready', agent: { id: agent.id, name: agent.name } });
+    this.emitConfig();
+  }
+
+  emitConfig() {
+    const options = (this.configOptions || [])
+      .filter((o) => o.type === 'select' && PANEL_CATEGORIES.includes(o.category))
+      .map((o) => ({
+        id: o.id,
+        name: o.name,
+        category: o.category,
+        currentValue: o.currentValue,
+        // Options may be flat or grouped; keep groups so the panel can render <optgroup>.
+        groups: o.options.some((x) => x.options)
+          ? o.options.map((g) => ({ name: g.name, options: g.options.map(({ value, name }) => ({ value, name })) }))
+          : [{ name: null, options: o.options.map(({ value, name }) => ({ value, name })) }],
+      }));
+    this.emit({ type: 'config', options });
+  }
+
+  async setConfigOption(configId, value) {
+    if (!this.sessionId) throw new Error('No agent session');
+    try {
+      const res = await this.connection.setSessionConfigOption({ sessionId: this.sessionId, configId, value });
+      this.configOptions = res.configOptions || this.configOptions;
+    } finally {
+      // On failure this resets the panel's selects to the agent's actual values.
+      this.emitConfig();
+    }
   }
 
   clientHandlers() {
@@ -174,6 +207,10 @@ export class AgentSession {
             text: summarizeToolContent(update.content),
           },
         });
+        break;
+      case 'config_option_update':
+        this.configOptions = update.configOptions || this.configOptions;
+        this.emitConfig();
         break;
       case 'plan':
         this.emit({ type: 'update', update: { kind, entries: (update.entries || []).map(({ content, status }) => ({ content, status })) } });
