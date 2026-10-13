@@ -2,6 +2,12 @@
 
 All notable changes to TabHelm. The newest release is at the top; the panel's update banner links here.
 
+## [0.24.0] - 2026-10-13
+
+### Added
+- **Context meter** in the header: how full the context window is; click for details — used / left / window size, this chat's tokens (input, output, cached, reasoning), cost, time and the last task. Amber at 80 %.
+- **Messages while the agent works:** Enter queues a message; it reaches the agent with its next browser step (or is sent as the next message if the task ends first).
+
 ## [0.23.0] - 2026-10-13
 
 ### Added

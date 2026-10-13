@@ -12,7 +12,7 @@ const chats = new Map(); // chatTabId -> { chatTabId, current, owned: Set, notes
 function chatState(chatTabId) {
   let c = chats.get(chatTabId);
   if (!c) {
-    c = { chatTabId, current: chatTabId, owned: new Set([chatTabId]), notes: [], groupId: null };
+    c = { chatTabId, current: chatTabId, owned: new Set([chatTabId]), notes: [], interjections: [], groupId: null };
     chats.set(chatTabId, c);
   }
   return c;
@@ -527,7 +527,23 @@ export async function runTool(chatTabId, tool, args, ui) {
   if (c.notes.length) {
     result.content = [...result.content, { type: 'text', text: `\n${c.notes.splice(0).join('\n')}` }];
   }
+  // Messages the user typed while the agent was working ride along with the
+  // next tool result, so the agent picks them up without waiting for the turn to end.
+  if (c.interjections.length) {
+    const texts = c.interjections.splice(0);
+    result.content = [...result.content, { type: 'text', text: `\n[Message from the user while you were working — take it into account now]\n${texts.join('\n\n')}` }];
+    ui.onInterjected?.(chatTabId, texts);
+  }
   return result;
+}
+
+export function interject(chatTabId, text) {
+  chatState(chatTabId).interjections.push(text);
+}
+
+export function dropInterjections(chatTabId) {
+  const c = chats.get(chatTabId);
+  if (c) c.interjections = [];
 }
 
 // skill_save: a skill written by the agent (e.g. from this chat) goes into the

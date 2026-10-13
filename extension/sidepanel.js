@@ -151,6 +151,9 @@ function onMessage(msg) {
     case 'ask':
       addAsk(msg);
       break;
+    case 'interjected':
+      markInterjected(msg.texts || []);
+      break;
     case 'ask_resolved':
       askCards.get(msg.id)?.(msg.reply?.done ? 'Clicked on the page' : 'Closed');
       askCards.delete(msg.id);
@@ -199,6 +202,7 @@ function onMessage(msg) {
     case 'usage':
       if (msg.cost) Object.assign(usage, { cost: msg.cost.amount, currency: msg.cost.currency || 'USD' });
       if (msg.size) usage.context = { used: msg.used, size: msg.size };
+      renderUsageButton();
       break;
     case 'done':
       usage.lastTurn = msg.usage || null;
@@ -269,6 +273,8 @@ function onStatus(msg) {
     connectedAgent = msg.agent;
     currentModel = null;
     Object.assign(usage, { cost: null, context: null, lastTurn: null });
+    renderUsageButton();
+    clearQueued();
     restorePrefs = true;
     // Any fresh agent session in a chat with history gets that history with its
     // first message (reconnects, restarts, chats reopened from History).
@@ -800,7 +806,7 @@ els.input.addEventListener('keydown', (e) => {
   if (slashKey(e)) return;
   if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
     e.preventDefault();
-    if (!busy) send();
+    send(); // while the agent works this queues the message
   }
 });
 els.input.addEventListener('input', () => slashUpdate());
@@ -877,9 +883,10 @@ function expandSlash(text) {
   return `Use the skill "${m[1]}" (read it with skill_read first and follow it).${m[2] ? ` Task: ${m[2]}` : ''}`;
 }
 
-async function send() {
+// Text + attachments from the composer, with page quotes folded into the text.
+function composeMessage() {
   let text = els.input.value.trim();
-  if ((!text && !hasAttachments()) || busy) return;
+  if (!text && !hasAttachments()) return null;
   $('slash-menu').hidden = true;
   if (text.startsWith('/')) text = expandSlash(text);
   let attachments = takeAttachments();
@@ -892,6 +899,65 @@ async function send() {
   }
   if (!text) text = 'Please look at the attached file(s).';
   els.input.value = '';
+  return { text, attachments };
+}
+
+// Messages typed while the agent works: shown at once, handed to the agent with
+// its next browser step (text only), or sent as the next message when the task ends.
+const queued = []; // { text, attachments, el }
+function queueMessage() {
+  const m = composeMessage();
+  if (!m) return;
+  breakActivity();
+  const el = add('div', 'msg user queued');
+  el.textContent = m.text;
+  if (m.attachments.length) {
+    const list = document.createElement('div');
+    list.className = 'attachments';
+    list.append(...m.attachments.map((a) => chip(a)));
+    el.append(list);
+  }
+  const tag = Object.assign(document.createElement('div'), { className: 'queued-tag', textContent: m.attachments.length ? '⏳ sent when the current task ends' : '⏳ the agent gets this with its next step' });
+  el.append(tag);
+  agentBubble = null;
+  queued.push({ ...m, el, tag });
+  record('user', { text: m.text, attachments: m.attachments.map((a) => ({ name: a.name, kind: a.kind, size: a.size })), queued: true });
+  if (!m.attachments.length) port.postMessage({ type: 'interject', text: m.text });
+  scrollDown();
+}
+
+// The agent read queued messages inside a tool result.
+function markInterjected(texts) {
+  for (const t of texts) {
+    const i = queued.findIndex((q) => q.text === t);
+    if (i < 0) continue;
+    queued[i].tag.textContent = '✓ picked up by the agent';
+    queued[i].el.classList.remove('queued');
+    queued.splice(i, 1);
+  }
+}
+
+// Whatever the agent did not pick up becomes the next message.
+function flushQueued() {
+  if (!queued.length || busy || !connected) return;
+  const items = queued.splice(0);
+  for (const q of items) {
+    q.tag.textContent = '→ sent';
+    q.el.classList.remove('queued');
+  }
+  const text = items.map((q) => q.text).join('\n\n');
+  sendNow(text, items.flatMap((q) => q.attachments), { silent: true });
+}
+
+function clearQueued() {
+  queued.splice(0);
+}
+
+async function send() {
+  if (busy) return queueMessage();
+  const m = composeMessage();
+  if (!m) return;
+  let { text, attachments } = m;
   // No Connect button: the first message starts the agent and is sent when it is ready.
   if (!connected) {
     if (!els.agent.value) return notice('No agent is installed. See Settings → Skills or the README to install one.', true);
@@ -902,17 +968,19 @@ async function send() {
   sendNow(text, attachments);
 }
 
-async function sendNow(text, attachments) {
+async function sendNow(text, attachments, { silent = false } = {}) {
   const features = await getFeatures();
   awaitingPlan = Boolean(features.planPreview) && !text.startsWith('[plan approved]');
   breakActivity();
-  const bubble = add('div', 'msg user');
-  bubble.textContent = text;
-  if (attachments.length) {
-    const list = document.createElement('div');
-    list.className = 'attachments';
-    list.append(...attachments.map((a) => chip(a)));
-    bubble.append(list);
+  if (!silent) {
+    const bubble = add('div', 'msg user');
+    bubble.textContent = text;
+    if (attachments.length) {
+      const list = document.createElement('div');
+      list.className = 'attachments';
+      list.append(...attachments.map((a) => chip(a)));
+      bubble.append(list);
+    }
   }
   agentBubble = null;
   thoughtEl = null;
@@ -920,7 +988,7 @@ async function sendNow(text, attachments) {
   busy = true;
   turn = { text: '', thought: '', actions: [], started: Date.now(), costStart: usage.cost };
   usage.lastTurn = null;
-  record('user', { text, attachments: attachments.map((a) => ({ name: a.name, kind: a.kind, size: a.size })) });
+  if (!silent) record('user', { text, attachments: attachments.map((a) => ({ name: a.name, kind: a.kind, size: a.size })) });
   setStatus('working', 'Working…');
   if (els.record.checked) startRecording();
   const context = pendingContext; // a string or a pending buildContext()
@@ -948,6 +1016,7 @@ function endTurn(note, failure = null) {
     showStats(stats);
     record('agent', { agent: connectedAgent?.name, model: currentModel, text: turn.text.trim(), thought: turn.thought.trim(), failure, stats });
     turn = null;
+    renderUsageButton();
   }
   stopRecording();
   // The turn's steps block stops pulsing but stays open.
@@ -964,6 +1033,8 @@ function endTurn(note, failure = null) {
   if (failure && wasBusy) offerContinue(failure);
   else if (awaitingPlan && wasBusy && !failure && lastTurnHadNoActions) offerPlanStart();
   awaitingPlan = false;
+  // Messages typed during the task that the agent did not pick up go next.
+  if (wasBusy && !failure) setTimeout(flushQueued, 50);
 }
 
 // ---------- Plan preview (flag) ----------
@@ -1130,6 +1201,91 @@ function hostRequest(type, data, replyType) {
   });
 }
 
+// ---------- Context & usage popup ----------
+// The header button shows how full the context window is; the popup has the
+// numbers: window used / left, this session's tokens and cost (summed from the
+// journal, so reopened chats count too) and the last task.
+function sessionTotals(entries = journal) {
+  const turns = entries.filter((e) => e.type === 'agent' && e.stats);
+  const sum = (f) => turns.reduce((a, e) => a + (f(e.stats) || 0), 0);
+  const costs = turns.filter((e) => e.stats.cost);
+  return {
+    turns: turns.length,
+    ms: sum((s) => s.ms),
+    tokens: sum((s) => s.tokens?.total),
+    input: sum((s) => s.tokens?.input),
+    output: sum((s) => s.tokens?.output),
+    cached: sum((s) => s.tokens?.cached),
+    thought: sum((s) => s.tokens?.thought),
+    cost: costs.length ? { amount: costs.reduce((a, e) => a + e.stats.cost.amount, 0), currency: costs[0].stats.cost.currency } : null,
+  };
+}
+
+function renderUsageButton() {
+  const btn = $('usage-open');
+  const ctx = usage.context;
+  const totals = sessionTotals();
+  const known = Boolean(ctx?.size) || totals.tokens > 0 || usage.cost != null;
+  btn.hidden = !known;
+  if (!known) return;
+  const pct = ctx?.size ? Math.min(100, Math.round((ctx.used / ctx.size) * 100)) : null;
+  $('usage-fill').style.width = `${pct ?? 0}%`;
+  btn.classList.toggle('warn', pct != null && pct >= 80);
+  $('usage-label').textContent = pct != null ? `${pct}%` : totals.tokens ? fmtTokens(totals.tokens) : fmtCost({ amount: usage.cost, currency: usage.currency });
+  btn.title = pct != null ? `Context window ${fmtTokens(ctx.used)} of ${fmtTokens(ctx.size)} used (${pct}%) — click for details` : 'Token usage — click for details';
+  if (!$('usage-popup').hidden) renderUsagePopup();
+}
+
+function renderUsagePopup() {
+  const body = $('usage-body');
+  const ctx = usage.context;
+  const totals = sessionTotals();
+  const row = (label, value, hint) => {
+    const div = document.createElement('div');
+    div.className = 'usage-row';
+    div.append(Object.assign(document.createElement('span'), { className: 'usage-k', textContent: label }), Object.assign(document.createElement('b'), { textContent: value }));
+    if (hint) div.title = hint;
+    return div;
+  };
+  const section = (title) => Object.assign(document.createElement('h4'), { textContent: title });
+  const items = [section(`Context window${connectedAgent ? ` — ${connectedAgent.name}${currentModel ? ` · ${currentModel}` : ''}` : ''}`)];
+  if (ctx?.size) {
+    const pct = Math.min(100, Math.round((ctx.used / ctx.size) * 100));
+    const bar = document.createElement('div');
+    bar.className = 'usage-bar big';
+    bar.append(Object.assign(document.createElement('span'), { className: `usage-fill${pct >= 80 ? ' warn' : ''}`, style: `width:${pct}%` }));
+    items.push(bar, row('Used', `${fmtTokens(ctx.used)} tokens (${pct}%)`, `${ctx.used.toLocaleString()} tokens`), row('Left', `${fmtTokens(Math.max(0, ctx.size - ctx.used))} tokens (${100 - pct}%)`), row('Window', `${fmtTokens(ctx.size)} tokens`, `${ctx.size.toLocaleString()} tokens`));
+    if (pct >= 80) items.push(Object.assign(document.createElement('p'), { className: 'hint', textContent: 'The window is almost full: the agent may start forgetting earlier parts of the chat. Consider New chat (the conversation is handed over in a short form).' }));
+  } else {
+    items.push(Object.assign(document.createElement('p'), { className: 'hint', textContent: `${connectedAgent?.name || 'This agent'} does not report its context window.` }));
+  }
+  items.push(section('This chat'));
+  items.push(row('Tasks', String(totals.turns)), row('Time', fmtTime(totals.ms)));
+  if (totals.tokens) {
+    items.push(row('Tokens', fmtTokens(totals.tokens), `${totals.tokens.toLocaleString()} tokens`), row('  input / output', `${fmtTokens(totals.input)} / ${fmtTokens(totals.output)}`));
+    if (totals.cached) items.push(row('  cached', fmtTokens(totals.cached)));
+    if (totals.thought) items.push(row('  reasoning', fmtTokens(totals.thought)));
+  } else items.push(Object.assign(document.createElement('p'), { className: 'hint', textContent: 'No token counts reported yet.' }));
+  if (totals.cost) items.push(row('Cost', fmtCost(totals.cost)));
+  else if (usage.cost != null) items.push(row('Cost (session)', fmtCost({ amount: usage.cost, currency: usage.currency })));
+  const last = journal.filter((e) => e.type === 'agent' && e.stats).pop();
+  if (last) {
+    items.push(section('Last task'));
+    items.push(row('Time', fmtTime(last.stats.ms)));
+    if (last.stats.tokens) items.push(row('Tokens', `${fmtTokens(last.stats.tokens.total)} (in ${fmtTokens(last.stats.tokens.input)} · out ${fmtTokens(last.stats.tokens.output)})`));
+    if (last.stats.cost) items.push(row('Cost', fmtCost(last.stats.cost)));
+  }
+  items.push(Object.assign(document.createElement('p'), { className: 'hint', textContent: 'Claude Code, OpenCode, Kilo and the built-in agent report tokens and cost; Codex reports tokens; Cursor and Grok report neither.' }));
+  body.replaceChildren(...items);
+}
+
+$('usage-open').onclick = () => {
+  const pop = $('usage-popup');
+  pop.hidden = !pop.hidden;
+  if (!pop.hidden) renderUsagePopup();
+};
+$('usage-close').onclick = () => ($('usage-popup').hidden = true);
+
 // Time, tokens and cost of one turn. Tokens and cost appear only for agents
 // that report them (Claude Code, OpenCode, Codex tokens, the built-in agent…).
 function turnStats(t) {
@@ -1199,6 +1355,7 @@ async function buildContext() {
 function syncControls() {
   els.agent.disabled = busy;
   els.send.textContent = busy ? 'Stop' : 'Send';
+  els.input.placeholder = busy ? 'Add a note for the agent — Enter hands it over with its next step (Stop cancels the task)' : els.input.dataset.placeholder;
   getFeatures().then((f) => {
     $('pause').hidden = !(f.takeOver && busy);
     for (const b of document.querySelectorAll('[data-voice]')) b.hidden = !f.voice;
@@ -1657,7 +1814,11 @@ function replayChat(chat) {
         }
         if (e.text) add('div', 'msg agent').innerHTML = renderMarkdown(e.text);
         if (e.failure) notice(`${e.agent || 'Agent'} stopped before finishing: ${e.failure}`, true);
-        if (e.stats) showStats(e.stats);
+        if (e.stats) {
+          showStats(e.stats);
+          if (e.stats.context) usage.context = e.stats.context;
+          renderUsageButton();
+        }
         break;
       case 'permission':
       case 'ask':

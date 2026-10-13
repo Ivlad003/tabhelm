@@ -1,4 +1,4 @@
-import { runTool, releaseChat, startRecording, stopRecording, ensureGroup, groupInfo, chatForGroupTab, chatDebugState, previewTarget } from './browser-tools.js';
+import { runTool, releaseChat, startRecording, stopRecording, ensureGroup, groupInfo, chatForGroupTab, chatDebugState, previewTarget, interject, dropInterjections } from './browser-tools.js';
 import { checkPolicy, pauseChat, resumeChat, isPaused, READ_ONLY } from './policy.js';
 import { getFeatures, getSetting, hostFeaturePayload } from './features.js';
 import { runScheduled, SCHEDULE_PREFIX } from './scheduler.js';
@@ -121,6 +121,9 @@ const ui = {
       deliver(chatTabId, { type: 'ask_resolved', id, reply });
     }
   },
+  onInterjected(chatTabId, texts) {
+    deliver(chatTabId, { type: 'interjected', texts });
+  },
   skillsChanged() {
     for (const port of panels.values()) port.postMessage({ type: 'skills_changed' });
   },
@@ -223,7 +226,10 @@ async function onHostMessage(msg) {
     criticWaits.delete(msg.requestId);
     return;
   }
-  if (msg.type === 'done') notify(msg.tabId, msg.stopReason === 'end_turn' ? 'done' : 'failed', 'Task finished');
+  if (msg.type === 'done') {
+    dropInterjections(msg.tabId); // whatever was not picked up is sent by the panel as the next message
+    notify(msg.tabId, msg.stopReason === 'end_turn' ? 'done' : 'failed', 'Task finished');
+  }
   if (msg.type === 'permission') notify(msg.tabId, 'needs', msg.title);
   if (msg.tabId != null) deliver(msg.tabId, msg);
   else for (const port of panels.values()) port.postMessage(msg);
@@ -247,6 +253,10 @@ export async function fromPanel(tabId, msg, port) {
   if (msg.type === 'ask_response') {
     asks.get(msg.id)?.resolve(msg.reply);
     asks.delete(msg.id);
+    return;
+  }
+  if (msg.type === 'interject') {
+    interject(tabId, msg.text);
     return;
   }
   if (msg.type === 'pause') {

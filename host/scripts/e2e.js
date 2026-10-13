@@ -389,6 +389,15 @@ if (!process.env.E2E_LAZY) {
   await panel.click('#send');
 }
 
+if (process.env.E2E_INTERJECT) {
+  // A message typed while the agent works rides along with its next tool result.
+  await panel.waitForSelector('.action', { timeout: 120000 });
+  await panel.type('#input', 'One more thing while you work: end your final answer with the word PINEAPPLE.');
+  await panel.keyboard.press('Enter');
+  const queuedTag = await panel.$eval('.msg.user.queued .queued-tag', (e) => e.textContent).catch(() => '(no queued bubble)');
+  console.log('queued message tag:', queuedTag);
+}
+
 if (process.env.E2E_FAILOVER) {
   // Kill the agent process (child of this test's native host) after its first browser action.
   await panel.waitForSelector('.action', { timeout: 120000 });
@@ -413,6 +422,13 @@ await panel.waitForFunction(() => document.querySelector('#send').textContent ==
 const out = await page.$eval('#out', (e) => e.textContent);
 
 let extraOk = true;
+if (process.env.E2E_INTERJECT) {
+  const tag = await panel.$$eval('.queued-tag', (l) => l.map((e) => e.textContent).join(' | '));
+  const reply = await panel.$$eval('.msg.agent', (m) => m.map((x) => x.innerText).join(' '));
+  const picked = /picked up|sent/.test(tag) && /PINEAPPLE/.test(reply);
+  console.log('interject tag:', tag, '| answer mentions PINEAPPLE:', /PINEAPPLE/.test(reply));
+  extraOk &&= picked;
+}
 if (process.env.E2E_HISTORY) {
   const count = await panel.$eval('.activity .activity-count', (e) => Number(e.textContent)).catch(() => 0);
   const blocks = await panel.$$eval('.activity', (b) => b.length);
@@ -496,6 +512,17 @@ if (process.env.E2E_SWITCH) {
   await panel.waitForFunction(() => document.querySelector('#status').dataset.state === 'ready' && document.querySelectorAll('.msg').length === 0, { timeout: 90000 });
   console.log('new chat: log cleared, agent reconnected');
 }
+// Context & usage popup (shown once the agent reported usage).
+const usageBtn = await panel.$eval('#usage-open', (b) => (b.hidden ? null : b.textContent.trim()));
+let usagePopup = '';
+if (usageBtn) {
+  await panel.click('#usage-open');
+  usagePopup = await panel.$eval('#usage-popup', (e) => (e.hidden ? '' : e.innerText.replace(/\s+/g, ' ')));
+  await panel.screenshot({ path: join(profile, 'panel-usage.png') });
+  await panel.click('#usage-close');
+}
+console.log('usage button:', usageBtn, '| popup:', usagePopup.slice(0, 200));
+const usageOk = !usageBtn || (/Context window/.test(usagePopup) && /Tasks \d+/.test(usagePopup));
 const log = await panel.$eval('#log', (e) => [...e.children].map((c) => c.className + ': ' + c.innerText.replace(/\n/g, ' ')).join('\n'));
 console.log('---- panel log\n' + log + '\n----');
 console.log('page result:', out);
@@ -510,7 +537,7 @@ if (process.env.E2E_SHOTS) {
   await panel.click('#settings-close');
   console.log('extra screenshots in', profile);
 }
-const pass = out === 'Saved: Ada Lovelace / blue / agreed' && extraOk;
+const pass = out === 'Saved: Ada Lovelace / blue / agreed' && extraOk && usageOk;
 console.log(pass ? 'E2E PASS' : 'E2E FAIL');
 await browser.close();
 server.close();

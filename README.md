@@ -70,6 +70,7 @@ To update, run the install command again (it stops a running host first), then p
 | **History** | Saved chats — open one to continue it (its page opens too), export it (⬇ Markdown, `{ }` JSON) or delete it (🗑, **Clear all**). |
 | **Settings** | Skills (links and, with the flag, skills written here), model options, page options (highlight finds), experimental features, version and updates. |
 | **New chat** | Clears the chat and starts a fresh session with the same agent and model. |
+| **Context meter** | How full the context window is; click for usage details (window, tokens, cost for this chat). |
 
 ### Approvals
 
@@ -143,6 +144,12 @@ With **Auto-approve** on, the agent edits files and runs commands in the folder 
 ### Task stats
 
 Under every answer the panel shows the time the task took and, when the agent reports them, tokens, cost and context use — e.g. `⏱ 11.9 s · 117k tokens · $0.17 · context 39k / 1.0M` (hover for input/output/cached tokens). Claude Code, OpenCode, Kilo and the built-in OpenRouter agent report tokens and cost; Codex reports tokens; Cursor and Grok only get the time. Totals are in the Markdown export.
+
+The header shows a **context meter** (a small bar with the percentage of the context window used) once the agent reports usage. Click it for the details: window used / left / size, this chat's totals (tasks, time, tokens split into input / output / cached / reasoning, cost) and the last task. At 80 % it turns amber with a hint to start a new chat.
+
+### Messages while the agent works
+
+You can keep typing while a task runs: **Enter** queues the message (shown dashed). Text-only messages are handed to the agent together with the result of its **next browser step**, so it adjusts without stopping — the bubble then says *picked up by the agent*. Messages with attachments, or anything the agent did not get to before finishing, are sent as the next message automatically. **Stop** still cancels the task.
 
 ### Attachments
 
@@ -461,6 +468,7 @@ Load `extension/` unpacked in Chrome. After editing extension files press ↻ on
 | `E2E_NEWS=1 npm run e2e` | update and news banners against a local feed |
 | `E2E_TABS=1 npm run e2e -- claude` | shares a second tab through the tab group and asks the agent to move data between tabs |
 | `E2E_HISTORY=1 npm run e2e -- claude` | steps block, saved history, reopening a chat (tab goes back to its page), continuing it, restore after reopening the panel |
+| `E2E_INTERJECT=1 npm run e2e -- claude` | a message typed during the task reaches the agent with its next tool result |
 | `E2E_FOLDER=1 npm run e2e -- claude` | binds a project folder (AGENTS.md + skill) and checks the agent follows it and creates a file there |
 | `E2E_ATTACH=1 npm run e2e -- claude` | attaches an image and a CSV and checks the agent reads both |
 | `E2E_SKILLS=1 npm run e2e -- claude` | adds a skill in Settings and checks the agent reads and follows it |
