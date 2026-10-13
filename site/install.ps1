@@ -16,14 +16,16 @@ $root = if ($env:TABHELM_HOME) { $env:TABHELM_HOME } else { Join-Path $env:USERP
 $app = Join-Path $root 'app'
 $tarball = if ($env:TABHELM_TARBALL) { $env:TABHELM_TARBALL } else { "https://github.com/$repo/releases/latest/download/tabhelm.tar.gz" }
 
-function Fail($msg) { Write-Host "x $msg" -ForegroundColor Red; exit 1 }
+function Fail($msg) { Write-Host "x $msg" -ForegroundColor Red; throw $msg }
 function Step($msg) { Write-Host $msg -ForegroundColor Cyan }
 
 if (-not (Get-Command node -ErrorAction SilentlyContinue)) { Fail 'Node.js 20+ is required: https://nodejs.org (restart the terminal after installing).' }
 if (-not (Get-Command npm -ErrorAction SilentlyContinue)) { Fail 'npm is required (it ships with Node.js).' }
 if (-not (Get-Command tar -ErrorAction SilentlyContinue)) { Fail 'tar is required (included with Windows 10 1803+).' }
-$nodeMajor = [int]((node -p 'process.versions.node.split(".")[0]').Trim())
-if ($nodeMajor -lt 20) { Fail "Node.js 20+ is required, found $(node -v)." }
+# Quotes inside arguments get mangled on the way to node, so parse `node -v` here.
+$nodeVersion = (node -v).Trim()
+$nodeMajor = [int]($nodeVersion.TrimStart('v').Split('.')[0])
+if ($nodeMajor -lt 20) { Fail "Node.js 20+ is required, found $nodeVersion." }
 
 Step "Installing TabHelm into $app"
 $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ("tabhelm-" + [System.Guid]::NewGuid().ToString('N').Substring(0, 8))
@@ -58,7 +60,7 @@ try {
   Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
 }
 
-$version = (node -p "require('$(($app -replace '\\', '/'))/extension/manifest.json').version").Trim()
+$version = (Get-Content (Join-Path $app 'extension\manifest.json') -Raw | ConvertFrom-Json).version
 Write-Host ''
 Write-Host "OK TabHelm $version installed" -ForegroundColor Green
 Write-Host @"
