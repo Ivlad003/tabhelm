@@ -9,6 +9,17 @@ import { memoryPreamble } from './memory.js';
 
 const bridgePath = fileURLToPath(new URL('./mcp-bridge.js', import.meta.url));
 
+// Node 20.12+ refuses to spawn .cmd/.bat files directly on Windows (spawn EINVAL,
+// CVE-2024-27980), and npm installs CLIs such as Cursor's `agent` as exactly that.
+// Those go through cmd.exe with every argument quoted; everything else spawns as is.
+export function spawnAgent(command, args, options) {
+  if (process.platform === 'win32' && /\.(cmd|bat)$/i.test(command)) {
+    const quote = (s) => `"${String(s).replace(/"/g, '\\"')}"`;
+    return spawn([command, ...args].map(quote).join(' '), { ...options, shell: true, windowsHide: true });
+  }
+  return spawn(command, args, options);
+}
+
 const BROWSER_PREAMBLE = `[TabHelm] You are running inside a Chrome side panel and are connected to the user's real, logged-in browser tab via the "tabhelm-browser" MCP tools (browser_snapshot, browser_click, browser_type, ...).
 - Start with browser_snapshot (or browser_find on big pages) and act on elements by their refs; take a new snapshot after navigation or when refs become stale.
 - For canvas apps, maps or anything without refs, take a viewport browser_screenshot and use browser_click_xy / browser_hover / browser_drag with its pixel coordinates.
@@ -50,7 +61,7 @@ export class AgentSession {
 
   async start() {
     const { agent } = this;
-    this.child = spawn(agent.command, agent.args, {
+    this.child = spawnAgent(agent.command, agent.args, {
       cwd: this.folder || this.workspace,
       env: process.env,
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -76,7 +87,7 @@ export class AgentSession {
       this.connection.initialize({
         protocolVersion: acp.PROTOCOL_VERSION,
         clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false },
-        clientInfo: { name: 'tabhelm', version: '0.19.0' },
+        clientInfo: { name: 'tabhelm', version: '0.19.1' },
       }),
       this.exited.then(() => {
         throw new Error(`${agent.name} exited during startup. Check that it is installed and logged in.`);

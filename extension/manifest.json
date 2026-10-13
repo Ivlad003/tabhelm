@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "TabHelm",
-  "version": "0.19.0",
+  "version": "0.19.1",
   "description": "Side-panel chat that lets terminal coding agents (Claude Code, Codex, Cursor, Antigravity, OpenCode, Qoder, Grok) or OpenRouter/Ollama models operate the current tab.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAuZGQsnIv+cIPqjjn8Hwq1PoOWg9WMfT2mHwEzfoHqsy4n9t42/dHzJw2B9W9puXS6+vHTbbxEfk/n0qo8E6PRt4WZKEddOknEsgDgj8OvXt+B14eAI5//qygi5tmJ5/Uyz2QmKVbs67eaxfi39AN1ieGnarx1mvA9OMwY1AYmjMoScu0mIYbeAIVPkDLlDDLSlH1Nbc34HJGBPep52R6wQWBt49gYYavRu3MGqGZrZp3QuDhm3qB81TTGHY5Xkk/jPhfuFyB/k/Z3bERjS+S2RASGZJ1AjXaCdcM9KHWx7dNCwmqZbAmbN0MnQ+YaQ00hsSpXksztdXEPJwqy0VbRQIDAQAB",
   "permissions": [

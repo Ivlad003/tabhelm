@@ -112,7 +112,7 @@ class BuiltinAgent {
     return {
       protocolVersion: acp.PROTOCOL_VERSION,
       agentCapabilities: { mcpCapabilities: { http: false, sse: false }, promptCapabilities: { image: true, embeddedContext: true } },
-      agentInfo: { name: 'tabhelm-builtin', title: `TabHelm ${provider.name}`, version: '0.19.0' },
+      agentInfo: { name: 'tabhelm-builtin', title: `TabHelm ${provider.name}`, version: '0.19.1' },
       authMethods: provider.keyEnv ? [{ id: 'api-key', name: `Use ${provider.keyEnv}`, description: keyHelp(provider) }] : [],
     };
   }
@@ -143,7 +143,7 @@ class BuiltinAgent {
     const toolOwner = new Map();
     for (const server of params.mcpServers || []) {
       if (!('command' in server)) continue;
-      const client = new Client({ name: 'tabhelm-builtin', version: '0.19.0' });
+      const client = new Client({ name: 'tabhelm-builtin', version: '0.19.1' });
       const env = { ...process.env, ...Object.fromEntries((server.env || []).map((e) => [e.name, e.value])) };
       await client.connect(new StdioClientTransport({ command: server.command, args: server.args, env, stderr: 'ignore' }));
       mcpClients.push(client);

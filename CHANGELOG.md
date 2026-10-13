@@ -2,6 +2,11 @@
 
 All notable changes to TabHelm. The newest release is at the top; the panel's update banner links here.
 
+## [0.19.1] - 2026-10-13
+
+### Fixed
+- **Windows: agents installed by npm (Cursor `agent`, Kilo, Cline, …) failed with `spawn EINVAL`.** Node 20.12+ refuses to start `.cmd`/`.bat` files directly; the host now launches them through cmd.exe.
+
 ## [0.19.0] - 2026-10-13
 
 ### Added
