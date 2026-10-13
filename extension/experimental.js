@@ -64,6 +64,10 @@ export async function authoredSkills() {
   return list.filter((s) => s.enabled !== false).map(({ name, description, body }) => ({ name, description, body }));
 }
 
+export function refreshExperimental() {
+  return render();
+}
+
 async function render() {
   const features = await getFeatures();
   const list = $('features-list');

@@ -2,6 +2,12 @@
 
 All notable changes to TabHelm. The newest release is at the top; the panel's update banner links here.
 
+## [0.21.0] - 2026-10-13
+
+### Added
+- **Guide mode:** ask to be shown how ("guide me through setting up…") and the agent walks you through it step by step — an arrow and instruction appear on the page next to the element and the agent waits for your click (or *I did it* / *Skip* on the page or in the panel). Recordings include the arrows.
+- **Make a skill from this chat** (＋ menu): the agent distils what was done — including guide steps — into a reusable skill saved with the new `skill_save` tool; it appears in Settings → Skill authoring and runs with `/name`.
+
 ## [0.20.0] - 2026-10-13
 
 ### Added

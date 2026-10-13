@@ -112,6 +112,18 @@ const ui = {
     notify(chatTabId, 'needs', kind === 'login' ? 'Sign-in needed' : payload.message);
     return new Promise((resolve) => asks.set(id, { resolve, chatTabId }));
   },
+  // Settles open asks of a chat from the extension side (e.g. the user clicked on the page).
+  resolveAsks(chatTabId, reply) {
+    for (const [id, a] of asks) {
+      if (a.chatTabId !== chatTabId) continue;
+      a.resolve(reply);
+      asks.delete(id);
+      deliver(chatTabId, { type: 'ask_resolved', id, reply });
+    }
+  },
+  skillsChanged() {
+    for (const port of panels.values()) port.postMessage({ type: 'skills_changed' });
+  },
   onTarget(chatTabId, tab) {
     deliver(chatTabId, { type: 'target', tabId: tab.id, title: tab.title || tab.url, isChat: tab.id === chatTabId });
   },

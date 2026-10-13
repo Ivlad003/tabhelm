@@ -4,7 +4,7 @@
 // chrome.scripting; mouse and keyboard go through CDP Input.* (trusted events).
 
 import { cdp, attach, detach, dialogs, consoleLogs, requests, fileChoosers, dragData, screencastListeners } from './cdp.js';
-import { getFeatures } from './features.js';
+import { getFeatures, setFeature } from './features.js';
 import * as P from './page-scripts.js';
 
 const chats = new Map(); // chatTabId -> { chatTabId, current, owned: Set, notes: [] }
@@ -506,6 +506,7 @@ export async function runTool(chatTabId, tool, args, ui) {
   const c = chatState(chatTabId);
   let result;
   if (tool === 'browser_tabs') result = await tabsTool(c, args, ui);
+  else if (tool === 'skill_save') result = await saveSkill(args, ui);
   else if (tool === 'browser_search_tabs') result = await searchTabs(c, args);
   else if (tool === 'browser_handle_dialog') result = await handleDialog(await targetTab(c, args.tabId, ui), args);
   else {
@@ -524,6 +525,23 @@ export async function runTool(chatTabId, tool, args, ui) {
     result.content = [...result.content, { type: 'text', text: `\n${c.notes.splice(0).join('\n')}` }];
   }
   return result;
+}
+
+// skill_save: a skill written by the agent (e.g. from this chat) goes into the
+// panel's authored skills and the Skill authoring flag is switched on.
+async function saveSkill(args, ui) {
+  const name = String(args.name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60);
+  const body = String(args.body || '').trim();
+  if (!name || !body) throw new Error('skill_save needs a name and a Markdown body.');
+  const { authoredSkills: items = [] } = await chrome.storage.local.get('authoredSkills');
+  const skill = { name, description: String(args.description || name).trim().slice(0, 200), body: body.slice(0, 20_000), enabled: true, created: new Date().toISOString() };
+  const i = items.findIndex((s) => s.name === name);
+  if (i >= 0) items[i] = { ...items[i], ...skill };
+  else items.push(skill);
+  await chrome.storage.local.set({ authoredSkills: items });
+  await setFeature('skillAuthoring', true);
+  ui.skillsChanged?.();
+  return { content: text(`Skill "${name}" saved. The user can run it with /${name} in any chat and edit it in Settings → Experimental → Skill authoring.`), label: `/${name}` };
 }
 
 // Finds text in every tab the chat can use; refs are per tab (use them with tabId).
@@ -864,6 +882,32 @@ async function runPageTool(tabId, tab, tool, args, ui, chatTabId) {
     }
 
     // ---- Take over / password manager flags: the panel does the work ----
+    // Guide mode: an arrow and instruction on the page, then wait for the user's click.
+    case 'browser_guide': {
+      const loc = await locate(tabId, args.ref);
+      const shown = checked(await inject(tabId, P.guideShow, [loc.ref, args.text, args.step || 0], loc.frameId));
+      const card = ui.ask(chatTabId, 'guide', { message: args.text, step: args.step || 0, target: shown.label, tab: { title: tab.title, url: tab.url } });
+      let panelReply;
+      card.then((r) => (panelReply = r ?? { cancelled: true }));
+      let status = 'waiting';
+      const started = Date.now();
+      // Poll the page until the user clicks the element, presses a bubble button,
+      // answers in the panel, navigates away, or 15 minutes pass.
+      while (status === 'waiting' && !panelReply && Date.now() - started < 15 * 60_000) {
+        await sleep(400);
+        const s = await inject(tabId, P.guideStatus, [], loc.frameId).catch(() => ({ status: 'navigated' }));
+        status = s?.status === 'gone' ? 'navigated' : s?.status || 'navigated';
+      }
+      await inject(tabId, P.guideHide, [], loc.frameId).catch(() => {});
+      ui.resolveAsks(chatTabId, { done: status === 'clicked' || status === 'done' || status === 'navigated' });
+      if (panelReply?.cancelled) throw new Error('The user stopped the guide.');
+      const outcome = panelReply?.skip || status === 'skipped' ? 'skipped' : status === 'navigated' ? 'clicked' : status === 'done' || panelReply?.done ? 'done' : status;
+      const nav = status === 'navigated' ? ' The page changed afterwards.' : '';
+      const label = `step ${args.step || ''} “${shown.label}” → ${outcome}`.replace(/\s+/g, ' ');
+      if (outcome === 'skipped') return { content: text(`The user skipped this step (${shown.label}). Continue with the next step or ask what they need.`), label };
+      return { content: text(`The user ${outcome === 'clicked' ? 'clicked' : 'completed'} “${shown.label}”.${nav} Take a new browser_snapshot before the next step.`), label };
+    }
+
     case 'browser_request_human': {
       await requireFlag('takeOver', 'Take over');
       const reply = await ui.ask(chatTabId, 'human', { message: args.message, tab: { title: tab.title, url: tab.url } });

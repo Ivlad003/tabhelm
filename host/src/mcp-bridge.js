@@ -10,7 +10,7 @@ import { z } from 'zod';
 const { TABHELM_URL, TABHELM_TOKEN, TABHELM_TAB } = process.env;
 const tabId = Number(TABHELM_TAB);
 
-const server = new McpServer({ name: 'tabhelm-browser', version: '0.20.0' });
+const server = new McpServer({ name: 'tabhelm-browser', version: '0.21.0' });
 
 async function call(tool, args = {}) {
   try {
@@ -158,6 +158,16 @@ const tools = {
   skill_read: {
     description: 'Read the full instructions of an enabled skill. Do this before a task the skill covers, then follow it.',
     inputSchema: { name: z.string().describe('Skill name from the list') },
+  },
+  browser_guide: {
+    description:
+      'Guide mode: show the user what to do instead of doing it. Draws an arrow and your instruction next to the element and waits until the user clicks it (or presses Skip / I did it). Use when the user asks to be guided, taught or walked through something; one call per step, snapshot again after each. Returns what the user did.',
+    inputSchema: { ref, text: z.string().describe('Short instruction for the user, e.g. "Click Settings"'), step: z.number().optional().describe('Step number shown on the page') },
+  },
+  skill_save: {
+    description:
+      'Save a reusable skill for TabHelm (shown in Settings, runnable with /name). Use it when the user asks to turn this chat, a guide or a procedure into a skill. Body: Markdown instructions another agent can follow — goal, site, exact steps with element names, checks, pitfalls.',
+    inputSchema: { name: z.string().describe('Short kebab-case name'), description: z.string().describe('One sentence: when to use it'), body: z.string().describe('Markdown instructions') },
   },
   skill_read_file: {
     description: "Read another file of a skill (e.g. references/forms.md) by its path relative to the skill's folder.",

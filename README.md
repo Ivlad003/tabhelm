@@ -117,6 +117,14 @@ To continue, connect any agent — it gets the whole conversation with your next
 
 Chrome wipes an extension's storage when the extension is removed, so the host keeps a copy of the panel's data (chats, settings, skills, flags — never secrets) in `~/.tabhelm/state.json`, written a few seconds after every change. An extension that starts with empty storage restores from it, so reinstalling with *Load unpacked* keeps your history.
 
+### Guide mode
+
+Ask to be shown instead of served — *"guide me through enabling two-factor auth here"*, *"show me how to create a project"* — and the agent stops clicking for you. For each step it calls `browser_guide`: an arrow and a short instruction appear on the page next to the element (pulsing outline), the panel shows the same step, and the agent waits until you click that element. **I did it** / **Skip** on the page or in the panel move on without clicking; **Stop guide** ends the task. If your click navigates, the step counts as done. The arrows are part of the page, so a recording of a guided session shows them. Works in iframes.
+
+### Skills from a chat
+
+**＋ → Make a skill from this chat** asks the connected agent to write down what was done — goal, site, exact steps (including the ones you did yourself in guide mode), checks and pitfalls — and save it with `skill_save`. The skill lands in **Settings → Experimental → Skill authoring** (the flag is switched on for you), goes to every agent as an inline skill and runs with `/name` in the message box. Agents can also call `skill_save` whenever you ask for a skill in your own words.
+
 ### Highlight finds
 
 When the agent searches the page (`browser_find` — "find the price", "where is the login button"), every match is outlined on the page with the search text for a few seconds and the first one is scrolled into view, so you see what the agent found. **Settings → Page → Highlight what the agent finds** switches it off; the agent's own `browser_highlight` (Developer tools flag) is not affected.
@@ -416,7 +424,7 @@ host/                          native host (Node 20+)
   src/state.js                 backup of the panel's storage (~/.tabhelm/state.json) for reinstalls
   src/transcribe.js            speech to text: transcription API or whisper.cpp + ffmpeg
   src/tool-server.js           loopback HTTP endpoint with token
-  src/mcp-bridge.js            stdio MCP server spawned by agents (24 tool definitions)
+  src/mcp-bridge.js            stdio MCP server spawned by agents (browser_*, skill_*, memory_* tool definitions)
   scripts/install.js           registers the native host (Chrome, Chromium, Brave, Edge)
   scripts/install-agent.js     installs any ACP-registry agent and records how to launch it
   scripts/set-key.js           stores an API key in ~/.tabhelm/env without echoing it

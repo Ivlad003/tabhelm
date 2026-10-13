@@ -1,6 +1,6 @@
 import { showNews } from './news.js';
 import { renderMarkdown } from './markdown.js';
-import { initSettings, handleSettingsMessage, hostVersionMismatch, skillPayload, slashSkills, onFeaturesChanged, setAgents } from './settings.js';
+import { initSettings, handleSettingsMessage, hostVersionMismatch, skillPayload, slashSkills, onFeaturesChanged, setAgents, skillsChanged } from './settings.js';
 import { getFeatures } from './features.js';
 import { initVoice, handleVoiceMessage, stop as stopVoice } from './voice.js';
 import { initAttachments, takeAttachments, hasAttachments, chip, addQuote, addImageUrl } from './attachments.js';
@@ -150,6 +150,13 @@ function onMessage(msg) {
       break;
     case 'ask':
       addAsk(msg);
+      break;
+    case 'ask_resolved':
+      askCards.get(msg.id)?.(msg.reply?.done ? 'Clicked on the page' : 'Closed');
+      askCards.delete(msg.id);
+      break;
+    case 'skills_changed':
+      skillsChanged();
       break;
     case 'paused':
       setPaused(msg.paused);
@@ -1015,7 +1022,8 @@ function setPaused(on) {
   }
 }
 
-// Requests from the agent that the panel answers (Take over / Password manager flags).
+// Requests from the agent that the panel answers (Take over / Password manager flags, guide steps).
+const askCards = new Map(); // ask id -> mark resolved (when settled from the page side)
 async function addAsk(msg) {
   breakActivity();
   agentBubble = null;
@@ -1040,6 +1048,24 @@ async function addAsk(msg) {
     options.append(done, cancel);
     card.append(title, note, options);
     record('ask', { kind: 'human', message: msg.message });
+  } else if (msg.kind === 'guide') {
+    card.classList.add('guide');
+    title.textContent = `${msg.step ? `Step ${msg.step}: ` : ''}${msg.message}`;
+    const hint = Object.assign(document.createElement('div'), { className: 'hint', textContent: `Waiting for you to click “${msg.target || 'the highlighted element'}” on the page…` });
+    const done = Object.assign(document.createElement('button'), { className: 'btn primary', textContent: 'I did it' });
+    done.onclick = () => reply({ done: true }, 'Done');
+    const skip = Object.assign(document.createElement('button'), { className: 'btn', textContent: 'Skip step' });
+    skip.onclick = () => reply({ skip: true }, 'Skipped');
+    const stop = Object.assign(document.createElement('button'), { className: 'btn', textContent: 'Stop guide' });
+    stop.onclick = () => reply(null, 'Stopped');
+    options.append(done, skip, stop);
+    card.append(title, hint, options);
+    askCards.set(msg.id, (label) => {
+      card.classList.add('resolved');
+      options.replaceChildren(Object.assign(document.createElement('span'), { textContent: `→ ${label}` }));
+      record('ask', { kind: 'guide', answer: label });
+    });
+    record('ask', { kind: 'guide', message: `${msg.step ? `Step ${msg.step}: ` : ''}${msg.message}` });
   } else if (msg.kind === 'login') {
     title.textContent = `Sign in needed on ${msg.tab?.title || 'this page'}${msg.note ? ` — ${msg.note}` : ''}`;
     const { getSetting } = await import('./features.js');
@@ -1675,6 +1701,15 @@ function replayChat(chat) {
   const active = fromHistory || (await chrome.storage.session.get(`activeChat:${tabId}`))[`activeChat:${tabId}`];
   if (active) openSavedChat(active);
 })();
+
+// Asks the connected agent to distil this chat into a skill (saved with skill_save).
+$('make-skill').onclick = () => {
+  $('plus-menu').open = false;
+  if (!journal.some((e) => e.type === 'user')) return notice('Nothing to turn into a skill yet — do something first.', true);
+  els.input.value =
+    'Turn what we did in this chat into a reusable skill: the goal, the site, and the exact steps that worked (elements to click, what to type, what to check, pitfalls), written as instructions another agent can follow next time, including steps I did myself in guide mode. Save it with skill_save (short kebab-case name, one-sentence description, Markdown body), then tell me its name.';
+  send();
+};
 
 $('add-selection').onclick = async () => {
   $('plus-menu').open = false;

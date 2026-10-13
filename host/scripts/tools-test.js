@@ -95,7 +95,7 @@ const tabId = await sw.evaluate(async (u) => (await chrome.tabs.query({ url: `${
 async function tool(name, args = {}, { allow = true } = {}) {
   return sw.evaluate(
     async (tabId, name, args, allow) => {
-      const ui = { confirm: async () => allow, onTarget() {} };
+      const ui = { confirm: async () => allow, onTarget() {}, ask: () => new Promise(() => {}), resolveAsks() {}, skillsChanged() {} };
       try {
         const r = await self.tabhelmDebug.runTool(tabId, name, args, ui);
         return { ok: true, text: r.content.filter((c) => c.type === 'text').map((c) => c.text).join('\n'), images: r.content.filter((c) => c.type === 'image').length, label: r.label };
@@ -132,6 +132,30 @@ await page.evaluate(() => document.getElementById('tabhelm-highlight')?.remove()
 found = await tool('browser_find', { text: 'Hover me' });
 check('find highlight can be switched off', !(await page.evaluate(() => document.getElementById('tabhelm-highlight'))));
 await sw.evaluate(() => chrome.storage.local.set({ highlightFinds: true }));
+
+// --- Guide mode: the tool waits until the user clicks the element
+{
+  const guide = tool('browser_guide', { ref: refFor(found.text, 'Hover me'), text: 'Click the Hover me button', step: 1 });
+  await page.waitForFunction(() => document.getElementById('tabhelm-guide')?.shadowRoot?.querySelector('.bubble'), { timeout: 5000 });
+  const bubble = await page.evaluate(() => document.getElementById('tabhelm-guide').shadowRoot.querySelector('.bubble').textContent);
+  check('guide shows the instruction on the page', /Step 1[\s\S]*Click the Hover me button/.test(bubble), bubble);
+  await page.click('#hoverTarget');
+  const g = await guide;
+  check('guide completes when the user clicks the element', g.ok && /clicked “Hover me”/.test(g.text), g.text);
+  check('guide overlay removed afterwards', !(await page.evaluate(() => document.getElementById('tabhelm-guide'))));
+  const skipRun = tool('browser_guide', { ref: refFor(found.text, 'Hover me'), text: 'Now skip this', step: 2 });
+  await page.waitForFunction(() => document.getElementById('tabhelm-guide'), { timeout: 5000 });
+  await page.evaluate(() => [...document.getElementById('tabhelm-guide').shadowRoot.querySelectorAll('button')].find((b) => b.textContent === 'Skip').click());
+  const sk = await skipRun;
+  check('guide Skip button on the page', sk.ok && /skipped/.test(sk.text), sk.text);
+}
+
+// --- skill_save: stored as an authored skill, flag switched on
+{
+  const r = await tool('skill_save', { name: 'Hover Menu Guide', description: 'How to open the hover menu', body: '# Steps\n1. Hover "Hover me".\n2. Click "Secret item".' });
+  const st = await sw.evaluate(() => chrome.storage.local.get(['authoredSkills', 'features']));
+  check('skill_save stores the skill and enables Skill authoring', r.ok && st.authoredSkills?.[0]?.name === 'hover-menu-guide' && st.features?.skillAuthoring === true, `${r.text} ${JSON.stringify(st)}`);
+}
 
 // --- Mouse
 let r = await tool('browser_hover', { ref: refFor(found.text, 'Hover me') });

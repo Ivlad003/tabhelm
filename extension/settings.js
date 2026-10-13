@@ -2,7 +2,7 @@
 // installed) and version / update checks.
 
 import { showNews } from './news.js';
-import { initExperimental, handleExperimentalMessage, authoredSkills, setAgentsForSchedules } from './experimental.js';
+import { initExperimental, handleExperimentalMessage, authoredSkills, setAgentsForSchedules, refreshExperimental } from './experimental.js';
 
 const $ = (id) => document.getElementById(id);
 const EXAMPLES = [
@@ -61,6 +61,13 @@ export function setAgents(list) {
 
 async function pushSkills() {
   port.postMessage({ type: 'set_skills', skills: enabledSkillUrls(), inlineSkills: await authoredSkills() });
+}
+
+// A skill was saved by the agent (skill_save): the host gets the new list and
+// Settings shows it (the Skill authoring flag was switched on by the save).
+export async function skillsChanged() {
+  await pushSkills();
+  refreshExperimental();
 }
 
 // Skills for the host: links plus skills written in the panel.

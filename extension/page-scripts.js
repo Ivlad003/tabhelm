@@ -495,3 +495,107 @@ export function webStorage(kind, action, key, value) {
   else store.removeItem(key);
   return { text: `${kind}.${key} ${action === 'set' ? 'set' : 'removed'}.` };
 }
+
+// Guide mode (browser_guide): points at an element with an arrow and an
+// instruction, then waits for the user to click it. State lives in
+// window.__tabhelm.guide and is read by guideStatus() from the extension.
+// The overlay is in the page, so recordings show it too.
+export function guideShow(ref, text, step) {
+  const ID = 'tabhelm-guide';
+  document.getElementById(ID)?.remove();
+  const state = (window.__tabhelm ||= { refs: new Map(), next: 1 });
+  const el = state.refs.get(ref);
+  if (!el || !el.isConnected) return { error: `Ref ${ref} is stale or unknown. Take a new browser_snapshot.` };
+  if (state.guideListener) document.removeEventListener('click', state.guideListener, true);
+  state.guide = { status: 'waiting', ref };
+
+  const host = document.createElement('div');
+  host.id = ID;
+  host.setAttribute('data-tabhelm-overlay', '');
+  const root = host.attachShadow({ mode: 'open' });
+  const sheet = new CSSStyleSheet();
+  sheet.replaceSync(`
+    .ring { position: fixed; border: 3px solid #2a9d76; border-radius: 6px; pointer-events: none; z-index: 2147483645; animation: pulse 1.2s ease-in-out infinite; }
+    @keyframes pulse { 0%, 100% { box-shadow: 0 0 0 4px rgba(42,157,118,.35); } 50% { box-shadow: 0 0 0 12px rgba(42,157,118,0); } }
+    .arrow { position: fixed; width: 0; height: 0; pointer-events: none; z-index: 2147483646; animation: bob 1s ease-in-out infinite; }
+    .arrow.down { border-left: 12px solid transparent; border-right: 12px solid transparent; border-top: 18px solid #1c7d5c; }
+    .arrow.up { border-left: 12px solid transparent; border-right: 12px solid transparent; border-bottom: 18px solid #1c7d5c; }
+    @keyframes bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(5px); } }
+    .bubble { position: fixed; max-width: 320px; background: #1c7d5c; color: #fff; font: 14px/1.4 system-ui, sans-serif; padding: 10px 12px; border-radius: 10px; box-shadow: 0 6px 24px rgba(0,0,0,.25); z-index: 2147483647; pointer-events: auto; }
+    .step { font-size: 11px; opacity: .8; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 2px; }
+    .row { display: flex; gap: 6px; margin-top: 8px; }
+    button { font: 600 12px system-ui, sans-serif; border: 0; border-radius: 6px; padding: 5px 10px; cursor: pointer; background: #fff; color: #1c7d5c; }
+    button.ghost { background: rgba(255,255,255,.18); color: #fff; }
+  `);
+  root.adoptedStyleSheets = [sheet];
+
+  const ring = document.createElement('div');
+  ring.className = 'ring';
+  const arrow = document.createElement('div');
+  const bubble = document.createElement('div');
+  bubble.className = 'bubble';
+  const head = document.createElement('div');
+  head.className = 'step';
+  head.textContent = step ? `Step ${step}` : 'Your turn';
+  const body = document.createElement('div');
+  body.textContent = text;
+  const row = document.createElement('div');
+  row.className = 'row';
+  const done = document.createElement('button');
+  done.textContent = 'I did it';
+  done.onclick = () => finish('done');
+  const skip = document.createElement('button');
+  skip.className = 'ghost';
+  skip.textContent = 'Skip';
+  skip.onclick = () => finish('skipped');
+  row.append(done, skip);
+  bubble.append(head, body, row);
+  root.append(ring, arrow, bubble);
+  document.documentElement.append(host);
+
+  function place() {
+    const r = el.getBoundingClientRect();
+    Object.assign(ring.style, { left: `${r.left - 4}px`, top: `${r.top - 4}px`, width: `${r.width + 8}px`, height: `${r.height + 8}px` });
+    const below = r.bottom + 120 < innerHeight || r.top < 140;
+    arrow.className = `arrow ${below ? 'up' : 'down'}`;
+    const ax = Math.min(Math.max(r.left + r.width / 2 - 12, 8), innerWidth - 32);
+    Object.assign(arrow.style, { left: `${ax}px`, top: below ? `${r.bottom + 6}px` : `${r.top - 24}px` });
+    const bw = Math.min(320, innerWidth - 16);
+    const bx = Math.min(Math.max(r.left + r.width / 2 - bw / 2, 8), innerWidth - bw - 8);
+    Object.assign(bubble.style, { width: `${bw}px`, left: `${bx}px` });
+    if (below) bubble.style.top = `${r.bottom + 26}px`;
+    else {
+      bubble.style.top = '';
+      bubble.style.bottom = `${innerHeight - r.top + 26}px`;
+    }
+  }
+  function finish(status) {
+    state.guide = { status, ref };
+    document.removeEventListener('click', state.guideListener, true);
+    removeEventListener('scroll', place, true);
+    removeEventListener('resize', place);
+    host.remove();
+  }
+  // The user's click on the target (or inside it) completes the step; the
+  // event itself is left alone so the page reacts normally.
+  state.guideListener = (e) => {
+    const path = e.composedPath();
+    if (path.includes(el)) finish('clicked');
+  };
+  document.addEventListener('click', state.guideListener, true);
+  addEventListener('scroll', place, true);
+  addEventListener('resize', place);
+  place();
+  return { ok: true, label: (el.getAttribute('aria-label') || el.innerText || el.value || '').replace(/\s+/g, ' ').trim().slice(0, 80) };
+}
+
+export function guideStatus() {
+  return window.__tabhelm?.guide || { status: 'gone' };
+}
+
+export function guideHide() {
+  const state = window.__tabhelm;
+  document.getElementById('tabhelm-guide')?.remove();
+  if (state?.guideListener) document.removeEventListener('click', state.guideListener, true);
+  if (state) state.guide = { status: 'cancelled' };
+}

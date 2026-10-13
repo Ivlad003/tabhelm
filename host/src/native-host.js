@@ -80,8 +80,8 @@ const toolServer = await startToolServer({
       send({ type: 'tool_activity', tabId, tool, args, label: args.text || args.query, ok: result.ok, error: result.error });
       return result;
     }
-    // skill_* tools are answered here; everything else runs in the extension.
-    if (tool.startsWith('skill_')) {
+    // skill_* tools are answered here (skill_save goes to the extension's storage); everything else runs in the extension.
+    if (tool.startsWith('skill_') && tool !== 'skill_save') {
       const skills = sessions.get(tabId)?.skills || [];
       let result;
       try {

@@ -1503,3 +1503,7 @@ button.chip:hover {
 .settings label.check input {
   margin-top: 3px;
 }
+
+.card.guide .hint {
+  margin: 4px 0 6px;
+}
