@@ -169,17 +169,95 @@ function askCritic(action) {
   });
 }
 
+// Remote host through a TabHelm relay (relay/server.js): chrome.storage.local
+// `remote` = { url, token | code, name }. Set in Settings → Remote host.
+let remoteConfig = null;
+chrome.storage.local.get('remote').then(({ remote }) => (remoteConfig = remote || null));
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'local' && changes.remote) remoteConfig = changes.remote.newValue || null;
+});
+
+function hostGone(reason) {
+  nativePort = null;
+  for (const port of panels.values()) port.postMessage({ type: 'host_disconnected', message: reason });
+  for (const r of runners.values()) r({ type: 'host_disconnected', message: reason });
+}
+
 export function ensureNative() {
   if (nativePort) return nativePort;
+  if (remoteConfig?.url && (remoteConfig.token || remoteConfig.code)) {
+    nativePort = connectRelay(remoteConfig);
+    return nativePort;
+  }
   nativePort = chrome.runtime.connectNative(HOST_NAME);
   nativePort.onMessage.addListener(onHostMessage);
-  nativePort.onDisconnect.addListener(() => {
-    const reason = chrome.runtime.lastError?.message || 'Host exited';
-    nativePort = null;
-    for (const port of panels.values()) port.postMessage({ type: 'host_disconnected', message: reason });
-    for (const r of runners.values()) r({ type: 'host_disconnected', message: reason });
-  });
+  nativePort.onDisconnect.addListener(() => hostGone(chrome.runtime.lastError?.message || 'Host exited'));
   return nativePort;
+}
+
+// A port-shaped wrapper around a WebSocket to the relay, so the rest of the
+// service worker does not care where the host runs.
+function connectRelay(cfg) {
+  const target = new URL(cfg.url);
+  target.protocol = target.protocol === 'http:' ? 'ws:' : target.protocol === 'https:' ? 'wss:' : target.protocol;
+  target.pathname = `${target.pathname.replace(/\/$/, '')}/client`;
+  if (cfg.token) target.searchParams.set('token', cfg.token);
+  else target.searchParams.set('code', cfg.code);
+  const ws = new WebSocket(target.href);
+  const queue = [];
+  let open = false;
+  const port = {
+    remote: true,
+    postMessage(msg) {
+      if (open) ws.send(JSON.stringify(msg));
+      else queue.push(msg);
+    },
+    disconnect() {
+      ws.onclose = null;
+      ws.close();
+      if (nativePort === port) nativePort = null;
+    },
+  };
+  ws.onopen = () => {
+    open = true;
+    for (const m of queue.splice(0)) ws.send(JSON.stringify(m));
+    keepAlive();
+  };
+  ws.onmessage = (e) => {
+    let msg;
+    try {
+      msg = JSON.parse(e.data);
+    } catch {
+      return;
+    }
+    if (msg.type === 'relay') {
+      if (msg.role === 'client' && msg.token && msg.token !== cfg.token) {
+        // Paired: keep the session token, the code is spent.
+        chrome.storage.local.set({ remote: { url: cfg.url, token: msg.token, name: msg.name || cfg.name || 'remote host' } });
+      }
+      if (msg.role === 'client' && !msg.hostOnline) broadcast({ type: 'error', message: `Paired with the relay, but the remote TabHelm host "${msg.name || ''}" is offline right now.` });
+      if (msg.event === 'host_disconnected') broadcast({ type: 'status', state: 'stopped', detail: 'The remote host disconnected' });
+      if (msg.event === 'host_connected') port.postMessage({ type: 'list_agents' });
+      return;
+    }
+    onHostMessage(msg);
+  };
+  ws.onclose = (e) => {
+    const why = e.code === 4401 ? 'The relay rejected the pairing code (unknown or expired). Get a new code from the remote host.' : e.code === 4429 ? 'Too many attempts — wait a minute.' : `Relay connection closed (${e.code}${e.reason ? ` ${e.reason}` : ''})`;
+    if (nativePort === port) hostGone(why);
+  };
+  ws.onerror = () => {};
+  // Chrome keeps the service worker alive while the socket has traffic.
+  function keepAlive() {
+    if (ws.readyState !== 1 || nativePort !== port) return;
+    ws.send(JSON.stringify({ type: 'ping' }));
+    setTimeout(keepAlive, 20_000);
+  }
+  return port;
+}
+
+function broadcast(msg) {
+  for (const port of panels.values()) port.postMessage(msg);
 }
 
 async function onHostMessage(msg) {
@@ -312,6 +390,19 @@ export async function fromPanel(tabId, msg, port) {
     chatInfo.set(tabId, info);
     resumeChat(tabId);
   }
+  // Settings → Remote host changed: drop the current host and connect to the new one.
+  if (msg.type === 'host_switch') {
+    remoteConfig = (await chrome.storage.local.get('remote')).remote || null;
+    const old = nativePort;
+    nativePort = null;
+    old?.disconnect();
+    try {
+      ensureNative().postMessage({ type: 'list_agents' });
+    } catch (err) {
+      port?.postMessage({ type: 'host_disconnected', message: err.message });
+    }
+    return;
+  }
   if (msg.type === 'start') {
     const tab = await chrome.tabs.get(tabId).catch(() => null);
     const payload = await hostFeaturePayload();
@@ -379,6 +470,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
 });
 
 async function backupState() {
+  if (remoteConfig?.url) return; // the backup lives next to the local host only
   const all = await chrome.storage.local.get(null);
   const data = Object.fromEntries(Object.entries(all).filter(([k]) => !BACKUP_SKIP.test(k)));
   const hadPort = Boolean(nativePort);
@@ -405,6 +497,7 @@ chrome.runtime.onInstalled.addListener(async () => {
 });
 
 function restoreState() {
+  if (remoteConfig?.url) return;
   restoring = { items: {} };
   try {
     ensureNative().postMessage({ type: 'restore_state' });

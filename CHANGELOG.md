@@ -2,6 +2,11 @@
 
 All notable changes to TabHelm. The newest release is at the top; the panel's update banner links here.
 
+## [0.25.0] - 2026-10-13
+
+### Added
+- **Remote host through your own relay.** `relay/` is a ~150-line WebSocket relay (Dockerfile, `RELAY_KEY`, ready for Dokploy). Run the host anywhere with `npm run relay -- wss://relay.example.com --key …`, enter the printed pairing code in **Settings → Remote host**, and the panel drives that machine's agents — outbound connections only, no SSH or open ports. `host/Dockerfile.agent` packages the host with OpenCode and Claude Code for running agents on the VPS itself.
+
 ## [0.24.0] - 2026-10-13
 
 ### Added

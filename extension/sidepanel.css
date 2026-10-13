@@ -1617,3 +1617,14 @@ button.chip:hover {
   margin-top: 4px;
   white-space: normal;
 }
+
+.remote-form {
+  display: grid;
+  gap: 6px;
+  margin: 6px 0;
+}
+
+.remote-form input {
+  width: 100%;
+  box-sizing: border-box;
+}

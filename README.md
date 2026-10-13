@@ -202,6 +202,15 @@ If an agent needs a login, the panel shows its sign-in options as buttons. Click
 - **Google Antigravity** offers *Log in with Google*, Gemini Enterprise, a Gemini API key or Agent Platform right in the panel.
 - **Qoder CLI** reuses an existing login: run `qodercli login` once (for an agent installed with `install-agent`: `~/.tabhelm/agents/qoder/node_modules/.bin/qodercli login`).
 
+### Remote host (relay)
+
+The agents do not have to run on the computer where Chrome is. Deploy the tiny **TabHelm relay** ([relay/README.md](relay/README.md) — a Dockerfile, one environment variable `RELAY_KEY`, HTTPS from your Dokploy/Traefik) and:
+
+1. On the remote machine (a VPS, a dev box behind NAT, a container built from [host/Dockerfile.agent](host/Dockerfile.agent)): `cd ~/.tabhelm/app/host && npm run relay -- wss://relay.example.com --key <RELAY_KEY> --name my-vps`. The host prints a pairing code like `K7PM-3QWX` (valid 10 minutes, single use) and keeps running; it reconnects by itself and keeps its session token in `~/.tabhelm/relay.json`.
+2. In the panel: **Settings → Remote host** → relay URL + the code → **Connect**. The remote host's agents appear in the list; everything — tool calls on your tab, screenshots, approvals — flows panel ⇄ relay ⇄ host over outbound WebSockets, so neither machine needs an open port or SSH.
+
+**Use local host** switches back (the pairing is kept and **Connect** resumes it without a code); **Forget pairing** drops it. The working folder, skills on disk, memory and recordings are then on the remote machine (recordings can still be downloaded from the chat). Only a host that knows `RELAY_KEY` can register, codes are rate-limited, and the relay stores nothing — but it does see the traffic in clear text inside TLS, so keep it your own.
+
 ### Several tabs
 
 Each tab has its own panel and its own agent session, and by default the agent works on that tab only. To let it work across tabs — move data from one page to another, compare pages, search several pages at once:
@@ -437,6 +446,8 @@ host/                          native host (Node 20+)
   scripts/install-agent.js     installs any ACP-registry agent and records how to launch it
   scripts/set-key.js           stores an API key in ~/.tabhelm/env without echoing it
   scripts/smoke.js | e2e.js | tools-test.js | icons.js
+relay/                         TabHelm relay (server.js, Dockerfile): pairs a remote host with the panel over WebSockets
+host/Dockerfile.agent          host + OpenCode + Claude Code in a container that serves a panel through the relay
 design/                        design system: tokens.css (source of truth) and its guide
 scripts/design.js              copies design tokens into the extension and the site
 scripts/build.js               release build → dist/
@@ -469,6 +480,7 @@ Load `extension/` unpacked in Chrome. After editing extension files press ↻ on
 | `E2E_TABS=1 npm run e2e -- claude` | shares a second tab through the tab group and asks the agent to move data between tabs |
 | `E2E_HISTORY=1 npm run e2e -- claude` | steps block, saved history, reopening a chat (tab goes back to its page), continuing it, restore after reopening the panel |
 | `E2E_INTERJECT=1 npm run e2e -- claude` | a message typed during the task reaches the agent with its next tool result |
+| `E2E_RELAY=1 npm run e2e -- claude` | starts a relay and a second host in relay mode, pairs the panel with the printed code and runs the task through it |
 | `E2E_FOLDER=1 npm run e2e -- claude` | binds a project folder (AGENTS.md + skill) and checks the agent follows it and creates a file there |
 | `E2E_ATTACH=1 npm run e2e -- claude` | attaches an image and a CSV and checks the agent reads both |
 | `E2E_SKILLS=1 npm run e2e -- claude` | adds a skill in Settings and checks the agent reads and follows it |

@@ -1,0 +1,10 @@
+{
+  "name": "tabhelm-relay",
+  "version": "0.25.0",
+  "private": true,
+  "type": "module",
+  "description": "Pairs a remote TabHelm host with the TabHelm Chrome extension over WebSockets",
+  "scripts": { "start": "node server.js" },
+  "dependencies": { "ws": "^8.18.0" },
+  "engines": { "node": ">=20" }
+}

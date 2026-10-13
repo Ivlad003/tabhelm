@@ -98,6 +98,27 @@ panel.on('console', (m) => console.log('[panel]', m.text()));
 if (process.env.E2E_DARK) await panel.emulateMediaFeatures([{ name: 'prefers-color-scheme', value: 'dark' }]);
 await panel.waitForSelector('#agent');
 
+// E2E_RELAY=1: a relay + a second host in relay mode; the panel pairs with the
+// code the host prints and the whole task runs through the relay.
+let relayProcs = [];
+if (process.env.E2E_RELAY) {
+  const { spawn } = await import('node:child_process');
+  const relayPort = 18000 + Math.floor(Math.random() * 1000);
+  const relay = spawn(process.execPath, [fileURLToPath(new URL('../../relay/server.js', import.meta.url))], { env: { ...process.env, PORT: String(relayPort), RELAY_KEY: 'test-relay-key-12345' }, stdio: ['ignore', 'pipe', 'inherit'] });
+  await new Promise((r) => relay.stdout.on('data', (d) => /listening/.test(String(d)) && r()));
+  const hostProc = spawn(process.execPath, [fileURLToPath(new URL('../src/native-host.js', import.meta.url)), '--relay', `ws://127.0.0.1:${relayPort}`, '--key', 'test-relay-key-12345', '--name', 'testbox'], { env: { ...process.env, TABHELM_RECORDINGS_DIR: join(profile, 'videos') }, stdio: ['ignore', 'ignore', 'pipe'] });
+  relayProcs = [relay, hostProc];
+  const code = await new Promise((r) => hostProc.stderr.on('data', (d) => { const m = /pairing code:\s+([A-Z0-9]{4}-[A-Z0-9]{4})/.exec(String(d)); if (m) r(m[1]); }));
+  console.log('relay pairing code:', code);
+  await panel.click('#settings-open');
+  await panel.type('#remote-url', `ws://127.0.0.1:${relayPort}`);
+  await panel.type('#remote-code', code);
+  await panel.click('#remote-connect');
+  await panel.waitForFunction(() => /connected \(testbox\)/.test(document.querySelector('#remote-status').textContent), { timeout: 20000 });
+  console.log('remote status:', await panel.$eval('#remote-status', (e) => e.textContent));
+  await panel.click('#settings-close');
+}
+
 if (process.env.E2E_TABS) {
   const contacts = await browser.newPage();
   await contacts.goto(`${url}contacts`);
@@ -537,6 +558,7 @@ if (process.env.E2E_SHOTS) {
   await panel.click('#settings-close');
   console.log('extra screenshots in', profile);
 }
+for (const p of relayProcs) p.kill();
 const pass = out === 'Saved: Ada Lovelace / blue / agreed' && extraOk && usageOk;
 console.log(pass ? 'E2E PASS' : 'E2E FAIL');
 await browser.close();

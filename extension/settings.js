@@ -26,6 +26,7 @@ export async function initSettings(panelPort) {
     addSkill($('skill-url').value.trim());
   };
   $('check-updates').onclick = checkUpdates;
+  initRemote();
   const hl = $('highlight-finds');
   hl.onchange = () => chrome.storage.local.set({ highlightFinds: hl.checked });
   const stored = await chrome.storage.local.get(['skills', 'highlightFinds']);
@@ -101,10 +102,61 @@ export function handleSettingsMessage(msg) {
   }
   if (msg.type === 'agents' && msg.hostVersion) {
     hostVersion = msg.hostVersion;
+    remoteName = msg.remote?.name || null;
     renderVersion();
+    renderRemote();
   }
   return false;
 }
+
+// ---------- Remote host (relay) ----------
+let remoteName = null;
+async function renderRemote() {
+  const { remote } = await chrome.storage.local.get('remote');
+  const status = $('remote-status');
+  const paired = Boolean(remote?.token);
+  const active = Boolean(remote?.url);
+  $('remote-url').value = remote?.url || $('remote-url').value;
+  $('remote-url').disabled = paired;
+  $('remote-code').hidden = paired;
+  $('remote-connect').hidden = paired && Boolean(remote?.url);
+  $('remote-local').hidden = !active;
+  $('remote-forget').hidden = !paired;
+  if (paired) status.textContent = `Paired with ${remote.name || 'the remote host'} via ${remote.url}${remoteName ? ` — connected (${remoteName})` : ''}.`;
+  else if (active) status.textContent = `Pairing with ${remote.url}…`;
+  else status.textContent = remote?.offUrl ? `Using the local host. Previous relay: ${remote.offUrl}` : 'Using the local host (agents on this computer).';
+}
+
+function initRemote() {
+  $('remote-connect').onclick = async () => {
+    const url = $('remote-url').value.trim().replace(/\/$/, '');
+    const code = $('remote-code').value.trim().toUpperCase();
+    const fail = (t) => ($('remote-status').textContent = t);
+    if (!/^(wss?|https?):\/\//.test(url)) return fail('Enter the relay URL, e.g. wss://relay.example.com');
+    const { remote } = await chrome.storage.local.get('remote');
+    // Resume a paused pairing with the same relay without a new code.
+    if (!code && remote?.offToken && remote.offUrl === url) await chrome.storage.local.set({ remote: { url, token: remote.offToken, name: remote.offName } });
+    else if (!/^[A-Z0-9]{4}-?[A-Z0-9]{4}$/.test(code)) return fail('Enter the 8-character pairing code the remote host printed.');
+    else await chrome.storage.local.set({ remote: { url, code } });
+    port.postMessage({ type: 'host_switch' });
+    renderRemote();
+  };
+  $('remote-local').onclick = async () => {
+    const { remote } = await chrome.storage.local.get('remote');
+    // Keep the token so the same pairing can be resumed from "Connect" later.
+    await chrome.storage.local.set({ remote: { offUrl: remote?.url, offToken: remote?.token, offName: remote?.name } });
+    port.postMessage({ type: 'host_switch' });
+    renderRemote();
+  };
+  $('remote-forget').onclick = async () => {
+    await chrome.storage.local.remove('remote');
+    port.postMessage({ type: 'host_switch' });
+    renderRemote();
+  };
+  renderRemote();
+}
+// A stored-but-paused pairing resumes without a new code.
+chrome.storage.onChanged.addListener((changes, area) => area === 'local' && changes.remote && renderRemote());
 
 export function hostVersionMismatch() {
   const mine = chrome.runtime.getManifest().version;

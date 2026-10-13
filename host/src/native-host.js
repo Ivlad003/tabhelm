@@ -16,9 +16,9 @@
 //                tool_call {id, tabId, tool, args}
 
 import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync } from 'node:fs';
-import { homedir } from 'node:os';
+import { homedir, hostname } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
-import { createNativeChannel } from './native-messaging.js';
+import { createNativeChannel, createRelayChannel } from './native-messaging.js';
 import { listAgents, getAgent } from './agents.js';
 import { loadEnvFile } from './env.js';
 import { loadSkill, runSkillTool, listSkillCollection } from './skills.js';
@@ -59,8 +59,33 @@ const sessions = new Map(); // tabId -> AgentSession
 const pendingTools = new Map(); // id -> resolve
 let nextToolId = 1;
 
-const channel = createNativeChannel({ onMessage: handleMessage, onClose: shutdown });
+// Relay mode (npm run relay -- wss://relay.example.com --key K [--name N]): the host
+// serves a panel somewhere else through relay/server.js instead of local Chrome.
+const argv = process.argv.slice(2);
+const argValue = (flag) => (argv.includes(flag) ? argv[argv.indexOf(flag) + 1] : null);
+const relayUrl = argValue('--relay') || process.env.TABHELM_RELAY_URL || null;
+const relayMode = Boolean(relayUrl);
+const channel = relayMode
+  ? createRelayChannel({
+      url: relayUrl,
+      key: argValue('--key') || process.env.TABHELM_RELAY_KEY || '',
+      name: argValue('--name') || process.env.TABHELM_RELAY_NAME || hostname(),
+      tokenFile: join(home, 'relay.json'),
+      onMessage: handleMessage,
+      // The panel went away: stop its agents, keep serving the relay.
+      onClientGone: () => Promise.all([...sessions.keys()].map(stopSession)),
+      log,
+    })
+  : createNativeChannel({ onMessage: handleMessage, onClose: shutdown });
 const send = (message) => channel.send(message);
+if (relayMode) {
+  if (!(argValue('--key') || process.env.TABHELM_RELAY_KEY)) {
+    process.stderr.write('Usage: npm run relay -- wss://relay.example.com --key <RELAY_KEY> [--name <label>]\n');
+    process.exit(1);
+  }
+  process.stderr.write(`TabHelm host ${JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version} connecting to ${relayUrl} …\n`);
+  process.on('SIGINT', () => process.exit(0));
+}
 
 const toolServer = await startToolServer({
   log,
@@ -101,14 +126,16 @@ const toolServer = await startToolServer({
 });
 log(`host started, tool server ${toolServer.url}`);
 const hostVersion = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
-send({ type: 'agents', agents: listAgents(), hostVersion });
+send({ type: 'agents', agents: listAgents(), hostVersion, remote: relayMode ? { name: argValue('--name') || process.env.TABHELM_RELAY_NAME || hostname() } : null });
 
 async function handleMessage(msg) {
   const { tabId } = msg;
   try {
     switch (msg.type) {
+      case 'ping':
+        break;
       case 'list_agents':
-        send({ type: 'agents', agents: listAgents(), hostVersion });
+        send({ type: 'agents', agents: listAgents(), hostVersion, remote: relayMode ? { name: argValue('--name') || process.env.TABHELM_RELAY_NAME || hostname() } : null });
         break;
 
       case 'start': {

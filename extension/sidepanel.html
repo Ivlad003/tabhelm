@@ -85,6 +85,19 @@
       <p class="hint">New features, all off by default. Turn one on to see its settings.</p>
       <ul id="features-list" class="feature-list"></ul>
 
+      <h3>Remote host</h3>
+      <p class="hint">Drive agents that run on another machine (a VPS, a dev box) through your own TabHelm relay — see <code>relay/README.md</code>. Start the host there with <code>npm run relay -- wss://… --key …</code> and enter the code it prints.</p>
+      <div id="remote-status" class="hint"></div>
+      <div class="remote-form">
+        <input id="remote-url" type="url" placeholder="wss://relay.example.com" aria-label="Relay URL" />
+        <input id="remote-code" placeholder="Pairing code, e.g. K7PM-3QWX" aria-label="Pairing code" autocapitalize="characters" />
+      </div>
+      <div class="options">
+        <button id="remote-connect" class="btn small primary" type="button">Connect</button>
+        <button id="remote-local" class="btn small" type="button" hidden>Use local host</button>
+        <button id="remote-forget" class="btn small" type="button" hidden>Forget pairing</button>
+      </div>
+
       <h3>Version</h3>
       <div id="version-info" class="hint"></div>
       <div id="version-warning" class="notice error" hidden></div>
