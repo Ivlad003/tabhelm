@@ -2,6 +2,11 @@
 
 All notable changes to TabHelm. The newest release is at the top; the panel's update banner links here.
 
+## [0.21.1] - 2026-10-13
+
+### Changed
+- Tabs the agent opens (and pop-ups from its clicks) are always put into the chat's green *TabHelm* tab group, creating it if needed, so the agent's tabs are distinguishable from yours. The panel's group counter updates as tabs join or leave.
+
 ## [0.21.0] - 2026-10-13
 
 ### Added

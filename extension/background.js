@@ -421,6 +421,12 @@ async function onStateRestore(msg) {
   setTimeout(() => dropIdleNative(), 2000);
 }
 
+// Keep the panel's "Tab group: N tabs" chip current when tabs join or leave a group.
+chrome.tabs.onUpdated.addListener((_id, info) => {
+  if (info.groupId === undefined) return;
+  for (const chatTabId of panels.keys()) postGroupInfo(chatTabId);
+});
+
 chrome.tabs.onRemoved.addListener((tabId) => {
   if (!panels.has(tabId) && !runners.has(tabId)) return;
   nativePort?.postMessage({ type: 'stop', tabId });

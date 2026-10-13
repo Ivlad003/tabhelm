@@ -287,6 +287,15 @@ check('closing popup returns to chat tab', r.ok && snap.text.includes('Fixture')
 r = await tool('browser_tabs', { action: 'new', url: `${url}page2` });
 snap = await tool('browser_snapshot');
 check('new background tab', r.ok && snap.text.includes('Second page'), `${r.text} | ${snap.text}`);
+{
+  const g = await sw.evaluate(async (id) => {
+    const st = self.tabhelmDebug.chatDebugState(id);
+    const tabs = st.groupId != null ? await chrome.tabs.query({ groupId: st.groupId }) : [];
+    const title = st.groupId != null ? (await chrome.tabGroups.get(st.groupId)).title : null;
+    return { groupId: st.groupId, ids: tabs.map((t) => t.id), title };
+  }, tabId);
+  check('tabs the agent opens are grouped with the chat tab', g.groupId != null && g.ids.includes(tabId) && g.ids.length >= 2 && g.title === 'TabHelm', JSON.stringify(g));
+}
 r = await tool('browser_tabs', { action: 'switch', tabId });
 check('switch back to chat tab', r.ok, r.text);
 r = await tool('browser_tabs', { action: 'close', tabId });
@@ -304,7 +313,7 @@ const otherId = await sw.evaluate(async (u) => (await chrome.tabs.query({ url: `
 await page.bringToFront();
 
 const group = await sw.evaluate(async (chat) => self.tabhelmDebug.ensureGroup(chat), tabId);
-check('chat tab put into a tab group', group.grouped && group.count === 1, JSON.stringify(group));
+check('chat tab put into a tab group', group.grouped && group.count >= 1, JSON.stringify(group));
 // The user drags the contacts tab into the group.
 await sw.evaluate(async (groupId, id) => chrome.tabs.group({ groupId, tabIds: [id] }), group.groupId, contactsId);
 r = await tool('browser_get_text', { tabId: contactsId }, { allow: false });

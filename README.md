@@ -199,7 +199,7 @@ If an agent needs a login, the panel shows its sign-in options as buttons. Click
 Each tab has its own panel and its own agent session, and by default the agent works on that tab only. To let it work across tabs — move data from one page to another, compare pages, search several pages at once:
 
 - press **Group tabs**: the chat's tab goes into a green Chrome tab group named *TabHelm*. **Drag any tab into that group** and the agent can use it without asking; drag it out to stop sharing. The button shows how many tabs are in the group, and the TabHelm icon on a grouped tab opens the chat.
-- the agent can also open tabs itself (`browser_tabs` → `new`, added to the group); pop-ups opened while it acts are added automatically; any other tab still needs your approval.
+- tabs the agent opens itself (`browser_tabs` → `new`) and pop-ups that appear while it acts are **always put into the chat's *TabHelm* group** (created on the spot if needed), so you can tell the agent's tabs from your own at a glance; any other tab still needs your approval.
 - every page tool takes a `tabId`, so the agent reads one tab and types into another without switching; `browser_search_tabs` finds text in all the tabs it can use.
 
 Example: with a contact card in one tab and a form in the chat's tab, "copy the email from the other tab into this form" works in a few steps.

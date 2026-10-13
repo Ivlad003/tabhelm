@@ -84,7 +84,10 @@ export async function groupInfo(chatTabId) {
   return { grouped: true, count: tabs.length, groupId: c.groupId };
 }
 
+// Tabs the agent opens always land in the chat's group (created on first use),
+// so the user can tell the agent's tabs from their own.
 async function addToGroup(c, tabId) {
+  if (c.groupId == null) await ensureGroup(c.chatTabId).catch(() => {}); // e.g. popup windows cannot group
   if (c.groupId == null) return;
   await chrome.tabs.group({ groupId: c.groupId, tabIds: [tabId] }).catch(() => {});
 }
