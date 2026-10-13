@@ -40,6 +40,12 @@ Windows (PowerShell):
 irm https://ivlad003.github.io/tabhelm/install.ps1 | iex
 ```
 
+Windows (Command Prompt / cmd):
+
+```bat
+powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://ivlad003.github.io/tabhelm/install.ps1 | iex"
+```
+
 The installer downloads the latest release into `~/.tabhelm/app` (`%USERPROFILE%\.tabhelm\app` on Windows), installs the native host's dependencies and registers it with Chrome, Chromium, Brave and Edge (on Windows through the registry, HKCU).
 
 **2. Load the extension.** Open `chrome://extensions`, turn on **Developer mode**, click **Load unpacked** and choose `~/.tabhelm/app/extension`. You can also download [`tabhelm-extension.zip`](https://github.com/Ivlad003/tabhelm/releases/latest/download/tabhelm-extension.zip) from the website and load the unpacked folder; the native host from step 1 is still required.

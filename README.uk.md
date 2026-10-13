@@ -40,6 +40,12 @@ Windows (PowerShell):
 irm https://ivlad003.github.io/tabhelm/install.ps1 | iex
 ```
 
+Windows (Command Prompt / cmd):
+
+```bat
+powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://ivlad003.github.io/tabhelm/install.ps1 | iex"
+```
+
 Інсталятор завантажує останній реліз у `~/.tabhelm/app` (`%USERPROFILE%\.tabhelm\app` на Windows), ставить залежності native host і реєструє його в Chrome, Chromium, Brave та Edge (на Windows — через реєстр, HKCU).
 
 **2. Завантажте розширення.** Відкрийте `chrome://extensions`, увімкніть **Developer mode**, натисніть **Load unpacked** і виберіть `~/.tabhelm/app/extension`. Можна також завантажити [`tabhelm-extension.zip`](https://github.com/Ivlad003/tabhelm/releases/latest/download/tabhelm-extension.zip) із сайту й підключити розпаковану папку, але native host із кроку 1 потрібен однаково.
