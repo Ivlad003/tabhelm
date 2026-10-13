@@ -77,6 +77,7 @@
         background: var(--surface); color: var(--text); cursor: pointer;
       }
       .install .note { font-size: 14px; color: var(--muted); margin: 0; }
+      .cmd-label { font-size: 12px; color: var(--muted); margin: 4px 0 -4px; }
       /* Grid items default to min-width: auto; the nowrap command would widen the page. */
       .hero > *, .install > * { min-width: 0; }
 
@@ -164,13 +165,19 @@
 
         <div class="install">
           <h2><span data-lang="en">Install in one command</span><span data-lang="uk">Встановлення однією командою</span></h2>
+          <div class="cmd-label"><span data-lang="en">Linux / macOS (bash)</span><span data-lang="uk">Linux / macOS (bash)</span></div>
           <div class="cmd">
             <code id="cmd">curl -fsSL https://ivlad003.github.io/tabhelm/install.sh | bash</code>
-            <button type="button" id="copy"><span data-lang="en">Copy</span><span data-lang="uk">Копіювати</span></button>
+            <button type="button" class="copy" data-copy="cmd"><span data-lang="en">Copy</span><span data-lang="uk">Копіювати</span></button>
+          </div>
+          <div class="cmd-label"><span data-lang="en">Windows (PowerShell)</span><span data-lang="uk">Windows (PowerShell)</span></div>
+          <div class="cmd">
+            <code id="cmd-win">irm https://ivlad003.github.io/tabhelm/install.ps1 | iex</code>
+            <button type="button" class="copy" data-copy="cmd-win"><span data-lang="en">Copy</span><span data-lang="uk">Копіювати</span></button>
           </div>
           <p class="note">
-            <span data-lang="en">Linux and macOS, Node.js 20+. Installs into <code>~/.tabhelm/app</code>, sets up the native host and prints the folder to load in Chrome.</span>
-            <span data-lang="uk">Linux і macOS, Node.js 20+. Встановлює в <code>~/.tabhelm/app</code>, реєструє native host і показує папку, яку треба завантажити в Chrome.</span>
+            <span data-lang="en">Node.js 20+. Installs into <code>~/.tabhelm/app</code> (<code>%USERPROFILE%\.tabhelm\app</code> on Windows), sets up the native host and prints the folder to load in Chrome.</span>
+            <span data-lang="uk">Node.js 20+. Встановлює в <code>~/.tabhelm/app</code> (<code>%USERPROFILE%\.tabhelm\app</code> на Windows), реєструє native host і показує папку, яку треба завантажити в Chrome.</span>
           </p>
         </div>
       </div>
@@ -222,7 +229,7 @@
         <div class="steps">
           <div class="step">
             <h3><span data-lang="en">Run the installer</span><span data-lang="uk">Запустіть інсталятор</span></h3>
-            <p><span data-lang="en">One command sets up the host and registers it with Chrome, Chromium, Brave and Edge.</span><span data-lang="uk">Одна команда встановлює хост і реєструє його в Chrome, Chromium, Brave та Edge.</span></p>
+            <p><span data-lang="en">One command (bash or PowerShell) sets up the host and registers it with Chrome, Chromium, Brave and Edge.</span><span data-lang="uk">Одна команда (bash або PowerShell) встановлює хост і реєструє його в Chrome, Chromium, Brave та Edge.</span></p>
           </div>
           <div class="step">
             <h3><span data-lang="en">Load the extension</span><span data-lang="uk">Завантажте розширення</span></h3>
@@ -349,10 +356,10 @@
       setLang(initial);
       for (const b of document.querySelectorAll('[data-set-lang]')) b.onclick = () => setLang(b.dataset.setLang);
 
-      document.getElementById('copy').onclick = async (e) => {
+      for (const b of document.querySelectorAll('.copy')) b.onclick = async (e) => {
         const button = e.currentTarget;
         try {
-          await navigator.clipboard.writeText(document.getElementById('cmd').textContent);
+          await navigator.clipboard.writeText(document.getElementById(button.dataset.copy).textContent);
           button.dataset.done = '1';
           const spans = button.querySelectorAll('span');
           const old = [...spans].map((s) => s.textContent);

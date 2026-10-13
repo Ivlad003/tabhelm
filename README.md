@@ -28,13 +28,19 @@ Pick **Claude Code, Codex, Cursor Agent CLI, Google Antigravity, OpenCode, Qoder
 
 ## Quick start
 
-**1. Install** (Linux or macOS, Node.js 20+):
+**1. Install** (Node.js 20+). Linux / macOS:
 
 ```bash
 curl -fsSL https://ivlad003.github.io/tabhelm/install.sh | bash
 ```
 
-The installer downloads the latest release into `~/.tabhelm/app`, installs the native host's dependencies and registers it with Chrome, Chromium, Brave and Edge.
+Windows (PowerShell):
+
+```powershell
+irm https://ivlad003.github.io/tabhelm/install.ps1 | iex
+```
+
+The installer downloads the latest release into `~/.tabhelm/app` (`%USERPROFILE%\.tabhelm\app` on Windows), installs the native host's dependencies and registers it with Chrome, Chromium, Brave and Edge (on Windows through the registry, HKCU).
 
 **2. Load the extension.** Open `chrome://extensions`, turn on **Developer mode**, click **Load unpacked** and choose `~/.tabhelm/app/extension`. You can also download [`tabhelm-extension.zip`](https://github.com/Ivlad003/tabhelm/releases/latest/download/tabhelm-extension.zip) from the website and load the unpacked folder; the native host from step 1 is still required.
 
@@ -464,6 +470,6 @@ Logs: `~/.tabhelm/host.log`. Agents run in `~/.tabhelm/workspace`.
 - Console and network capture starts when the agent first touches a tab.
 - Closing the panel stops the agent; chat history is not kept.
 - Recordings capture only the visible tab and contain no audio.
-- The installer supports Linux and macOS. The Chrome Web Store version is not published yet (the manifest's `key` field must be removed for the store).
+- Windows support is new and less tested than Linux/macOS; the folder picker uses a PowerShell dialog, 1Password needs `op.exe` on PATH, tab audio needs `ffmpeg`/`whisper-cli` or a transcription API. The Chrome Web Store version is not published yet (the manifest's `key` field must be removed for the store).
 
 TabHelm is an independent project and is not affiliated with Google, Anthropic, OpenAI, Cursor, Qoder or xAI.

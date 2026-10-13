@@ -19,7 +19,7 @@ const env = (k) => process.env[k] || readEnvFile()[k] || '';
 
 async function has(cmd) {
   try {
-    await run('which', [cmd]);
+    await run(process.platform === 'win32' ? 'where' : 'which', [cmd]);
     return true;
   } catch {
     return false;

@@ -2,6 +2,11 @@
 
 All notable changes to TabHelm. The newest release is at the top; the panel's update banner links here.
 
+## [0.18.0] - 2026-10-13
+
+### Added
+- **Windows installer:** `irm https://ivlad003.github.io/tabhelm/install.ps1 | iex`. The native host is registered in the registry (HKCU) for Chrome, Edge, Chromium and Brave and started through a `.cmd` wrapper; agents are found via PATHEXT; the folder picker uses a PowerShell dialog; registry agents unpack with `tar`.
+
 ## [0.17.1] - 2026-10-13
 
 ### Fixed
@@ -140,6 +145,7 @@ All notable changes to TabHelm. The newest release is at the top; the panel's up
 ### Added
 - First version: side-panel chat that drives terminal agents over ACP, with browser tools over MCP.
 
+[0.18.0]: https://github.com/Ivlad003/tabhelm/releases/tag/v0.18.0
 [0.17.1]: https://github.com/Ivlad003/tabhelm/releases/tag/v0.17.1
 [0.17.0]: https://github.com/Ivlad003/tabhelm/releases/tag/v0.17.0
 [0.16.0]: https://github.com/Ivlad003/tabhelm/releases/tag/v0.16.0

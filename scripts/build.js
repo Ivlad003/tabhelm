@@ -88,7 +88,7 @@ const zip = join(dist, `tabhelm-extension-${version}.zip`);
 const tgz = join(dist, `tabhelm-${version}.tar.gz`);
 for (const f of [zip, tgz]) if (existsSync(f)) rmSync(f);
 run('zip', ['-qr', zip, '.'], join(out, 'extension'));
-run('tar', ['-czf', tgz, '--exclude', 'node_modules', '--exclude', 'tabhelm-host.sh', '-C', dist, `tabhelm-${version}`]);
+run('tar', ['-czf', tgz, '--exclude', 'node_modules', '--exclude', 'tabhelm-host.sh', '--exclude', 'tabhelm-host.cmd', '-C', dist, `tabhelm-${version}`]);
 cpSync(zip, join(dist, 'tabhelm-extension.zip'));
 cpSync(tgz, join(dist, 'tabhelm.tar.gz'));
 

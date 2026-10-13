@@ -28,13 +28,19 @@
 
 ## Швидкий старт
 
-**1. Встановлення** (Linux або macOS, Node.js 20+):
+**1. Встановлення** (Node.js 20+). Linux / macOS:
 
 ```bash
 curl -fsSL https://ivlad003.github.io/tabhelm/install.sh | bash
 ```
 
-Інсталятор завантажує останній реліз у `~/.tabhelm/app`, ставить залежності native host і реєструє його в Chrome, Chromium, Brave та Edge.
+Windows (PowerShell):
+
+```powershell
+irm https://ivlad003.github.io/tabhelm/install.ps1 | iex
+```
+
+Інсталятор завантажує останній реліз у `~/.tabhelm/app` (`%USERPROFILE%\.tabhelm\app` на Windows), ставить залежності native host і реєструє його в Chrome, Chromium, Brave та Edge (на Windows — через реєстр, HKCU).
 
 **2. Завантажте розширення.** Відкрийте `chrome://extensions`, увімкніть **Developer mode**, натисніть **Load unpacked** і виберіть `~/.tabhelm/app/extension`. Можна також завантажити [`tabhelm-extension.zip`](https://github.com/Ivlad003/tabhelm/releases/latest/download/tabhelm-extension.zip) із сайту й підключити розпаковану папку, але native host із кроку 1 потрібен однаково.
 
@@ -464,6 +470,6 @@ npm run install-host           # зареєструвати хост для ці
 - Console і network збираються з моменту, коли агент уперше звернувся до вкладки.
 - Якщо закрити панель, агент зупиняється, а історія чату не зберігається.
 - Запис охоплює лише видиму вкладку й не містить звуку.
-- Інсталятор підтримує Linux і macOS. У Chrome Web Store розширення ще не опубліковане: для магазину з manifest треба прибрати поле `key`.
+- Підтримка Windows нова й перевірена менше за Linux/macOS; вибір папки йде через діалог PowerShell, 1Password потребує `op.exe` у PATH, звук вкладки — `ffmpeg`/`whisper-cli` або API транскрипції. У Chrome Web Store розширення ще не опубліковане: для магазину з manifest треба прибрати поле `key`.
 
 TabHelm — незалежний проєкт, не пов'язаний із Google, Anthropic, OpenAI, Cursor, Qoder чи xAI.

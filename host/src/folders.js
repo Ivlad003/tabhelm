@@ -26,6 +26,9 @@ export function pickFolder() {
         res(stdout.trim());
       }),
     );
+  if (process.platform === 'win32') {
+    return run('powershell', ['-NoProfile', '-STA', '-Command', "Add-Type -AssemblyName System.Windows.Forms; $d = New-Object System.Windows.Forms.FolderBrowserDialog; $d.Description = 'Choose a folder for TabHelm'; if ($d.ShowDialog() -eq 'OK') { $d.SelectedPath }"]).then((p) => p || null).catch(cancelledOrMissing);
+  }
   if (process.platform === 'darwin') {
     return run('osascript', ['-e', 'POSIX path of (choose folder with prompt "Choose a folder for TabHelm")']).catch(cancelledOrMissing);
   }

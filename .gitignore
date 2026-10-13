@@ -1,4 +1,5 @@
 node_modules/
 host/tabhelm-host.sh
+host/tabhelm-host.cmd
 .DS_Store
 dist/

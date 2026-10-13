@@ -129,7 +129,10 @@ export const AGENTS = [
 ];
 
 function findExecutable(command) {
-  const candidates = isAbsolute(command) ? [command] : (process.env.PATH || '').split(delimiter).filter(Boolean).map((d) => join(d, command));
+  // On Windows a bare name may be foo.exe / foo.cmd / foo.bat.
+  const exts = process.platform === 'win32' && !/\.[a-z0-9]+$/i.test(command) ? (process.env.PATHEXT || '.EXE;.CMD;.BAT').split(';') : [''];
+  const names = exts.map((e) => command + e);
+  const candidates = isAbsolute(command) ? names : (process.env.PATH || '').split(delimiter).filter(Boolean).flatMap((d) => names.map((n) => join(d, n)));
   for (const path of candidates) {
     try {
       accessSync(path, constants.X_OK);

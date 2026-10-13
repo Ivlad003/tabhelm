@@ -64,18 +64,19 @@ if (binary) {
   const res = await fetch(target.archive);
   if (!res.ok) throw new Error(`Download failed: HTTP ${res.status}`);
   writeFileSync(archive, Buffer.from(await res.arrayBuffer()));
-  if (ext === '.zip') execFileSync('unzip', ['-q', '-o', archive, '-d', dir]);
-  else execFileSync('tar', [ext === '.tar.bz2' ? '-xjf' : '-xzf', archive, '-C', dir]);
+  // tar (bundled with Windows 10+, macOS and Linux) also unpacks zip archives.
+  if (ext === '.zip' && process.platform !== 'win32') execFileSync('unzip', ['-q', '-o', archive, '-d', dir]);
+  else execFileSync('tar', [ext === '.tar.bz2' ? '-xjf' : '-xf', archive, '-C', dir]);
   rmSync(archive);
   const command = join(dir, target.cmd);
-  chmodSync(command, 0o755);
+  if (process.platform !== 'win32') chmodSync(command, 0o755);
   launch = { command, args: target.args || [] };
 } else if (npx) {
   const pkgName = npx.package.replace(/(.)@[^@/]+$/, '$1');
   const spec = process.argv.includes('--pinned') ? npx.package : `${pkgName}@latest`;
   console.log(`npm install ${spec}`);
   writeFileSync(join(dir, 'package.json'), '{"private": true}\n');
-  execFileSync('npm', ['install', '--no-audit', '--no-fund', '--loglevel=error', spec], { cwd: dir, stdio: 'inherit' });
+  execFileSync(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['install', '--no-audit', '--no-fund', '--loglevel=error', spec], { cwd: dir, stdio: 'inherit', shell: process.platform === 'win32' });
   // Pick the package's command: the one named like the package, else the first.
   const pkg = JSON.parse(readFileSync(join(dir, 'node_modules', pkgName, 'package.json'), 'utf8'));
   const bins = typeof pkg.bin === 'string' ? { [pkgName.split('/').pop()]: pkg.bin } : pkg.bin || {};

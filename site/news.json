@@ -1,6 +1,20 @@
 {
   "news": [
     {
+      "id": "2026-10-windows",
+      "date": "2026-10-13",
+      "minVersion": "0.18.0",
+      "title": {
+        "en": "Windows installer",
+        "uk": "Інсталятор для Windows"
+      },
+      "text": {
+        "en": "In PowerShell: irm https://ivlad003.github.io/tabhelm/install.ps1 | iex — then Load unpacked from %USERPROFILE%\\.tabhelm\\app\\extension.",
+        "uk": "У PowerShell: irm https://ivlad003.github.io/tabhelm/install.ps1 | iex — далі Load unpacked з %USERPROFILE%\\.tabhelm\\app\\extension."
+      },
+      "url": "https://github.com/Ivlad003/tabhelm#quick-start"
+    },
+    {
       "id": "2026-10-simpler-panel",
       "date": "2026-10-13",
       "minVersion": "0.17.0",
