@@ -607,7 +607,11 @@ select:focus,
 .settings-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 6px;
+}
+
+.settings-head h2 {
+  flex: 1;
 }
 
 .settings h2 {
@@ -1039,8 +1043,15 @@ input[type='checkbox'] {
   color: var(--muted);
 }
 
-.history-item .banner-close {
-  margin-top: 8px;
+.history-item .history-delete {
+  margin-top: 4px;
+  padding: 2px 6px;
+}
+
+.history-item .history-delete:hover,
+.btn.danger:hover {
+  color: var(--th-error, #b42318);
+  border-color: var(--th-error, #b42318);
 }
 
 .tabs-row .tab-line {

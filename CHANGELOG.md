@@ -2,6 +2,11 @@
 
 All notable changes to TabHelm. The newest release is at the top; the panel's update banner links here.
 
+## [0.19.4] - 2026-10-13
+
+### Added
+- History: 🗑 deletes one chat (with confirmation) and *Clear all* removes every saved chat except the one that is open.
+
 ## [0.19.3] - 2026-10-13
 
 ### Fixed

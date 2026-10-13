@@ -14,6 +14,7 @@ export function initHistory({ open, export: exp }) {
   $('history-open').onclick = () => toggle(true);
   $('history-close').onclick = () => toggle(false);
   $('history-search').oninput = render;
+  $('history-clear').onclick = clearHistory;
 }
 
 export function setCurrentChat(id) {
@@ -56,6 +57,17 @@ async function deleteChat(id) {
   const { chatIndex = [] } = await chrome.storage.local.get('chatIndex');
   await chrome.storage.local.set({ chatIndex: chatIndex.filter((c) => c.id !== id) });
   await chrome.storage.local.remove(`chat:${id}`);
+  render();
+}
+
+// Everything except the chat that is open right now (its journal is still in memory).
+async function clearHistory() {
+  const { chatIndex = [] } = await chrome.storage.local.get('chatIndex');
+  const gone = chatIndex.filter((c) => c.id !== currentId);
+  if (!gone.length) return;
+  if (!confirm(`Delete ${gone.length} saved chat${gone.length === 1 ? '' : 's'}? Exported files are not affected.`)) return;
+  await chrome.storage.local.set({ chatIndex: chatIndex.filter((c) => c.id === currentId) });
+  await chrome.storage.local.remove(gone.map((c) => `chat:${c.id}`));
   render();
 }
 
@@ -107,6 +119,7 @@ async function render() {
     }),
   );
   $('history-empty').hidden = list.length > 0;
+  $('history-clear').hidden = !chatIndex.length;
   $('history-list').replaceChildren(
     ...list.map((c) => {
       const li = document.createElement('li');
@@ -130,9 +143,11 @@ async function render() {
       md.onclick = () => onExport(c, 'md');
       const js = Object.assign(document.createElement('button'), { className: 'btn small history-export-json', textContent: '{ }', title: 'Export: full log (.json)' });
       js.onclick = () => onExport(c, 'json');
-      const del = Object.assign(document.createElement('button'), { className: 'banner-close', textContent: '×', title: 'Delete this chat' });
+      const del = Object.assign(document.createElement('button'), { className: 'btn small history-delete', textContent: '🗑', title: 'Delete this chat' });
       del.setAttribute('aria-label', `Delete chat ${c.title}`);
-      del.onclick = () => deleteChat(c.id);
+      del.onclick = () => {
+        if (confirm(`Delete the chat “${c.title}”?`)) deleteChat(c.id);
+      };
       li.append(open, md, js, del);
       return li;
     }),
