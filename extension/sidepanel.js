@@ -1,4 +1,5 @@
 import { showNews } from './news.js';
+import { renderMarkdown } from './markdown.js';
 import { initSettings, handleSettingsMessage, hostVersionMismatch, skillPayload, slashSkills, onFeaturesChanged, setAgents } from './settings.js';
 import { getFeatures } from './features.js';
 import { initVoice, handleVoiceMessage, stop as stopVoice } from './voice.js';
@@ -1498,31 +1499,6 @@ function scrollDown() {
 
 function truncate(s = '', n) {
   return s.length > n ? `${s.slice(0, n)}…` : s;
-}
-
-function escapeHtml(s) {
-  return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-}
-
-// Small, escape-first Markdown subset: code fences, inline code, bold, links, paragraphs.
-function renderMarkdown(src) {
-  const parts = src.split(/```[^\n]*\n?/);
-  return parts
-    .map((part, i) => {
-      if (i % 2 === 1) return `<pre><code>${escapeHtml(part.replace(/\n$/, ''))}</code></pre>`;
-      return escapeHtml(part)
-        .split(/\n{2,}/)
-        .filter((p) => p.trim())
-        .map((p) =>
-          `<p>${p
-            .replace(/`([^`]+)`/g, '<code>$1</code>')
-            .replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>')
-            .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
-            .replace(/\n/g, '<br>')}</p>`,
-        )
-        .join('');
-    })
-    .join('');
 }
 
 syncControls();

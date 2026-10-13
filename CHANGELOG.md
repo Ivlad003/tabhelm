@@ -2,6 +2,11 @@
 
 All notable changes to TabHelm. The newest release is at the top; the panel's update banner links here.
 
+## [0.19.2] - 2026-10-13
+
+### Fixed
+- Agent replies render full Markdown: headings, nested and numbered lists, task lists, block quotes, tables, rules, italics and bare links (previously only paragraphs, bold, code and links).
+
 ## [0.19.1] - 2026-10-13
 
 ### Fixed
