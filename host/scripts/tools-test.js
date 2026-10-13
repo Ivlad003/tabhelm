@@ -126,6 +126,12 @@ check('snapshot lists hidden file input', /hidden file inputs[\s\S]*file-input/.
 
 let found = await tool('browser_find', { text: 'Hover me' });
 check('find returns a ref', /\[e\d+\]/.test(found.text), found.text);
+check('find highlights the match on the page', await page.evaluate(() => Boolean(document.getElementById('tabhelm-highlight')?.shadowRoot?.querySelector('.box'))));
+await sw.evaluate(() => chrome.storage.local.set({ highlightFinds: false }));
+await page.evaluate(() => document.getElementById('tabhelm-highlight')?.remove());
+found = await tool('browser_find', { text: 'Hover me' });
+check('find highlight can be switched off', !(await page.evaluate(() => document.getElementById('tabhelm-highlight'))));
+await sw.evaluate(() => chrome.storage.local.set({ highlightFinds: true }));
 
 // --- Mouse
 let r = await tool('browser_hover', { ref: refFor(found.text, 'Hover me') });

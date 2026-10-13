@@ -68,7 +68,7 @@ To update, run the install command again (it stops a running host first), then p
 | **Auto-approve** | Lets the agent use tools without asking. Uploads, JavaScript, other tabs and the experimental gates still ask. |
 | **Send / Stop** | Sends a message (and starts the agent if needed); while the agent works, the button cancels the turn. |
 | **History** | Saved chats — open one to continue it (its page opens too), export it (⬇ Markdown, `{ }` JSON) or delete it (🗑, **Clear all**). |
-| **Settings** | Skills (links and, with the flag, skills written here), model options, experimental features, version and updates. |
+| **Settings** | Skills (links and, with the flag, skills written here), model options, page options (highlight finds), experimental features, version and updates. |
 | **New chat** | Clears the chat and starts a fresh session with the same agent and model. |
 
 ### Approvals
@@ -116,6 +116,10 @@ Every chat is saved on your computer (messages, steps, stats, the page, agent an
 To continue, connect any agent — it gets the whole conversation with your next message. Closing and reopening the panel on a tab restores that tab's chat. 🗑 deletes one chat and **Clear all** deletes every saved chat except the open one (both ask first); up to 200 are kept.
 
 Chrome wipes an extension's storage when the extension is removed, so the host keeps a copy of the panel's data (chats, settings, skills, flags — never secrets) in `~/.tabhelm/state.json`, written a few seconds after every change. An extension that starts with empty storage restores from it, so reinstalling with *Load unpacked* keeps your history.
+
+### Highlight finds
+
+When the agent searches the page (`browser_find` — "find the price", "where is the login button"), every match is outlined on the page with the search text for a few seconds and the first one is scrolled into view, so you see what the agent found. **Settings → Page → Highlight what the agent finds** switches it off; the agent's own `browser_highlight` (Developer tools flag) is not affected.
 
 ### Working folder (project)
 

@@ -27,6 +27,9 @@ export async function initSettings(panelPort) {
     addSkill($('skill-url').value.trim());
   };
   $('check-updates').onclick = checkUpdates;
+  const hl = $('highlight-finds');
+  hl.checked = (await chrome.storage.local.get('highlightFinds')).highlightFinds !== false;
+  hl.onchange = () => chrome.storage.local.set({ highlightFinds: hl.checked });
   const examples = $('skill-examples');
   for (const ex of EXAMPLES) {
     const a = Object.assign(document.createElement('a'), { href: ex.url, textContent: ex.label });

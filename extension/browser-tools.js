@@ -559,6 +559,13 @@ async function runPageTool(tabId, tab, tool, args, ui, chatTabId) {
     case 'browser_find': {
       const frames = await injectAll(tabId, P.findInPage, [args.text, 25]);
       const lines = frames.flatMap((f) => (f.frameId === 0 ? f.result.lines : f.result.lines.map((l) => l.replace(/^\[(e\d+)\]/, `[f${f.frameId}:$1]`))));
+      // Show the user what was found (Settings → Page → Highlight finds).
+      if (lines.length && (await chrome.storage.local.get('highlightFinds')).highlightFinds !== false) {
+        for (const f of frames) {
+          const refs = f.result.lines.map((l) => l.match(/^\[(e\d+)\]/)?.[1]).filter(Boolean);
+          if (refs.length) await inject(tabId, P.highlightRefs, [refs, args.text, f.frameId === 0], f.frameId).catch(() => {});
+        }
+      }
       return { content: text(lines.length ? lines.join('\n') : `No visible element contains "${args.text}".`), label: `"${args.text}": ${lines.length} found` };
     }
 

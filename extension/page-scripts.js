@@ -423,10 +423,17 @@ export function showPointer(x, y, kind) {
   return {};
 }
 
-// Outlines ref'd elements with a label for a few seconds (browser_highlight).
-export function highlightRefs(refs, label) {
+// Outlines ref'd elements with a label for a few seconds (browser_highlight, and
+// browser_find results when "Highlight finds" is on). With scroll, the first
+// element is brought into view first so the user actually sees it.
+export function highlightRefs(refs, label, scroll) {
   const ID = 'tabhelm-highlight';
   document.getElementById(ID)?.remove();
+  if (scroll) {
+    const first = refs.map((r) => window.__tabhelm?.refs.get(r)).find((el) => el?.isConnected);
+    const r = first?.getBoundingClientRect();
+    if (r && (r.bottom < 0 || r.top > innerHeight)) first.scrollIntoView({ block: 'center', inline: 'nearest' });
+  }
   const host = document.createElement('div');
   host.id = ID;
   host.setAttribute('data-tabhelm-overlay', '');

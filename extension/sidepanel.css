@@ -1491,3 +1491,15 @@ button.chip:hover {
   max-width: 100%;
   border-radius: 6px;
 }
+
+.settings label.check {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  font-size: 13px;
+  margin: 4px 0 8px;
+}
+
+.settings label.check input {
+  margin-top: 3px;
+}

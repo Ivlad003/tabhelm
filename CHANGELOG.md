@@ -2,6 +2,11 @@
 
 All notable changes to TabHelm. The newest release is at the top; the panel's update banner links here.
 
+## [0.20.0] - 2026-10-13
+
+### Added
+- **Highlight finds:** when the agent searches the page (`browser_find`), the matches are outlined on the page for a few seconds and the first one is scrolled into view. Switch it off in Settings → Page.
+
 ## [0.19.4] - 2026-10-13
 
 ### Added
