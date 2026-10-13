@@ -904,10 +904,11 @@ async function runPageTool(tabId, tab, tool, args, ui, chatTabId) {
       await inject(tabId, P.guideHide, [], loc.frameId).catch(() => {});
       ui.resolveAsks(chatTabId, { done: status === 'clicked' || status === 'done' || status === 'navigated' });
       if (panelReply?.cancelled) throw new Error('The user stopped the guide.');
-      const outcome = panelReply?.skip || status === 'skipped' ? 'skipped' : status === 'navigated' ? 'clicked' : status === 'done' || panelReply?.done ? 'done' : status;
+      const outcome = panelReply?.back || status === 'back' ? 'back' : panelReply?.skip || status === 'skipped' ? 'skipped' : status === 'navigated' ? 'clicked' : status === 'done' || panelReply?.done ? 'done' : status;
       const nav = status === 'navigated' ? ' The page changed afterwards.' : '';
       const label = `step ${args.step || ''} “${shown.label}” → ${outcome}`.replace(/\s+/g, ' ');
       if (outcome === 'skipped') return { content: text(`The user skipped this step (${shown.label}). Continue with the next step or ask what they need.`), label };
+      if (outcome === 'back') return { content: text(`The user pressed Back: show the previous step again (call browser_guide with step ${Math.max(1, (args.step || 2) - 1)}, its element and its instruction; snapshot first if the page changed), then continue from there.`), label };
       return { content: text(`The user ${outcome === 'clicked' ? 'clicked' : 'completed'} “${shown.label}”.${nav} Take a new browser_snapshot before the next step.`), label };
     }
 

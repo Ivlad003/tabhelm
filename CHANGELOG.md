@@ -2,6 +2,11 @@
 
 All notable changes to TabHelm. The newest release is at the top; the panel's update banner links here.
 
+## [0.22.1] - 2026-10-13
+
+### Added
+- Guide steps have a **← Back** button (from step 2 on) that asks the agent to show the previous step again.
+
 ## [0.22.0] - 2026-10-13
 
 ### Added

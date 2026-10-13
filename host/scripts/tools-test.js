@@ -148,6 +148,11 @@ await sw.evaluate(() => chrome.storage.local.set({ highlightFinds: true }));
   await page.evaluate(() => [...document.getElementById('tabhelm-guide').shadowRoot.querySelectorAll('button')].find((b) => b.textContent === 'Skip').click());
   const sk = await skipRun;
   check('guide Skip button on the page', sk.ok && /skipped/.test(sk.text), sk.text);
+  const backRun = tool('browser_guide', { ref: refFor(found.text, 'Hover me'), text: 'Go back from here', step: 3 });
+  await page.waitForFunction(() => document.getElementById('tabhelm-guide'), { timeout: 5000 });
+  await page.evaluate(() => [...document.getElementById('tabhelm-guide').shadowRoot.querySelectorAll('button')].find((b) => b.textContent.includes('Back')).click());
+  const bk = await backRun;
+  check('guide Back button asks for the previous step', bk.ok && /previous step again .*step 2/.test(bk.text), bk.text);
 }
 
 // --- skill_save: stored as an authored skill, flag switched on

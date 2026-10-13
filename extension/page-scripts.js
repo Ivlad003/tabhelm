@@ -553,6 +553,14 @@ export function guideShow(ref, text, step) {
   skip.className = 'ghost';
   skip.textContent = 'Skip';
   skip.onclick = () => finish('skipped');
+  if (step > 1) {
+    const back = document.createElement('button');
+    back.className = 'ghost';
+    back.textContent = '← Back';
+    back.title = 'Show the previous step again';
+    back.onclick = () => finish('back');
+    row.append(back);
+  }
   row.append(done, skip);
   bubble.append(head, body, row);
   root.append(ring, arrow, bubble);

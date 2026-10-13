@@ -1058,6 +1058,11 @@ async function addAsk(msg) {
     skip.onclick = () => reply({ skip: true }, 'Skipped');
     const stop = Object.assign(document.createElement('button'), { className: 'btn', textContent: 'Stop guide' });
     stop.onclick = () => reply(null, 'Stopped');
+    if (msg.step > 1) {
+      const back = Object.assign(document.createElement('button'), { className: 'btn', textContent: '← Back', title: 'Show the previous step again' });
+      back.onclick = () => reply({ back: true }, 'Back');
+      options.append(back);
+    }
     options.append(done, skip, stop);
     card.append(title, hint, options);
     askCards.set(msg.id, (label) => {
