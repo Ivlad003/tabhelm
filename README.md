@@ -49,7 +49,7 @@ To update, run the install command again.
 | Area | What it does |
 |---|---|
 | Agent list | The agent for this chat; it starts when you send the first message. Agents that are not installed are shown disabled, with an install hint. Changing the agent mid-chat hands the conversation over. |
-| Model | Appears next to the agent once it is connected (the list comes from the agent itself); effort and other options are in **Settings → Model options**. Your choice is remembered per agent. |
+| Model | Next to the agent. Before the agent is connected it shows your last choice; clicking it connects the agent and loads its full model list. The same list plus effort and other options are in **Settings → Model options**. Your choice is remembered per agent. |
 | Chips | Shown only when needed: 🗂 the tab the agent is on when it is not this one / how many tabs are shared; 📁 the working folder. |
 | Chat | Agent replies, collapsible *Thinking*, plans, and the agent's steps (`↳ Click "Save"`, tool search, …) grouped into one scrollable **Steps** block per run. |
 | **＋ menu** | Everything optional in one place: attach files (or drop / paste them), voice message and tab audio (Voice feature), record video, share tabs (tab group), choose / change / remove the working folder. |

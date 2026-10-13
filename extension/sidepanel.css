@@ -1381,3 +1381,24 @@ button.chip:hover {
   margin: 10px 0 4px;
   color: var(--muted);
 }
+
+.model-placeholder {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  text-align: left;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--th-radius-s);
+  background: var(--bg);
+  color: var(--muted);
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model-placeholder:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}

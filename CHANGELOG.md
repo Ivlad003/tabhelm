@@ -2,6 +2,11 @@
 
 All notable changes to TabHelm. The newest release is at the top; the panel's update banner links here.
 
+## [0.17.1] - 2026-10-13
+
+### Fixed
+- The model is visible before the agent is connected (last choice; clicking it connects and loads the list) and can also be changed in Settings → Model options.
+
 ## [0.17.0] - 2026-10-13
 
 ### Changed
@@ -135,6 +140,7 @@ All notable changes to TabHelm. The newest release is at the top; the panel's up
 ### Added
 - First version: side-panel chat that drives terminal agents over ACP, with browser tools over MCP.
 
+[0.17.1]: https://github.com/Ivlad003/tabhelm/releases/tag/v0.17.1
 [0.17.0]: https://github.com/Ivlad003/tabhelm/releases/tag/v0.17.0
 [0.16.0]: https://github.com/Ivlad003/tabhelm/releases/tag/v0.16.0
 [0.15.0]: https://github.com/Ivlad003/tabhelm/releases/tag/v0.15.0

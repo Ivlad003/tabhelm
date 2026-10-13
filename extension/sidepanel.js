@@ -222,6 +222,7 @@ async function fillAgents(agents) {
     }),
   );
   if (!installed.length) els.agent.prepend(new Option('No agents found on PATH', '', true, true));
+  showModelPlaceholder();
 
   // Tell the user how to add the missing ones.
   const missing = agents.filter((a) => !a.installed);
@@ -267,10 +268,8 @@ function onStatus(msg) {
   } else {
     connected = false;
     endTurn(null, busy ? msg.detail || 'the agent exited' : null);
-    els.config.hidden = true;
-    els.config.replaceChildren();
-    $('config-extra').replaceChildren(Object.assign(document.createElement('span'), { className: 'hint', textContent: 'Effort and other options appear here once an agent is connected.' }));
     setStatus('idle', 'Not connected');
+    showModelPlaceholder();
     if (msg.detail) notice(msg.detail, true);
   }
   syncControls();
@@ -375,6 +374,25 @@ port.postMessage({ type: 'group_info' });
 
 // ---------- Model & effort ----------
 
+// Before the agent is connected the model list is not known yet: show the last
+// choice for this agent; using the control connects the agent to load the list.
+async function showModelPlaceholder() {
+  if (connected || starting) return;
+  const saved = (await chrome.storage.local.get(prefsKey()))[prefsKey()] || {};
+  const name = saved.modelName || saved.model || 'default model';
+  els.config.replaceChildren();
+  const b = Object.assign(document.createElement('button'), { type: 'button', className: 'model-placeholder', textContent: `${name} ▾` });
+  b.title = 'Model (last used). Click to connect the agent and choose from all its models.';
+  b.onclick = () => {
+    if (!els.agent.value) return;
+    notice(`Connecting ${els.agent.selectedOptions[0]?.text} to load its models…`);
+    startAgent(els.agent.value);
+  };
+  els.config.append(b);
+  els.config.hidden = false;
+  $('config-extra').replaceChildren(Object.assign(document.createElement('span'), { className: 'hint', textContent: `Model: ${name} (last used). Send a message or click the model next to the agent to connect and see all models and options.` }));
+}
+
 const prefsKey = () => `prefs:${els.agent.value}`;
 
 async function renderConfig(options) {
@@ -398,7 +416,7 @@ async function renderConfig(options) {
     if (changed) return;
   }
 
-  for (const opt of options) {
+  const makeSelect = (opt) => {
     const select = document.createElement('select');
     select.className = opt.category;
     select.title = opt.name;
@@ -412,18 +430,19 @@ async function renderConfig(options) {
       select.disabled = true;
       port.postMessage({ type: 'set_config', configId: opt.id, value: select.value });
       const saved = (await chrome.storage.local.get(prefsKey()))[prefsKey()] || {};
-      chrome.storage.local.set({ [prefsKey()]: { ...saved, [opt.id]: select.value } });
+      chrome.storage.local.set({ [prefsKey()]: { ...saved, [opt.id]: select.value, [`${opt.id}Name`]: select.selectedOptions[0]?.text } });
     };
+    return select;
+  };
+  for (const opt of options) {
+    const select = makeSelect(opt);
+    // The model sits next to the agent; every option (model included) is also in Settings → Model options.
     if (opt.category === 'model') els.config.append(select);
-    else {
-      // Effort and other options live in Settings → Model options.
-      const extra = $('config-extra');
-      if (!extra.querySelector('select')) extra.replaceChildren();
-      const wrap = document.createElement('label');
-      wrap.className = 'field';
-      wrap.append(Object.assign(document.createElement('span'), { textContent: opt.name }), select);
-      extra.append(wrap);
-    }
+    const extra = $('config-extra');
+    const wrap = document.createElement('label');
+    wrap.className = 'field';
+    wrap.append(Object.assign(document.createElement('span'), { textContent: opt.name }), makeSelect(opt));
+    extra.append(wrap);
     if (opt.category === 'model') {
       const model = select.selectedOptions[0]?.text;
       if (model && model !== currentModel) record('model', { agent: connectedAgent?.name, model });
@@ -686,6 +705,7 @@ window.tabhelmTest = {
 
 els.agent.onchange = () => {
   chrome.storage.local.set({ lastAgent: els.agent.value });
+  if (!connected) showModelPlaceholder();
   if (!connected || busy) return;
   const name = els.agent.selectedOptions[0]?.text;
   const hasHistory = journal.some((e) => e.type === 'user');

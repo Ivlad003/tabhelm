@@ -288,6 +288,16 @@ await panel.waitForFunction(() => document.querySelectorAll('#agent option[value
 console.log('agents:', await panel.$$eval('#agent option', (o) => o.map((x) => x.value).join(',')));
 await panel.select('#agent', agent);
 await panel.click('#auto');
+// Before connecting, the model control shows the last choice and connects on click.
+if (process.env.E2E_MODEL_PLACEHOLDER) {
+  await panel.waitForSelector('.model-placeholder', { timeout: 10000 });
+  console.log('placeholder:', await panel.$eval('.model-placeholder', (e) => e.textContent));
+  await panel.screenshot({ path: join(profile, 'panel-before.png') });
+  await panel.click('.model-placeholder');
+  await panel.waitForSelector('#config select.model', { timeout: 60000 });
+  const inSettings = await panel.$$eval('#config-extra select.model', (s) => s.length);
+  console.log('model select after click:', await panel.$eval('#config select.model', (e) => e.selectedOptions[0].text), '| also in Settings:', inSettings === 1);
+}
 // E2E_LAZY=1: no explicit connect — the first Send starts the agent.
 if (process.env.E2E_LAZY) {
   await panel.type('#input', 'Fill this form: name "Ada Lovelace", color Blue, tick the agreement checkbox, then click Save and tell me the exact confirmation text shown.');
