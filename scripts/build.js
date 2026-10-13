@@ -55,7 +55,7 @@ writeFileSync(spPath, spStripped);
 
 const bgPath = join(out, 'extension/background.js');
 const bg = readFileSync(bgPath, 'utf8');
-const stripped = bg.replace(/\n\/\/ Dev hook for scripts\/tools-test\.js[^\n]*\nself\.tabhelmDebug = \{ runTool, ensureGroup, chatDebugState, runSchedule: \(id\) => runScheduled\(id, scheduleDeps\) \};\n/, '\n');
+const stripped = bg.replace(/\n\/\/ Dev hook for scripts\/tools-test\.js[^\n]*\nself\.tabhelmDebug = \{[^\n]*\};\n/, '\n');
 if (stripped === bg) throw new Error('Debug hook not found in background.js; update scripts/build.js');
 writeFileSync(bgPath, stripped);
 

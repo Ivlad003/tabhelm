@@ -2,7 +2,7 @@ import { showNews } from './news.js';
 import { initSettings, handleSettingsMessage, hostVersionMismatch, skillPayload, slashSkills, onFeaturesChanged, setAgents } from './settings.js';
 import { getFeatures } from './features.js';
 import { initVoice, handleVoiceMessage, stop as stopVoice } from './voice.js';
-import { initAttachments, takeAttachments, hasAttachments, chip } from './attachments.js';
+import { initAttachments, takeAttachments, hasAttachments, chip, addQuote, addImageUrl } from './attachments.js';
 import { initFolder, currentFolder, handleFolderMessage, updateFolderWarning, restoreFolder } from './folder.js';
 import { initHistory, saveChat, loadChat, newChatId, setCurrentChat, closeHistory } from './history.js';
 
@@ -152,6 +152,12 @@ function onMessage(msg) {
       break;
     case 'paused':
       setPaused(msg.paused);
+      break;
+    case 'page_context':
+      // Selection or image sent from the page (context menu, shortcut, + menu).
+      if (msg.kind === 'image') addImageUrl(msg.srcUrl, msg.pageUrl);
+      else addQuote({ text: msg.text, pageUrl: msg.pageUrl, pageTitle: msg.pageTitle });
+      els.input.focus();
       break;
     case 'confirm':
       addConfirm(msg);
@@ -865,7 +871,14 @@ async function send() {
   if ((!text && !hasAttachments()) || busy) return;
   $('slash-menu').hidden = true;
   if (text.startsWith('/')) text = expandSlash(text);
-  const attachments = takeAttachments();
+  let attachments = takeAttachments();
+  // Quotes from the page travel inside the message text, with their source.
+  const quotes = attachments.filter((a) => a.kind === 'quote');
+  attachments = attachments.filter((a) => a.kind !== 'quote');
+  if (quotes.length) {
+    const block = quotes.map((q) => `[Selected on the page${q.source?.url ? ` ${q.source.url}` : ''}]\n${q.text.split('\n').map((l) => `> ${l}`).join('\n')}`).join('\n\n');
+    text = text ? `${text}\n\n${block}` : `${block}\n\nLet's discuss this.`;
+  }
   if (!text) text = 'Please look at the attached file(s).';
   els.input.value = '';
   // No Connect button: the first message starts the agent and is sent when it is ready.
@@ -1236,6 +1249,12 @@ function exportMarkdown(tab, entries = journal) {
       break;
     case 'paused':
       setPaused(msg.paused);
+      break;
+    case 'page_context':
+      // Selection or image sent from the page (context menu, shortcut, + menu).
+      if (msg.kind === 'image') addImageUrl(msg.srcUrl, msg.pageUrl);
+      else addQuote({ text: msg.text, pageUrl: msg.pageUrl, pageTitle: msg.pageTitle });
+      els.input.focus();
       break;
     case 'confirm':
         out.push(`- ${t} 🔐 ${e.title} → ${e.answer}${e.detail ? ` (${e.detail.replace(/\n/g, ', ')})` : ''}`);
@@ -1637,6 +1656,12 @@ function replayChat(chat) {
     case 'paused':
       setPaused(msg.paused);
       break;
+    case 'page_context':
+      // Selection or image sent from the page (context menu, shortcut, + menu).
+      if (msg.kind === 'image') addImageUrl(msg.srcUrl, msg.pageUrl);
+      else addQuote({ text: msg.text, pageUrl: msg.pageUrl, pageTitle: msg.pageTitle });
+      els.input.focus();
+      break;
     case 'confirm':
         notice(`🔐 ${e.title} → ${e.answer}`);
         break;
@@ -1671,6 +1696,19 @@ function replayChat(chat) {
   const active = fromHistory || (await chrome.storage.session.get(`activeChat:${tabId}`))[`activeChat:${tabId}`];
   if (active) openSavedChat(active);
 })();
+
+$('add-selection').onclick = async () => {
+  $('plus-menu').open = false;
+  const tab = await chrome.tabs.get(targetTabId).catch(() => null);
+  try {
+    const [r] = await chrome.scripting.executeScript({ target: { tabId: targetTabId }, func: () => window.getSelection()?.toString() || '' });
+    addQuote({ text: r?.result, pageUrl: tab?.url, pageTitle: tab?.title });
+    els.input.focus();
+  } catch (err) {
+    notice(`Cannot read the selection on this page: ${err.message}`, true);
+  }
+};
+port.postMessage({ type: 'page_context_pending' });
 
 initAttachments({
   list: $('attachments'),

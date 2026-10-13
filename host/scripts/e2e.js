@@ -10,6 +10,7 @@
 // E2E_FAILOVER=<agentId> kills the first agent mid-task, continues with <agentId>
 // via the panel's "Continue with" card, then checks the Markdown export;
 // E2E_NEWS=1 only checks the update/news banner against a local feed;
+// E2E_CONTEXT=1 sends a page selection and an image to the chat (context menu path) and checks the agent sees them;
 // E2E_SKILLS=1 adds a skill in Settings and checks the agent reads and follows it;
 // E2E_ATTACH=1 attaches an image and a CSV and checks the agent reads both;
 // E2E_FOLDER=1 binds a project folder (AGENTS.md + skill) and checks the agent works in it;
@@ -56,6 +57,7 @@ const server = http
     if (q.url === '/skills/signup-secret/SKILL.md') return r.writeHead(200, { 'content-type': 'text/markdown' }).end(SKILL);
     if (q.url.startsWith('/skills/')) return r.writeHead(404).end('not found');
     if (q.url === '/contacts') return r.writeHead(200, { 'content-type': 'text/html' }).end('<title>Contacts</title><h1>Contacts</h1><p>Name: Grace Hopper</p><p>Email: grace@navy.example</p>');
+    if (q.url === '/pic.png') return r.writeHead(200, { 'content-type': 'image/png' }).end(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64'));
     r.writeHead(200, { 'content-type': 'text/html' }).end(PAGE);
   })
   .listen(0, '127.0.0.1');
@@ -221,6 +223,31 @@ if (process.env.E2E_ATTACH) {
   await panel.screenshot({ path: join(profile, 'panel.png') });
   console.log('panel screenshot:', join(profile, 'panel.png'));
   const ok = sentChips === 2 && sumOk && (wordOk || process.env.E2E_ATTACH === 'text-only');
+  console.log(ok ? 'E2E PASS' : 'E2E FAIL');
+  await browser.close();
+  server.close();
+  process.exit(ok ? 0 : 1);
+}
+
+if (process.env.E2E_CONTEXT) {
+  // Simulate the context-menu actions on the chat tab.
+  const tabInfo = await sw.evaluate((id) => chrome.tabs.get(id), tabId);
+  await sw.evaluate((tab) => self.tabhelmDebug.sendPageContext(tab, { kind: 'selection', text: 'The quick emerald helm turns the tab' }), tabInfo);
+  await sw.evaluate((tab, u) => self.tabhelmDebug.sendPageContext(tab, { kind: 'image', srcUrl: `${u}pic.png` }), tabInfo, url);
+  await panel.waitForFunction(() => document.querySelectorAll('#attachments .attachment').length === 2, { timeout: 15000 });
+  const chips = await panel.$$eval('#attachments .attachment', (a) => a.map((x) => `${x.className}: ${x.querySelector('.name').textContent}`));
+  console.log('chips:', chips.join(' | '));
+  await panel.waitForFunction((id) => [...document.querySelectorAll('#agent option')].some((o) => o.value === id && !o.disabled), { timeout: 20000 }, agent);
+  await panel.select('#agent', agent);
+  await panel.click('#auto');
+  await panel.type('#input', 'Do not use any tools. Reply with exactly the quoted text I selected on the page, and the dominant color of the attached image in one word, as: QUOTE=<text>; COLOR=<color>');
+  await panel.click('#send');
+  await panel.waitForFunction(() => document.querySelector('#send').textContent === 'Send' && document.querySelector('#status').dataset.state !== 'working' && document.querySelector('.msg.agent'), { timeout: 240000, polling: 1000 });
+  const sent = await panel.$eval('.msg.user', (e) => e.innerText.replace(/\s+/g, ' '));
+  const answer = (await panel.$$eval('.msg.agent', (m) => m.map((x) => x.innerText).join(' '))).replace(/\s+/g, ' ');
+  console.log('sent:', sent.slice(0, 200));
+  console.log('answer:', answer.slice(0, 200));
+  const ok = chips.some((c) => /quote/.test(c)) && chips.some((c) => /image/.test(c)) && /Selected on the page/.test(sent) && /QUOTE=.*quick emerald helm turns the tab/i.test(answer) && /COLOR=\s*\**(purple|violet|magenta)/i.test(answer);
   console.log(ok ? 'E2E PASS' : 'E2E FAIL');
   await browser.close();
   server.close();

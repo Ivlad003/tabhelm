@@ -64,7 +64,7 @@ To update, run the install command again.
 | Model | Next to the agent. Before the agent is connected it shows your last choice; clicking it connects the agent and loads its full model list. The same list plus effort and other options are in **Settings → Model options**. Your choice is remembered per agent. |
 | Chips | Shown only when needed: 🗂 the tab the agent is on when it is not this one / how many tabs are shared; 📁 the working folder. |
 | Chat | Agent replies, collapsible *Thinking*, plans, and the agent's steps (`↳ Click "Save"`, tool search, …) grouped into one scrollable **Steps** block per run. |
-| **＋ menu** | Everything optional in one place: attach files (or drop / paste them), voice message and tab audio (Voice feature), record video, share tabs (tab group), choose / change / remove the working folder. |
+| **＋ menu** | Everything optional in one place: attach files (or drop / paste them), add the page selection, voice message and tab audio (Voice feature), record video, share tabs (tab group), choose / change / remove the working folder. |
 | **Auto-approve** | Lets the agent use tools without asking. Uploads, JavaScript, other tabs and the experimental gates still ask. |
 | **Send / Stop** | Sends a message (and starts the agent if needed); while the agent works, the button cancels the turn. |
 | **History** | Saved chats — open one to continue it (its page opens too) or export it (⬇ Markdown, `{ }` JSON). |
@@ -133,6 +133,10 @@ Under every answer the panel shows the time the task took and, when the agent re
 ### Attachments
 
 Attach up to 10 files per message with **Attach**, by dropping them on the panel, or by pasting an image into the message box. Images are downscaled to 1600 px; text files can be up to 300 KB. Each agent gets them in the form it supports: images and embedded files over ACP where possible; otherwise TabHelm saves the image into the agent's workspace (`~/.tabhelm/workspace/attachments`) and tells the agent the path, and puts text files inline in the message. The built-in agent passes images to models marked *vision*. Checked with Claude Code, Codex, OpenCode, Cursor, Grok and the built-in agent.
+
+### Page selection and images
+
+Select text on the page and right-click → **Add selection to TabHelm chat** (or press **Alt+Shift+T**, or use **＋ → Add page selection**); right-click an image → **Add image to TabHelm chat**. The panel opens if needed and a chip appears in the message box: ❝ for a quote, a thumbnail for an image. Write your question and send — the quote goes to the agent with the page's address, the image as an attachment. Send with an empty box to just discuss the selection.
 
 ### Skills
 

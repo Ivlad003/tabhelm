@@ -1,6 +1,20 @@
 {
   "news": [
     {
+      "id": "2026-10-page-selection",
+      "date": "2026-10-13",
+      "minVersion": "0.19.0",
+      "title": {
+        "en": "Send a selection or an image to the chat",
+        "uk": "Виділене або картинка — в чат"
+      },
+      "text": {
+        "en": "Right-click selected text or an image → Add to TabHelm chat (or Alt+Shift+T). Ask the agent about it.",
+        "uk": "Правою кнопкою на виділеному тексті чи картинці → Add to TabHelm chat (або Alt+Shift+T). І запитуйте агента про це."
+      },
+      "url": "https://github.com/Ivlad003/tabhelm#page-selection-and-images"
+    },
+    {
       "id": "2026-10-windows",
       "date": "2026-10-13",
       "minVersion": "0.18.0",

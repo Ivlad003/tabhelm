@@ -8,7 +8,7 @@ const MAX_IMAGE_SIDE = 1600;
 const TEXT_FILE = /\.(txt|md|markdown|csv|tsv|json|log)$/i;
 const TEXT_MIME = { csv: 'text/csv', tsv: 'text/tab-separated-values', md: 'text/markdown', markdown: 'text/markdown', json: 'application/json' };
 
-let pending = []; // { id, kind: 'image'|'text', name, mimeType, data?, text?, size, url? }
+let pending = []; // { id, kind: 'image'|'text'|'quote', name, mimeType, data?, text?, size, url?, source? }
 let els;
 let report = () => {};
 
@@ -103,6 +103,32 @@ function toBase64(blob) {
   });
 }
 
+// Text selected on a page → a quote chip; sent as part of the message with its source.
+export function addQuote({ text, pageUrl, pageTitle }) {
+  const clean = String(text || '').trim();
+  if (!clean) return report('Nothing is selected on the page.');
+  if (pending.length >= MAX_FILES) return report(`Up to ${MAX_FILES} items per message.`);
+  pending.push({ id: crypto.randomUUID(), kind: 'quote', name: `❝ ${clean.slice(0, 40)}${clean.length > 40 ? '…' : ''}`, text: clean.slice(0, MAX_TEXT_BYTES), size: clean.length, source: { url: pageUrl, title: pageTitle } });
+  render();
+}
+
+// An image on a page (context menu) → fetched here and attached like a file.
+export async function addImageUrl(srcUrl, pageUrl) {
+  try {
+    const res = await fetch(srcUrl);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const blob = await res.blob();
+    if (!blob.type.startsWith('image/')) throw new Error('not an image');
+    const name = decodeURIComponent(new URL(srcUrl).pathname.split('/').pop() || 'image') || 'image';
+    const file = new File([blob], /\.[a-z0-9]+$/i.test(name) ? name : `${name}.${blob.type.split('/')[1] || 'png'}`, { type: blob.type });
+    await addFiles([file]);
+    const added = pending.at(-1);
+    if (added?.kind === 'image') added.source = { url: pageUrl };
+  } catch (err) {
+    report(`Could not add the image: ${err.message}`);
+  }
+}
+
 export function formatSize(bytes) {
   return bytes < 1024 ? `${bytes} B` : bytes < 1048576 ? `${Math.round(bytes / 1024)} KB` : `${(bytes / 1048576).toFixed(1)} MB`;
 }
@@ -113,7 +139,10 @@ export function chip(a, onRemove) {
   el.className = `attachment ${a.kind}`;
   el.title = `${a.name} · ${formatSize(a.size)}`;
   if (a.kind === 'image' && a.url) el.append(Object.assign(document.createElement('img'), { src: a.url, alt: a.name }));
-  else el.append(Object.assign(document.createElement('span'), { className: 'file-icon', textContent: (a.name.split('.').pop() || 'txt').slice(0, 4).toUpperCase() }));
+  else if (a.kind === 'quote') {
+    el.append(Object.assign(document.createElement('span'), { className: 'file-icon', textContent: '❝' }));
+    el.title = `${a.text.slice(0, 300)}\n— ${a.source?.title || a.source?.url || 'page'}`;
+  } else el.append(Object.assign(document.createElement('span'), { className: 'file-icon', textContent: (a.name.split('.').pop() || 'txt').slice(0, 4).toUpperCase() }));
   el.append(Object.assign(document.createElement('span'), { className: 'name', textContent: a.name }));
   if (onRemove) {
     const x = Object.assign(document.createElement('button'), { className: 'remove', textContent: '×', title: `Remove ${a.name}` });

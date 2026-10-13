@@ -16,7 +16,48 @@ let nextCriticId = 1;
 let nativePort = null;
 
 // Dev hook for scripts/tools-test.js: lets the test call tools directly from the service worker.
-self.tabhelmDebug = { runTool, ensureGroup, chatDebugState, runSchedule: (id) => runScheduled(id, scheduleDeps) };
+self.tabhelmDebug = { runTool, ensureGroup, chatDebugState, runSchedule: (id) => runScheduled(id, scheduleDeps), sendPageContext };
+
+// ---------- Page context: selection / image → chat ----------
+const pendingPageContext = new Map(); // tabId -> [payload]
+
+chrome.runtime.onInstalled.addListener(() => {
+  chrome.contextMenus?.removeAll(() => {
+    chrome.contextMenus.create({ id: 'tabhelm-selection', title: 'Add selection to TabHelm chat', contexts: ['selection'] });
+    chrome.contextMenus.create({ id: 'tabhelm-image', title: 'Add image to TabHelm chat', contexts: ['image'] });
+  });
+});
+
+// Opens the panel on the tab (allowed: user gesture) and hands the item to it.
+function sendPageContext(tab, payload) {
+  const tabId = tab.id;
+  const message = { type: 'page_context', pageUrl: tab.url, pageTitle: tab.title, ...payload };
+  if (panels.has(tabId)) {
+    deliver(tabId, message);
+    chrome.sidePanel.open({ tabId }).catch(() => {});
+    return;
+  }
+  pendingPageContext.set(tabId, [...(pendingPageContext.get(tabId) || []), message]);
+  chrome.sidePanel.setOptions({ tabId, path: `sidepanel.html?tabId=${tabId}`, enabled: true });
+  chrome.sidePanel.open({ tabId }).catch(() => {});
+}
+
+chrome.contextMenus?.onClicked.addListener((info, tab) => {
+  if (!tab?.id) return;
+  if (info.menuItemId === 'tabhelm-selection') sendPageContext(tab, { kind: 'selection', text: info.selectionText || '' });
+  if (info.menuItemId === 'tabhelm-image') sendPageContext(tab, { kind: 'image', srcUrl: info.srcUrl });
+});
+
+// Keyboard shortcut (Alt+Shift+T): add the current selection.
+chrome.commands?.onCommand.addListener(async (command, tab) => {
+  if (command !== 'add-selection' || !tab?.id) return;
+  let text = '';
+  try {
+    const [r] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: () => window.getSelection()?.toString() || '' });
+    text = r?.result || '';
+  } catch {}
+  sendPageContext(tab, { kind: 'selection', text });
+});
 
 // Each tab gets its own side panel instance, bound to that tab's id.
 chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: false }).catch(() => {});
@@ -219,6 +260,11 @@ export async function fromPanel(tabId, msg, port) {
   }
   if (msg.type === 'group_info') {
     postGroupInfo(tabId);
+    return;
+  }
+  if (msg.type === 'page_context_pending') {
+    for (const m of pendingPageContext.get(tabId) || []) port?.postMessage(m);
+    pendingPageContext.delete(tabId);
     return;
   }
   if (msg.type === 'run_schedule') {

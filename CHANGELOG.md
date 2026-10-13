@@ -2,6 +2,11 @@
 
 All notable changes to TabHelm. The newest release is at the top; the panel's update banner links here.
 
+## [0.19.0] - 2026-10-13
+
+### Added
+- **Page selection and images in the chat:** right-click → *Add selection / Add image to TabHelm chat*, Alt+Shift+T, or ＋ → *Add page selection*. The panel opens and the quote (with the page address) or image is sent with your next message.
+
 ## [0.18.0] - 2026-10-13
 
 ### Added
@@ -145,6 +150,7 @@ All notable changes to TabHelm. The newest release is at the top; the panel's up
 ### Added
 - First version: side-panel chat that drives terminal agents over ACP, with browser tools over MCP.
 
+[0.19.0]: https://github.com/Ivlad003/tabhelm/releases/tag/v0.19.0
 [0.18.0]: https://github.com/Ivlad003/tabhelm/releases/tag/v0.18.0
 [0.17.1]: https://github.com/Ivlad003/tabhelm/releases/tag/v0.17.1
 [0.17.0]: https://github.com/Ivlad003/tabhelm/releases/tag/v0.17.0
