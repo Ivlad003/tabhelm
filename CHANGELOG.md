@@ -2,6 +2,15 @@
 
 All notable changes to TabHelm. The newest release is at the top; the panel's update banner links here.
 
+## [0.22.0] - 2026-10-13
+
+### Added
+- **Detailed guide** flag (Settings → Experimental): in guide mode the agent explains each step in a few sentences — what the element is, why, what happens after the click, what to check.
+- Guide steps have a **Next →** button (on the page and in the panel) to move on.
+
+### Fixed
+- The guide overlay now scrolls with the page instead of jumping into place after scrolling stops.
+
 ## [0.21.1] - 2026-10-13
 
 ### Changed

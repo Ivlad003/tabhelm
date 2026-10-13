@@ -507,6 +507,7 @@ export function guideShow(ref, text, step) {
   const el = state.refs.get(ref);
   if (!el || !el.isConnected) return { error: `Ref ${ref} is stale or unknown. Take a new browser_snapshot.` };
   if (state.guideListener) document.removeEventListener('click', state.guideListener, true);
+  clearInterval(state.guideTimer);
   state.guide = { status: 'waiting', ref };
 
   const host = document.createElement('div');
@@ -515,13 +516,15 @@ export function guideShow(ref, text, step) {
   const root = host.attachShadow({ mode: 'open' });
   const sheet = new CSSStyleSheet();
   sheet.replaceSync(`
-    .ring { position: fixed; border: 3px solid #2a9d76; border-radius: 6px; pointer-events: none; z-index: 2147483645; animation: pulse 1.2s ease-in-out infinite; }
+    :host { position: absolute; left: 0; top: 0; width: 0; height: 0; }
+    .ring { position: absolute; border: 3px solid #2a9d76; border-radius: 6px; pointer-events: none; z-index: 2147483645; animation: pulse 1.2s ease-in-out infinite; }
     @keyframes pulse { 0%, 100% { box-shadow: 0 0 0 4px rgba(42,157,118,.35); } 50% { box-shadow: 0 0 0 12px rgba(42,157,118,0); } }
-    .arrow { position: fixed; width: 0; height: 0; pointer-events: none; z-index: 2147483646; animation: bob 1s ease-in-out infinite; }
+    .arrow { position: absolute; width: 0; height: 0; pointer-events: none; z-index: 2147483646; animation: bob 1s ease-in-out infinite; }
     .arrow.down { border-left: 12px solid transparent; border-right: 12px solid transparent; border-top: 18px solid #1c7d5c; }
     .arrow.up { border-left: 12px solid transparent; border-right: 12px solid transparent; border-bottom: 18px solid #1c7d5c; }
     @keyframes bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(5px); } }
-    .bubble { position: fixed; max-width: 320px; background: #1c7d5c; color: #fff; font: 14px/1.4 system-ui, sans-serif; padding: 10px 12px; border-radius: 10px; box-shadow: 0 6px 24px rgba(0,0,0,.25); z-index: 2147483647; pointer-events: auto; }
+    .bubble { position: absolute; max-width: 360px; background: #1c7d5c; color: #fff; font: 14px/1.4 system-ui, sans-serif; padding: 10px 12px; border-radius: 10px; box-shadow: 0 6px 24px rgba(0,0,0,.25); z-index: 2147483647; pointer-events: auto; }
+    .text { max-height: 40vh; overflow: auto; white-space: pre-wrap; }
     .step { font-size: 11px; opacity: .8; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 2px; }
     .row { display: flex; gap: 6px; margin-top: 8px; }
     button { font: 600 12px system-ui, sans-serif; border: 0; border-radius: 6px; padding: 5px 10px; cursor: pointer; background: #fff; color: #1c7d5c; }
@@ -538,11 +541,13 @@ export function guideShow(ref, text, step) {
   head.className = 'step';
   head.textContent = step ? `Step ${step}` : 'Your turn';
   const body = document.createElement('div');
+  body.className = 'text';
   body.textContent = text;
   const row = document.createElement('div');
   row.className = 'row';
   const done = document.createElement('button');
-  done.textContent = 'I did it';
+  done.textContent = 'Next →';
+  done.title = 'I did this step — show the next one';
   done.onclick = () => finish('done');
   const skip = document.createElement('button');
   skip.className = 'ghost';
@@ -553,29 +558,36 @@ export function guideShow(ref, text, step) {
   root.append(ring, arrow, bubble);
   document.documentElement.append(host);
 
+  // Everything is placed in document coordinates (the host is absolute at 0,0),
+  // so it scrolls with the page natively; re-placing handles inner scroll
+  // containers, layout shifts and resizes.
+  let last = '';
   function place() {
     const r = el.getBoundingClientRect();
-    Object.assign(ring.style, { left: `${r.left - 4}px`, top: `${r.top - 4}px`, width: `${r.width + 8}px`, height: `${r.height + 8}px` });
+    const key = [r.left, r.top, r.width, r.height, scrollX, scrollY, innerWidth, innerHeight].join(',');
+    if (key === last) return;
+    last = key;
+    const X = scrollX;
+    const Y = scrollY;
+    Object.assign(ring.style, { left: `${r.left + X - 4}px`, top: `${r.top + Y - 4}px`, width: `${r.width + 8}px`, height: `${r.height + 8}px` });
     const below = r.bottom + 120 < innerHeight || r.top < 140;
     arrow.className = `arrow ${below ? 'up' : 'down'}`;
     const ax = Math.min(Math.max(r.left + r.width / 2 - 12, 8), innerWidth - 32);
-    Object.assign(arrow.style, { left: `${ax}px`, top: below ? `${r.bottom + 6}px` : `${r.top - 24}px` });
-    const bw = Math.min(320, innerWidth - 16);
+    Object.assign(arrow.style, { left: `${ax + X}px`, top: `${(below ? r.bottom + 6 : r.top - 24) + Y}px` });
+    const bw = Math.min(360, innerWidth - 16);
     const bx = Math.min(Math.max(r.left + r.width / 2 - bw / 2, 8), innerWidth - bw - 8);
-    Object.assign(bubble.style, { width: `${bw}px`, left: `${bx}px` });
-    if (below) bubble.style.top = `${r.bottom + 26}px`;
-    else {
-      bubble.style.top = '';
-      bubble.style.bottom = `${innerHeight - r.top + 26}px`;
-    }
+    Object.assign(bubble.style, { width: `${bw}px`, left: `${bx + X}px` });
+    bubble.style.top = below ? `${r.bottom + 26 + Y}px` : `${Math.max(Y + 8, r.top - 26 - bubble.offsetHeight + Y)}px`;
   }
   function finish(status) {
     state.guide = { status, ref };
     document.removeEventListener('click', state.guideListener, true);
     removeEventListener('scroll', place, true);
     removeEventListener('resize', place);
+    clearInterval(state.guideTimer);
     host.remove();
   }
+  state.guideTimer = setInterval(place, 250);
   // The user's click on the target (or inside it) completes the step; the
   // event itself is left alone so the page reacts normally.
   state.guideListener = (e) => {
@@ -597,5 +609,6 @@ export function guideHide() {
   const state = window.__tabhelm;
   document.getElementById('tabhelm-guide')?.remove();
   if (state?.guideListener) document.removeEventListener('click', state.guideListener, true);
+  clearInterval(state?.guideTimer);
   if (state) state.guide = { status: 'cancelled' };
 }

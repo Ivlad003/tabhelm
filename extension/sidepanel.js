@@ -1052,8 +1052,8 @@ async function addAsk(msg) {
     card.classList.add('guide');
     title.textContent = `${msg.step ? `Step ${msg.step}: ` : ''}${msg.message}`;
     const hint = Object.assign(document.createElement('div'), { className: 'hint', textContent: `Waiting for you to click “${msg.target || 'the highlighted element'}” on the page…` });
-    const done = Object.assign(document.createElement('button'), { className: 'btn primary', textContent: 'I did it' });
-    done.onclick = () => reply({ done: true }, 'Done');
+    const done = Object.assign(document.createElement('button'), { className: 'btn primary', textContent: 'Next →', title: 'I did this step — show the next one' });
+    done.onclick = () => reply({ done: true }, 'Next');
     const skip = Object.assign(document.createElement('button'), { className: 'btn', textContent: 'Skip step' });
     skip.onclick = () => reply({ skip: true }, 'Skipped');
     const stop = Object.assign(document.createElement('button'), { className: 'btn', textContent: 'Stop guide' });

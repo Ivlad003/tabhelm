@@ -89,7 +89,7 @@ export class AgentSession {
       this.connection.initialize({
         protocolVersion: acp.PROTOCOL_VERSION,
         clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false },
-        clientInfo: { name: 'tabhelm', version: '0.21.1' },
+        clientInfo: { name: 'tabhelm', version: '0.22.0' },
       }),
       this.exited.then(() => {
         throw new Error(`${agent.name} exited during startup. Check that it is installed and logged in.`);
@@ -251,6 +251,7 @@ export class AgentSession {
       skills += '[TabHelm plan preview] Before acting: reply with a short numbered plan of the steps you intend to take (3–8 lines) and then STOP without using any tools. The user will press Start to approve it, after which you will receive "[plan approved] proceed" and can act.\n\n';
     }
     if (this.features?.takeOver) skills += 'If you need the user to do something themselves (2FA code, captcha, choosing a payment method), call browser_request_human with a short message and wait for it to return.\n';
+    if (this.features?.guideDetail) skills += 'Guide mode is set to detailed: for every browser_guide step write 2–4 sentences in "text" — what the element is and where it is, why this step is needed, what happens after the click and what the user should see next. Before the first step, briefly say what the whole procedure will do.\n';
     if (this.features?.passwordManager) skills += 'For sign-in forms, do not guess credentials: call browser_request_login with the login and password field refs; the user picks the account and the credentials are typed without you seeing them.\n';
     if (this.features?.secrets) skills += 'Secrets: the user may give you placeholders like {{SECRET:name}}; pass them unchanged in browser_type / browser_fill_form and they are substituted on the page.\n';
     else if (this.skillsChanged) skills = `[TabHelm] The user changed the enabled skills. ${skillsPreamble(this.skills) || 'No skills are enabled now.\n\n'}`;
