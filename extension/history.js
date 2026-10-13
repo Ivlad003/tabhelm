@@ -5,10 +5,12 @@
 const $ = (id) => document.getElementById(id);
 const MAX_CHATS = 200;
 let onOpen = () => {};
+let onExport = () => {};
 let currentId = null;
 
-export function initHistory({ open }) {
+export function initHistory({ open, export: exp }) {
   onOpen = open;
+  onExport = exp || (() => {});
   $('history-open').onclick = () => toggle(true);
   $('history-close').onclick = () => toggle(false);
   $('history-search').oninput = render;
@@ -124,10 +126,14 @@ async function render() {
       open.title = `${c.pageTitle || ''}\n${c.url || ''}${c.folder ? `\nFolder: ${c.folder}` : ''}`;
       open.append(title, meta);
       open.onclick = () => onOpen(c, alive.has(c.id));
+      const md = Object.assign(document.createElement('button'), { className: 'btn small history-export', textContent: '⬇', title: 'Export: chat + action log (.md)' });
+      md.onclick = () => onExport(c, 'md');
+      const js = Object.assign(document.createElement('button'), { className: 'btn small history-export-json', textContent: '{ }', title: 'Export: full log (.json)' });
+      js.onclick = () => onExport(c, 'json');
       const del = Object.assign(document.createElement('button'), { className: 'banner-close', textContent: '×', title: 'Delete this chat' });
       del.setAttribute('aria-label', `Delete chat ${c.title}`);
       del.onclick = () => deleteChat(c.id);
-      li.append(open, del);
+      li.append(open, md, js, del);
       return li;
     }),
   );

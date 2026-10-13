@@ -1258,3 +1258,126 @@ input[type='checkbox'] {
   margin: 2px 0;
   padding: 2px 0;
 }
+
+/* ---- Simplified layout ---- */
+.config {
+  display: flex;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.config select.model {
+  flex: 1;
+}
+
+.bar-row > #agent {
+  flex: 1;
+}
+
+.context {
+  gap: 6px;
+}
+
+.chip {
+  font: inherit;
+  font-size: 12px;
+  color: var(--muted);
+  background: var(--th-accent-softer);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 2px 10px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: default;
+}
+
+button.chip {
+  cursor: pointer;
+}
+
+button.chip:hover {
+  border-color: var(--accent);
+}
+
+.composer-row .spacer {
+  flex: 1;
+}
+
+.menu.up .menu-list {
+  top: auto;
+  bottom: calc(100% + 4px);
+  left: 0;
+  right: auto;
+  min-width: 230px;
+}
+
+.menu-sep {
+  border-top: 1px solid var(--border);
+  margin: 4px 0;
+}
+
+.menu-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  padding: 6px 8px;
+  cursor: pointer;
+}
+
+.menu-check:hover {
+  background: var(--tool-bg);
+  border-radius: 6px;
+}
+
+.status:empty::before {
+  display: none;
+}
+
+.banner {
+  padding: 5px 10px;
+  font-size: 12px;
+}
+
+.banner-title {
+  display: inline;
+}
+
+.banner-title .banner-actions {
+  display: inline-flex;
+  margin-left: 8px;
+}
+
+.banner-fold summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.banner-fold summary::-webkit-details-marker {
+  display: none;
+}
+
+.banner-fold .banner-text {
+  margin-top: 4px;
+  color: var(--muted);
+}
+
+.config-extra {
+  display: grid;
+  gap: 6px;
+}
+
+.history-item .history-export,
+.history-item .history-export-json {
+  margin-top: 4px;
+  padding: 2px 6px;
+}
+
+.settings h4 {
+  font-size: 12px;
+  margin: 10px 0 4px;
+  color: var(--muted);
+}

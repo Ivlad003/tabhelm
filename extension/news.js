@@ -113,12 +113,14 @@ function link(text, url) {
 
 function renderUpdate(container, latest, mine, onDismiss) {
   const body = banner(container, 'update', onDismiss);
+  // One line: title + Update; the command unfolds under it.
   const title = Object.assign(document.createElement('div'), { className: 'banner-title', textContent: TEXT.update(latest.version, mine) });
   const actions = document.createElement('div');
   actions.className = 'banner-actions';
   const how = Object.assign(document.createElement('button'), { className: 'btn small primary', textContent: TEXT.how });
   actions.append(how);
   if (latest.url) actions.append(link(TEXT.notes, latest.url));
+  title.append(' ', actions);
 
   const steps = document.createElement('div');
   steps.className = 'banner-steps';
@@ -136,17 +138,18 @@ function renderUpdate(container, latest, mine, onDismiss) {
   steps.append(Object.assign(document.createElement('div'), { textContent: TEXT.steps }), row);
   how.onclick = () => (steps.hidden = !steps.hidden);
 
-  body.append(title, actions, steps);
+  body.append(title, steps);
 }
 
 function renderItem(container, item, onDismiss) {
   const body = banner(container, 'news', onDismiss);
-  body.append(Object.assign(document.createElement('div'), { className: 'banner-title', textContent: tr(item.title) }));
-  if (item.text) body.append(Object.assign(document.createElement('div'), { textContent: tr(item.text) }));
-  if (item.url) {
-    const actions = document.createElement('div');
-    actions.className = 'banner-actions';
-    actions.append(link(lang === 'uk' ? 'Докладніше' : 'Learn more', item.url));
-    body.append(actions);
-  }
+  // One line with the title; the text unfolds on click.
+  const details = document.createElement('details');
+  details.className = 'banner-fold';
+  const summary = document.createElement('summary');
+  summary.append(Object.assign(document.createElement('span'), { className: 'banner-title', textContent: tr(item.title) }));
+  if (item.url) summary.append(' ', link(lang === 'uk' ? 'Докладніше' : 'Learn more', item.url));
+  details.append(summary);
+  if (item.text) details.append(Object.assign(document.createElement('div'), { className: 'banner-text', textContent: tr(item.text) }));
+  body.append(details);
 }

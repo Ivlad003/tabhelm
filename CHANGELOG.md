@@ -2,6 +2,17 @@
 
 All notable changes to TabHelm. The newest release is at the top; the panel's update banner links here.
 
+## [0.17.0] - 2026-10-13
+
+### Changed
+- **Simpler panel.** No Connect button: the agent starts with your first message; changing the agent mid-chat hands the conversation over. The status shows words only while starting, working, paused or on errors.
+- One **＋ menu** in the composer holds attachments, voice, video recording, tab sharing and the working folder; the folder and tab rows became chips that appear only when relevant.
+- Effort and other agent options moved to **Settings → Model options**; the model stays next to the agent.
+- **Export** moved into History (any chat, Markdown or JSON); the top bar is History · Settings · New chat.
+- Agent permission cards and TabHelm confirmations now look and read the same (Allow once / Reject).
+- Written skills live in the Skills section next to skills from links.
+- Update and news banners are one line each and unfold on click.
+
 ## [0.16.0] - 2026-10-13
 
 ### Added
@@ -124,6 +135,7 @@ All notable changes to TabHelm. The newest release is at the top; the panel's up
 ### Added
 - First version: side-panel chat that drives terminal agents over ACP, with browser tools over MCP.
 
+[0.17.0]: https://github.com/Ivlad003/tabhelm/releases/tag/v0.17.0
 [0.16.0]: https://github.com/Ivlad003/tabhelm/releases/tag/v0.16.0
 [0.15.0]: https://github.com/Ivlad003/tabhelm/releases/tag/v0.15.0
 [0.14.0]: https://github.com/Ivlad003/tabhelm/releases/tag/v0.14.0

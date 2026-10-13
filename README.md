@@ -38,7 +38,7 @@ The installer downloads the latest release into `~/.tabhelm/app`, installs the n
 
 **2. Load the extension.** Open `chrome://extensions`, turn on **Developer mode**, click **Load unpacked** and choose `~/.tabhelm/app/extension`. You can also download [`tabhelm-extension.zip`](https://github.com/Ivlad003/tabhelm/releases/latest/download/tabhelm-extension.zip) from the website and load the unpacked folder; the native host from step 1 is still required.
 
-**3. Use it.** Click the TabHelm icon on any page → pick an agent → **Connect** → write a task, e.g. *"Find the cheapest flight on this page and open it"*.
+**3. Use it.** Click the TabHelm icon on any page → pick an agent → write a task, e.g. *"Find the cheapest flight on this page and open it"* → **Send**. The agent starts with your first message.
 
 To update, run the install command again.
 
@@ -48,20 +48,16 @@ To update, run the install command again.
 
 | Area | What it does |
 |---|---|
-| Agent list + **Connect** | Starts the chosen agent for this tab. Agents that are not installed are shown disabled, with an install hint. |
-| Model + effort | Appear after connecting. The list comes from the agent itself (ACP `configOptions`). Your choice is remembered per agent. |
-| **Controls: …** | The tab the agent is working on. It changes if the agent opens or switches tabs. |
+| Agent list | The agent for this chat; it starts when you send the first message. Agents that are not installed are shown disabled, with an install hint. Changing the agent mid-chat hands the conversation over. |
+| Model | Appears next to the agent once it is connected (the list comes from the agent itself); effort and other options are in **Settings → Model options**. Your choice is remembered per agent. |
+| Chips | Shown only when needed: 🗂 the tab the agent is on when it is not this one / how many tabs are shared; 📁 the working folder. |
 | Chat | Agent replies, collapsible *Thinking*, plans, and the agent's steps (`↳ Click "Save"`, tool search, …) grouped into one scrollable **Steps** block per run. |
-| **Auto-approve actions** | Lets the agent use tools without asking. Uploads, JavaScript and other tabs still ask (see below). |
-| **Send / Stop** | Sends a message; while the agent works, the button cancels the turn. |
-| **History** | Saved chats — open one to continue it; its page opens too. |
-| **Group tabs** | Puts the chat's tab in a Chrome tab group; tabs you drag into the group are shared with the agent (see *Several tabs*). |
-| **Folder…** | Optional working folder (project) for the chat: system dialog, recent folders or a typed path — see below. |
-| **Attach** | Adds images and text files (txt, md, csv, tsv, json, log) to the message. You can also drop files on the panel or paste an image. |
+| **＋ menu** | Everything optional in one place: attach files (or drop / paste them), voice message and tab audio (Voice feature), record video, share tabs (tab group), choose / change / remove the working folder. |
+| **Auto-approve** | Lets the agent use tools without asking. Uploads, JavaScript, other tabs and the experimental gates still ask. |
+| **Send / Stop** | Sends a message (and starts the agent if needed); while the agent works, the button cancels the turn. |
+| **History** | Saved chats — open one to continue it (its page opens too) or export it (⬇ Markdown, `{ }` JSON). |
+| **Settings** | Skills (links and, with the flag, skills written here), model options, experimental features, version and updates. |
 | **New chat** | Clears the chat and starts a fresh session with the same agent and model. |
-| **Export** | Downloads the chat with the agent's action log as Markdown, or the full event log as JSON. |
-| **Settings** | Skills from links, versions and **Check for updates**. |
-| **Record video** | Records the tab while the agent works on each message (see below). |
 
 ### Approvals
 
@@ -90,9 +86,9 @@ sequenceDiagram
     A2-->>P: finishes the task
 ```
 
-### Exporting the chat
+### Exporting a chat
 
-**Export → Chat + action log (.md)** downloads a readable transcript: your messages, each agent's answers (with thinking collapsed), every action with its time and result, approvals, model and agent switches, failures and saved recordings. **Full log (.json)** contains the same events as structured data.
+In **History**, ⬇ downloads a chat as Markdown: your messages, each agent's answers (with thinking collapsed), every action with its time and result, approvals, model and agent switches, failures and saved recordings. `{ }` downloads the same events as JSON. The current chat is highlighted.
 
 ### Recording videos
 
@@ -419,7 +415,7 @@ npm install
 npm run install-host           # register the host for this checkout
 ```
 
-Load `extension/` unpacked in Chrome. After editing extension files press ↻ on `chrome://extensions`; host changes apply the next time you press Connect.
+Load `extension/` unpacked in Chrome. After editing extension files press ↻ on `chrome://extensions`; host changes apply the next time an agent starts (New chat or a new message after a stop).
 
 | Command (in `host/`) | What it checks |
 |---|---|

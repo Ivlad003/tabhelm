@@ -13,7 +13,7 @@ export async function initFolder(panelPort, chatTabId, { changed }) {
   port = panelPort;
   tabId = chatTabId;
   onChange = changed;
-  const closeMenu = () => ($('folder-menu').open = false);
+  const closeMenu = () => ($('plus-menu').open = false);
   $('folder-pick').onclick = () => {
     closeMenu();
     pick();
@@ -101,17 +101,17 @@ async function setFolder(info) {
 }
 
 function render() {
-  const label = $('folder-label');
-  if (!folder) {
-    label.textContent = 'No working folder';
-    label.title = 'Optional: a project folder where agents can work with files and run commands';
-  } else {
+  // A chip only when a folder is set; the actions live in the ＋ menu.
+  const chip = $('folder-chip');
+  chip.hidden = !folder;
+  if (folder) {
     const extras = [...folder.instructions, folder.skills.length ? `${folder.skills.length} skill${folder.skills.length > 1 ? 's' : ''}` : null, folder.git ? 'git' : null].filter(Boolean);
-    label.textContent = `📁 ${folder.name}${extras.length ? ` · ${extras.join(' · ')}` : ''}`;
-    label.title = `${folder.path}${folder.skills.length ? `\nSkills: ${folder.skills.join(', ')}` : ''}`;
+    chip.textContent = `📁 ${folder.name}${extras.length ? ` · ${extras.join(' · ')}` : ''}`;
+    chip.title = `${folder.path}${folder.skills.length ? `\nSkills: ${folder.skills.join(', ')}` : ''}\nRemove it from the ＋ menu.`;
   }
+  $('context').hidden = chip.hidden && $('tab-chip').hidden;
   $('folder-clear').hidden = !folder;
-  $('folder-menu').querySelector('summary').textContent = folder ? 'Change folder…' : 'Folder…';
+  $('folder-pick').textContent = folder ? 'Change working folder…' : 'Choose working folder…';
   updateFolderWarning($('auto').checked);
 }
 
@@ -123,7 +123,7 @@ async function renderRecent() {
     ...recentFolders.slice(0, 5).map((p) => {
       const b = Object.assign(document.createElement('button'), { type: 'button', textContent: p.split('/').filter(Boolean).pop() || p, title: p });
       b.onclick = async () => {
-        $('folder-menu').open = false;
+        $('plus-menu').open = false;
         const info = await request({ type: 'folder_info', path: p });
         if (info.error) return showError(info.error);
         setFolder(info);

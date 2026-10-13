@@ -10,9 +10,9 @@ const tabId = Number(new URLSearchParams(location.search).get('tabId'));
 const $ = (id) => document.getElementById(id);
 const els = {
   agent: $('agent'),
-  connect: $('connect'),
+
   status: $('status'),
-  tab: $('tab'),
+
   config: $('config'),
   newChat: $('new-chat'),
   record: $('record'),
@@ -86,11 +86,25 @@ port.postMessage({ type: 'list_agents' });
 // The agent acts on this tab unless it switched to another one via browser_tabs.
 let targetTabId = tabId;
 
+// One chip for tabs: shown when the agent works on another tab or tabs are shared.
+let groupState = { grouped: false, count: 1 };
 async function showTab() {
-  const tab = await chrome.tabs.get(targetTabId).catch(() => null);
-  const where = targetTabId === tabId ? 'Controls' : 'Controls another tab';
-  els.tab.textContent = tab ? `${where}: ${tab.title || tab.url}` : 'Tab closed';
+  const chip = $('tab-chip');
+  const other = targetTabId !== tabId;
+  const tab = other ? await chrome.tabs.get(targetTabId).catch(() => null) : null;
+  if (!other && !groupState.grouped) chip.hidden = true;
+  else {
+    chip.hidden = false;
+    const parts = [other ? `On: ${truncate(tab?.title || tab?.url || 'closed tab', 28)}` : 'This tab', groupState.grouped ? `${groupState.count} in group` : null].filter(Boolean);
+    chip.textContent = `🗂 ${parts.join(' · ')}`;
+    chip.title = groupState.grouped ? 'Drag tabs into the green "TabHelm" group to share them; drag them out to stop. Click for options.' : 'Click to share more tabs with this chat';
+  }
+  $('context').hidden = chip.hidden && $('folder-chip').hidden;
 }
+$('tab-chip').onclick = () => {
+  $('plus-menu').open = true;
+  $('group-tabs').focus();
+};
 showTab();
 chrome.tabs.onUpdated.addListener((id, info) => {
   if (id === targetTabId && (info.title || info.url)) showTab();
@@ -233,6 +247,7 @@ function onStatus(msg) {
     setStatus('starting', msg.detail || `Starting ${msg.agent.name}…`);
   } else if (msg.state === 'ready') {
     connected = true;
+    starting = false;
     connectedAgent = msg.agent;
     currentModel = null;
     Object.assign(usage, { cost: null, context: null, lastTurn: null });
@@ -245,15 +260,16 @@ function onStatus(msg) {
     notice(`${msg.agent.name} connected`);
     els.input.focus();
     if (autoContinue) {
-      els.input.value = autoContinue;
+      const q = autoContinue;
       autoContinue = null;
-      send();
+      sendNow(q.text, q.attachments || []);
     }
   } else {
     connected = false;
     endTurn(null, busy ? msg.detail || 'the agent exited' : null);
     els.config.hidden = true;
     els.config.replaceChildren();
+    $('config-extra').replaceChildren(Object.assign(document.createElement('span'), { className: 'hint', textContent: 'Effort and other options appear here once an agent is connected.' }));
     setStatus('idle', 'Not connected');
     if (msg.detail) notice(msg.detail, true);
   }
@@ -337,7 +353,6 @@ function addAuth(msg) {
     options.append(b);
   }
   card.append(title, hints, options);
-  els.connect.disabled = false;
   scrollDown();
 }
 
@@ -345,15 +360,14 @@ function addAuth(msg) {
 // The chat's Chrome tab group: tabs dragged into it are shared with the agent.
 
 function showGroup({ grouped, count }) {
+  groupState = { grouped, count };
   const b = $('group-tabs');
-  b.classList.toggle('grouped', grouped);
-  b.textContent = grouped ? `Group · ${count} tab${count === 1 ? '' : 's'}` : 'Group tabs';
-  b.title = grouped
-    ? 'Drag tabs into the green "TabHelm" group to let the agent use them; drag them out to stop sharing.'
-    : 'Put this tab in a Chrome tab group; drag other tabs into the group to let the agent use them';
+  b.textContent = grouped ? `Tab group: ${count} tab${count === 1 ? '' : 's'} shared — drag more in` : 'Share tabs (tab group)';
+  showTab();
 }
 
 $('group-tabs').onclick = () => {
+  $('plus-menu').open = false;
   port.postMessage({ type: 'group_tabs' });
   record('group', {});
 };
@@ -365,7 +379,8 @@ const prefsKey = () => `prefs:${els.agent.value}`;
 
 async function renderConfig(options) {
   els.config.replaceChildren();
-  els.config.hidden = !options.length;
+  $('config-extra').replaceChildren();
+  els.config.hidden = !options.some((o) => o.category === 'model');
 
   if (restorePrefs) {
     restorePrefs = false;
@@ -399,7 +414,16 @@ async function renderConfig(options) {
       const saved = (await chrome.storage.local.get(prefsKey()))[prefsKey()] || {};
       chrome.storage.local.set({ [prefsKey()]: { ...saved, [opt.id]: select.value } });
     };
-    els.config.append(select);
+    if (opt.category === 'model') els.config.append(select);
+    else {
+      // Effort and other options live in Settings → Model options.
+      const extra = $('config-extra');
+      if (!extra.querySelector('select')) extra.replaceChildren();
+      const wrap = document.createElement('label');
+      wrap.className = 'field';
+      wrap.append(Object.assign(document.createElement('span'), { textContent: opt.name }), select);
+      extra.append(wrap);
+    }
     if (opt.category === 'model') {
       const model = select.selectedOptions[0]?.text;
       if (model && model !== currentModel) record('model', { agent: connectedAgent?.name, model });
@@ -585,16 +609,16 @@ function describeAction(tool, a = {}, detail) {
 function addConfirm(msg) {
   breakActivity();
   agentBubble = null;
-  const card = add('div', 'card');
+  const card = add('div', 'card ask');
   const title = document.createElement('div');
   title.className = 'title';
-  title.textContent = msg.title;
+  title.textContent = `Allow: ${msg.title.replace(/\?$/, '')}?`;
   const detail = document.createElement('pre');
   detail.className = 'detail';
   detail.textContent = msg.detail || '';
   const options = document.createElement('div');
   options.className = 'options';
-  for (const [name, allow] of [['Allow', true], ['Deny', false]]) {
+  for (const [name, allow] of [['Allow once', true], ['Reject', false]]) {
     const b = document.createElement('button');
     b.className = `btn${allow ? ' primary' : ''}`;
     b.textContent = name;
@@ -613,7 +637,7 @@ function addConfirm(msg) {
 function addPermission(msg) {
   breakActivity();
   agentBubble = null;
-  const card = add('div', 'card');
+  const card = add('div', 'card ask');
   const title = document.createElement('div');
   title.className = 'title';
   title.textContent = `Allow: ${msg.title}?`;
@@ -637,31 +661,31 @@ function addPermission(msg) {
 
 // ---------- Controls ----------
 
-els.connect.onclick = async () => {
-  if (connected) {
-    port.postMessage({ type: 'stop' });
-    return;
-  }
-  const agentId = els.agent.value;
-  if (!agentId) return;
-  els.connect.disabled = true;
-  await startAgent(agentId);
-};
-
 // Starts (or switches to) an agent. If this chat already has history, the new
 // agent receives it with its first message so it can continue the work.
-async function startAgent(agentId, continueText = null) {
+// `queued` ({ text, attachments }) is sent as soon as the agent is ready.
+let starting = false;
+async function startAgent(agentId, queued = null) {
+  if (!agentId) return;
   chrome.storage.local.set({ lastAgent: agentId });
   els.agent.value = agentId;
   pendingContext = await buildContext();
-  autoContinue = continueText;
+  autoContinue = queued && typeof queued === 'string' ? { text: queued, attachments: [] } : queued;
+  starting = true;
   connected = false;
   els.config.hidden = true;
   syncControls();
   port.postMessage({ type: 'start', agentId, autoApprove: els.auto.checked, ...(await skillPayload()), folder: currentFolder() });
 }
 
+// Test hook (stripped from releases): connect / disconnect without sending.
+window.tabhelmTest = {
+  connect: () => startAgent(els.agent.value),
+  disconnect: () => port.postMessage({ type: 'stop' }),
+};
+
 els.agent.onchange = () => {
+  chrome.storage.local.set({ lastAgent: els.agent.value });
   if (!connected || busy) return;
   const name = els.agent.selectedOptions[0]?.text;
   const hasHistory = journal.some((e) => e.type === 'user');
@@ -749,7 +773,7 @@ els.input.addEventListener('input', () => slashUpdate());
 const slash = { items: [], active: 0 };
 const BUILTIN_SLASH = [
   { name: 'new', description: 'New chat', run: () => els.newChat.click() },
-  { name: 'export', description: 'Export chat as Markdown', run: () => document.querySelector('[data-export="md"]').click() },
+  { name: 'export', description: 'Export this chat (History → ⬇)', run: () => $('history-open').click() },
   { name: 'pause', description: 'Pause the agent (Take over)', run: () => $('pause').click() },
 ];
 
@@ -818,15 +842,26 @@ function expandSlash(text) {
 
 async function send() {
   let text = els.input.value.trim();
-  if ((!text && !hasAttachments()) || !connected) return;
+  if ((!text && !hasAttachments()) || busy) return;
   $('slash-menu').hidden = true;
   if (text.startsWith('/')) text = expandSlash(text);
-  const features = await getFeatures();
-  awaitingPlan = Boolean(features.planPreview) && !text.startsWith('[plan approved]');
-  breakActivity();
   const attachments = takeAttachments();
   if (!text) text = 'Please look at the attached file(s).';
   els.input.value = '';
+  // No Connect button: the first message starts the agent and is sent when it is ready.
+  if (!connected) {
+    if (!els.agent.value) return notice('No agent is installed. See Settings → Skills or the README to install one.', true);
+    if (!starting) notice(`Starting ${els.agent.selectedOptions[0]?.text}…`);
+    await startAgent(els.agent.value, { text, attachments });
+    return;
+  }
+  sendNow(text, attachments);
+}
+
+async function sendNow(text, attachments) {
+  const features = await getFeatures();
+  awaitingPlan = Boolean(features.planPreview) && !text.startsWith('[plan approved]');
+  breakActivity();
   const bubble = add('div', 'msg user');
   bubble.textContent = text;
   if (attachments.length) {
@@ -1094,31 +1129,25 @@ async function buildContext() {
 }
 
 function syncControls() {
-  els.connect.textContent = connected ? 'Disconnect' : 'Connect';
-  els.connect.disabled = !connected && !els.agent.value;
   els.agent.disabled = busy;
-  els.input.disabled = !connected;
-  $('attach').disabled = !connected;
-  els.send.disabled = !connected;
   els.send.textContent = busy ? 'Stop' : 'Send';
   getFeatures().then((f) => {
     $('pause').hidden = !(f.takeOver && busy);
-    if (!$('voice-stop').hidden) return;
-    $('voice-menu').hidden = !f.voice;
+    for (const b of document.querySelectorAll('[data-voice]')) b.hidden = !f.voice;
   });
-  for (const select of els.config.querySelectorAll('select')) select.disabled = busy;
+  for (const select of document.querySelectorAll('#config select, #config-extra select')) select.disabled = busy;
 }
 
 // ---------- Export ----------
 
-for (const b of document.querySelectorAll('[data-export]')) {
-  b.onclick = async () => {
-    $('export-menu').open = false;
-    const tab = await chrome.tabs.get(targetTabId).catch(() => null);
-    const stamp = new Date().toISOString().slice(0, 19).replace('T', '_').replaceAll(':', '-');
-    if (b.dataset.export === 'md') download(`tabhelm-chat-${stamp}.md`, exportMarkdown(tab), 'text/markdown');
-    else download(`tabhelm-log-${stamp}.json`, JSON.stringify({ exported: new Date().toISOString(), tab: tab && { title: tab.title, url: tab.url }, journal }, null, 2), 'application/json');
-  };
+// Export lives in History (any chat, current one highlighted).
+async function exportChat(meta, format) {
+  const chat = meta.id === chatId ? { journal, url: (await chrome.tabs.get(targetTabId).catch(() => null))?.url, pageTitle: null } : await loadChat(meta.id);
+  if (!chat) return notice('This chat is no longer saved.', true);
+  const tab = { title: chat.pageTitle || meta.pageTitle || '', url: chat.url || meta.url || '' };
+  const stamp = new Date(meta.updated || Date.now()).toISOString().slice(0, 19).replace('T', '_').replaceAll(':', '-');
+  if (format === 'md') download(`tabhelm-chat-${stamp}.md`, exportMarkdown(tab, chat.journal), 'text/markdown');
+  else download(`tabhelm-log-${stamp}.json`, JSON.stringify({ exported: new Date().toISOString(), tab, journal: chat.journal }, null, 2), 'application/json');
 }
 
 function download(filename, content, type) {
@@ -1127,8 +1156,8 @@ function download(filename, content, type) {
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 
-function totalsLine() {
-  const turns = journal.filter((e) => e.type === 'agent' && e.stats);
+function totalsLine(entries = journal) {
+  const turns = entries.filter((e) => e.type === 'agent' && e.stats);
   if (!turns.length) return null;
   const ms = turns.reduce((a, e) => a + e.stats.ms, 0);
   const tokens = turns.reduce((a, e) => a + (e.stats.tokens?.total || 0), 0);
@@ -1137,16 +1166,16 @@ function totalsLine() {
   return `- Totals: ${turns.length} tasks · ${fmtTime(ms)}${tokens ? ` · ${fmtTokens(tokens)} tokens` : ''}${costs.length ? ` · ${fmtCost({ amount: cost, currency: costs[0].stats.cost.currency })}` : ''}`;
 }
 
-function exportMarkdown(tab) {
+function exportMarkdown(tab, entries = journal) {
   const time = (ts) => new Date(ts).toLocaleTimeString();
-  const agents = [...new Set(journal.filter((e) => e.type === 'agent_connected').map((e) => e.agent))];
+  const agents = [...new Set(entries.filter((e) => e.type === 'agent_connected').map((e) => e.agent))];
   const out = [
     '# TabHelm chat',
     '',
     `- Exported: ${new Date().toLocaleString()}`,
     tab ? `- Tab: ${tab.title} — ${tab.url}` : null,
     agents.length ? `- Agents: ${agents.join(' → ')}` : null,
-    totalsLine(),
+    totalsLine(entries),
     '',
   ].filter((l) => l !== null);
 
@@ -1155,7 +1184,7 @@ function exportMarkdown(tab) {
     inActions = false;
     out.push('', `### ${heading}`, '');
   };
-  for (const e of journal) {
+  for (const e of entries) {
     const t = time(e.ts);
     switch (e.type) {
       case 'user':
@@ -1403,7 +1432,9 @@ function blobToBase64(blob) {
 
 function setStatus(state, label) {
   els.status.dataset.state = state;
-  els.status.textContent = label;
+  // Idle/ready states need no words: the agent select already says which agent.
+  els.status.textContent = state === 'idle' || state === 'ready' ? '' : label;
+  els.status.title = label || '';
 }
 
 // ---------- Rendering helpers ----------
@@ -1483,6 +1514,7 @@ initFolder(port, tabId, {
 // ---------- History: open and replay saved chats ----------
 
 initHistory({
+  export: exportChat,
   open(meta, tabAlive) {
     if (meta.id === chatId) return closeHistory();
     // The chat's own tab is still open: switch to it and open its panel there.

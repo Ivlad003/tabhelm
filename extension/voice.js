@@ -19,7 +19,7 @@ export function initVoice(panelPort, { text, error }) {
   onError = error;
   for (const b of document.querySelectorAll('[data-voice]')) {
     b.onclick = () => {
-      $('voice-menu').open = false;
+      $('plus-menu').open = false;
       start(b.dataset.voice).catch((err) => {
         stop(true);
         onError(err.message);
@@ -167,7 +167,6 @@ function startBrowserRecognition(settings) {
 function show(status) {
   $('voice-live').hidden = false;
   $('voice-status').textContent = status;
-  $('voice-menu').hidden = true;
   $('voice-stop').hidden = false;
   render();
 }
@@ -198,7 +197,6 @@ export function stop(discard = false) {
   s.ctx?.close().catch(() => {});
   $('voice-live').hidden = true;
   $('voice-stop').hidden = true;
-  $('voice-menu').hidden = false;
   if (discard) return;
   const deliver = () => onText(s.finals.filter(Boolean).join(' ').trim(), s.source);
   if (s.pending > 0 || (s.recorder && s.recorder.state === 'recording')) {

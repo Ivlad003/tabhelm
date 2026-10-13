@@ -79,7 +79,13 @@ async function render() {
       const panel = el('div', { className: 'feature-panel' });
       if (features[f.id]) {
         const builder = PANELS[f.id];
-        if (builder) {
+        if (f.id === 'skillAuthoring') {
+          // Written skills belong with the other skills, in the Skills section.
+          const home = $('skills-authoring');
+          home.replaceChildren(panel);
+          builder(panel);
+          item.append(el('div', { className: 'feature-panel' }, hint('Write and edit skills in the Skills section above; run them with /name.')));
+        } else if (builder) {
           builder(panel);
           item.append(panel);
         }
@@ -87,6 +93,9 @@ async function render() {
       return item;
     }),
   );
+  $('skills-authoring').hidden = !features.skillAuthoring;
+  $('skills-write-hint').hidden = !features.skillAuthoring;
+  if (!features.skillAuthoring) $('skills-authoring').replaceChildren();
 }
 
 const PANELS = {
@@ -296,7 +305,7 @@ const PANELS = {
       save();
       renderList();
     };
-    panel.append(hint('Skills you write here work like skills from links and can be run with /name in the message box. The agent sees the description and reads the instructions when needed.'), list, field('Name', name), field('Description', desc), field('Instructions', body), add);
+    panel.append(el('h4', { textContent: 'Written here' }), list, field('Name', name), field('Description', desc), field('Instructions', body), add);
   },
 
   async passwordManager(panel) {

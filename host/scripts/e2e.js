@@ -102,22 +102,23 @@ if (process.env.E2E_TABS) {
   const contactsId = await sw.evaluate(async (u) => (await chrome.tabs.query({ url: `${u}contacts` }))[0].id, url);
   // Clicks in a background tab never complete in headless Chrome; keep the panel in front.
   await panel.bringToFront();
+  await panel.click('#plus-menu summary');
   await panel.click('#group-tabs');
   try {
-    await panel.waitForFunction(() => /Group · 1 tab/.test(document.querySelector('#group-tabs').textContent), { timeout: 10000 });
+    await panel.waitForFunction(() => /1 tab shared/.test(document.querySelector('#group-tabs').textContent), { timeout: 10000 });
   } catch (err) {
     console.log('group failed; notices:', await panel.$$eval('.notice', (n) => n.map((x) => x.innerText).join(' / ')));
     throw err;
   }
   // The user drags the contacts tab into the group.
   await sw.evaluate(async (chat, id) => chrome.tabs.group({ groupId: (await chrome.tabs.get(chat)).groupId, tabIds: [id] }), tabId, contactsId);
-  await panel.waitForFunction(() => /Group · 2 tabs/.test(document.querySelector('#group-tabs').textContent), { timeout: 10000 });
-  console.log('group button:', await panel.$eval('#group-tabs', (e) => e.textContent));
+  await panel.waitForFunction(() => /2 tabs shared/.test(document.querySelector('#group-tabs').textContent), { timeout: 10000 });
+  console.log('group button:', await panel.$eval('#group-tabs', (e) => e.textContent), '| chip:', await panel.$eval('#tab-chip', (e) => e.textContent));
 
   await panel.waitForFunction((id) => [...document.querySelectorAll('#agent option')].some((o) => o.value === id && !o.disabled), { timeout: 20000 }, agent);
   await panel.select('#agent', agent);
   await panel.click('#auto');
-  await panel.click('#connect');
+  await panel.evaluate(() => window.tabhelmTest.connect());
   await panel.waitForFunction(() => document.querySelector('#status').dataset.state === 'ready', { timeout: 90000 });
   await panel.type('#input', "Another tab in this chat's tab group shows a contact. Find that person's email address there, type it into the Name field of the form on this tab, click Save, and tell me the email.");
   await panel.click('#send');
@@ -146,16 +147,16 @@ if (process.env.E2E_FOLDER) {
   );
 
   await panel.waitForFunction((id) => [...document.querySelectorAll('#agent option')].some((o) => o.value === id && !o.disabled), { timeout: 20000 }, agent);
-  await panel.click('#folder-menu summary');
+  await panel.click('#plus-menu summary');
   await panel.click('#folder-type');
   await panel.type('#folder-path', project);
   await panel.click('#folder-form button');
-  await panel.waitForFunction(() => /demo-project/.test(document.querySelector('#folder-label').textContent), { timeout: 15000 });
-  const label = await panel.$eval('#folder-label', (e) => e.textContent);
+  await panel.waitForFunction(() => /demo-project/.test(document.querySelector('#folder-chip').textContent), { timeout: 15000 });
+  const label = await panel.$eval('#folder-chip', (e) => e.textContent);
   await panel.select('#agent', agent);
   await panel.click('#auto');
   const warning = await panel.$eval('#folder-warning', (e) => !e.hidden);
-  await panel.click('#connect');
+  await panel.evaluate(() => window.tabhelmTest.connect());
   await panel.waitForFunction(() => document.querySelector('#status').dataset.state === 'ready', { timeout: 90000 });
   await panel.type('#input', 'In the working folder, create a file named hello.txt containing only the secret word of this project (see the project skills). Do not use browser tools. Then tell me what you wrote.');
   await panel.click('#send');
@@ -192,7 +193,7 @@ if (process.env.E2E_ATTACH) {
   await panel.waitForFunction((id) => [...document.querySelectorAll('#agent option')].some((o) => o.value === id && !o.disabled), { timeout: 20000 }, agent);
   await panel.select('#agent', agent);
   await panel.click('#auto');
-  await panel.click('#connect');
+  await panel.evaluate(() => window.tabhelmTest.connect());
   try {
     await panel.waitForFunction(() => document.querySelector('#status').dataset.state === 'ready', { timeout: 90000 });
   } catch (err) {
@@ -239,7 +240,7 @@ if (process.env.E2E_SKILLS) {
   await panel.waitForFunction(() => document.querySelector('#agent option:checked')?.value, { timeout: 15000 });
   await panel.select('#agent', agent);
   await panel.click('#auto');
-  await panel.click('#connect');
+  await panel.evaluate(() => window.tabhelmTest.connect());
   await panel.waitForFunction(() => document.querySelector('#status').dataset.state === 'ready', { timeout: 60000 });
   await panel.type('#input', 'What is the secret code of this signup page? Answer with the code only.');
   await panel.click('#send');
@@ -287,7 +288,11 @@ await panel.waitForFunction(() => document.querySelectorAll('#agent option[value
 console.log('agents:', await panel.$$eval('#agent option', (o) => o.map((x) => x.value).join(',')));
 await panel.select('#agent', agent);
 await panel.click('#auto');
-await panel.click('#connect');
+// E2E_LAZY=1: no explicit connect — the first Send starts the agent.
+if (process.env.E2E_LAZY) {
+  await panel.type('#input', 'Fill this form: name "Ada Lovelace", color Blue, tick the agreement checkbox, then click Save and tell me the exact confirmation text shown.');
+  await panel.click('#send');
+} else await panel.evaluate(() => window.tabhelmTest.connect());
 if (process.env.E2E_EXPECT_AUTH) {
   await panel.waitForFunction(() => [...document.querySelectorAll('.card .title')].some((t) => /sign in/.test(t.textContent)), { timeout: 60000 });
   const buttons = await panel.$$eval('.card .options button', (b) => b.map((x) => x.textContent));
@@ -316,18 +321,24 @@ if (process.env.E2E_MODEL) {
   console.log('model switched to', process.env.E2E_MODEL);
 
   // Reconnect: the panel should restore the saved model for this agent.
-  await panel.click('#connect');
+  await panel.evaluate(() => window.tabhelmTest.disconnect());
   await panel.waitForFunction(() => document.querySelector('#status').dataset.state === 'idle', { timeout: 30000 });
-  await panel.click('#connect');
+  await panel.evaluate(() => window.tabhelmTest.connect());
   await panel.waitForFunction((m) => {
     const s = document.querySelector('#config select.model');
     return document.querySelector('#status').dataset.state === 'ready' && s && s.value === m;
   }, { timeout: 60000 }, process.env.E2E_MODEL);
   console.log('model restored after reconnect');
 }
-if (process.env.E2E_RECORD) await panel.click('#record');
-await panel.type('#input', 'Fill this form: name "Ada Lovelace", color Blue, tick the agreement checkbox, then click Save and tell me the exact confirmation text shown.');
-await panel.click('#send');
+if (process.env.E2E_RECORD) {
+  await panel.click('#plus-menu summary');
+  await panel.click('#record');
+  await panel.click('#plus-menu summary');
+}
+if (!process.env.E2E_LAZY) {
+  await panel.type('#input', 'Fill this form: name "Ada Lovelace", color Blue, tick the agreement checkbox, then click Save and tell me the exact confirmation text shown.');
+  await panel.click('#send');
+}
 
 if (process.env.E2E_FAILOVER) {
   // Kill the agent process (child of this test's native host) after its first browser action.
@@ -397,8 +408,10 @@ if (process.env.E2E_FAILOVER) {
   const downloads = join(profile, 'downloads');
   const session = await browser.target().createCDPSession();
   await session.send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: downloads });
-  await panel.click('#export-menu summary');
-  await panel.click('[data-export="md"]');
+  await panel.click('#history-open');
+  await panel.waitForSelector('.history-item.current .history-export', { timeout: 10000 });
+  await panel.click('.history-item.current .history-export');
+  await panel.click('#history-close');
   await new Promise((r) => setTimeout(r, 1500));
   const file = readdirSync(downloads).find((f) => f.endsWith('.md'));
   const md = file ? readFileSync(join(downloads, file), 'utf8') : '';
@@ -439,6 +452,15 @@ console.log('---- panel log\n' + log + '\n----');
 console.log('page result:', out);
 await panel.screenshot({ path: join(profile, 'panel.png') });
 console.log('panel screenshot:', join(profile, 'panel.png'));
+if (process.env.E2E_SHOTS) {
+  await panel.click('#plus-menu summary');
+  await panel.screenshot({ path: join(profile, 'panel-menu.png') });
+  await panel.click('#plus-menu summary');
+  await panel.click('#settings-open');
+  await panel.screenshot({ path: join(profile, 'panel-settings.png') });
+  await panel.click('#settings-close');
+  console.log('extra screenshots in', profile);
+}
 const pass = out === 'Saved: Ada Lovelace / blue / agreed' && extraOk;
 console.log(pass ? 'E2E PASS' : 'E2E FAIL');
 await browser.close();

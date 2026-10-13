@@ -169,7 +169,7 @@ async function connect() {
   await panel.waitForFunction(() => [...document.querySelectorAll('#agent option')].some((o) => o.value === 'openrouter' && !o.disabled), { timeout: 20000 });
   await panel.select('#agent', 'openrouter');
   if (!(await panel.$eval('#auto', (e) => e.checked))) await panel.click('#auto');
-  await panel.click('#connect');
+  await panel.evaluate(() => window.tabhelmTest.connect());
   await panel.waitForFunction(() => document.querySelector('#status').dataset.state === 'ready', { timeout: 60000 });
 }
 async function ask(text) {
@@ -303,8 +303,8 @@ await setStorage({ features: { voice: true }, featureSettings: { voice: { engine
 // Extension pages need an explicit microphone grant in headless Chrome.
 await browser.defaultBrowserContext().overridePermissions(`chrome-extension://${extId}`, ['microphone']);
 await connect();
-await panel.waitForFunction(() => !document.querySelector('#voice-menu').hidden, { timeout: 5000 });
-await panel.click('#voice-button');
+await panel.click('#plus-menu summary');
+await panel.waitForFunction(() => !document.querySelector('[data-voice="mic"]').hidden, { timeout: 5000 });
 await panel.click('[data-voice="mic"]');
 await panel.waitForFunction(() => !document.querySelector('#voice-live').hidden, { timeout: 5000 });
 try {

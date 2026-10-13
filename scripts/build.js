@@ -46,6 +46,13 @@ mkdirSync(out, { recursive: true });
 
 step('Copying extension (without the test hook)');
 cpSync(join(root, 'extension'), join(out, 'extension'), { recursive: true });
+// The panel's test hook (window.tabhelmTest) is removed from releases too.
+const spPath = join(out, 'extension/sidepanel.js');
+const sp = readFileSync(spPath, 'utf8');
+const spStripped = sp.replace(/\n\/\/ Test hook \(stripped from releases\)[\s\S]*?\n\};\n/, '\n');
+if (spStripped === sp) throw new Error('Panel test hook not found in sidepanel.js; update scripts/build.js');
+writeFileSync(spPath, spStripped);
+
 const bgPath = join(out, 'extension/background.js');
 const bg = readFileSync(bgPath, 'utf8');
 const stripped = bg.replace(/\n\/\/ Dev hook for scripts\/tools-test\.js[^\n]*\nself\.tabhelmDebug = \{ runTool, ensureGroup, chatDebugState, runSchedule: \(id\) => runScheduled\(id, scheduleDeps\) \};\n/, '\n');

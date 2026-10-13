@@ -1,6 +1,20 @@
 {
   "news": [
     {
+      "id": "2026-10-simpler-panel",
+      "date": "2026-10-13",
+      "minVersion": "0.17.0",
+      "title": {
+        "en": "A simpler panel",
+        "uk": "Простіша панель"
+      },
+      "text": {
+        "en": "No Connect button — just send. One ＋ menu for attachments, voice, recording, tabs and folder; export moved to History; effort lives in Settings.",
+        "uk": "Без кнопки Connect — просто надсилайте. Одне меню ＋ для вкладень, голосу, запису, вкладок і папки; експорт переїхав в History; effort — у Settings."
+      },
+      "url": "https://github.com/Ivlad003/tabhelm#the-panel"
+    },
+    {
       "id": "2026-10-voice",
       "date": "2026-10-13",
       "minVersion": "0.16.0",

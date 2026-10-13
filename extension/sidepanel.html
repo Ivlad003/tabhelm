@@ -12,34 +12,18 @@
       <div class="bar-row">
         <span class="brand"><img src="icons/icon32.png" alt="" />TabHelm</span>
         <span id="rec-indicator" class="rec" hidden><span class="rec-dot"></span>REC</span>
-        <span id="status" class="status" data-state="idle">Not connected</span>
-        <button id="history-open" class="btn small" aria-pressed="false" title="Saved chats">History</button>
-        <button id="settings-open" class="btn small" aria-pressed="false" title="Skills and updates">Settings</button>
-        <details class="menu" id="export-menu">
-          <summary class="btn small" title="Download this chat and the agent's action log">Export</summary>
-          <div class="menu-list">
-            <button type="button" data-export="md">Chat + action log (.md)</button>
-            <button type="button" data-export="json">Full log (.json)</button>
-          </div>
-        </details>
+        <span id="status" class="status" data-state="idle" aria-live="polite"></span>
+        <button id="history-open" class="btn small" aria-pressed="false" title="Saved chats, export">History</button>
+        <button id="settings-open" class="btn small" aria-pressed="false" title="Skills, features, updates">Settings</button>
         <button id="new-chat" class="btn small" title="Clear the chat and start a fresh agent session">New chat</button>
       </div>
       <div class="bar-row">
-        <select id="agent" aria-label="Agent"></select>
-        <button id="connect" class="btn">Connect</button>
+        <select id="agent" aria-label="Agent" title="Agent — connects when you send the first message"></select>
+        <div id="config" class="config" hidden></div>
       </div>
-      <div id="config" class="bar-row config" hidden></div>
-      <div class="bar-row folder-row">
-        <span id="folder-label" class="folder-label">No working folder</span>
-        <details class="menu" id="folder-menu">
-          <summary class="btn small" title="Working folder for the agent (optional)">Folder…</summary>
-          <div class="menu-list">
-            <button type="button" id="folder-pick">Choose folder…</button>
-            <div id="folder-recent-list"></div>
-            <button type="button" id="folder-type">Type a path</button>
-            <button type="button" id="folder-clear" hidden>Remove folder</button>
-          </div>
-        </details>
+      <div id="context" class="bar-row context" hidden>
+        <button id="tab-chip" class="chip" type="button" hidden title="Tabs this chat works with"></button>
+        <span id="folder-chip" class="chip" hidden></span>
       </div>
       <form id="folder-form" class="folder-form" hidden>
         <input id="folder-path" list="folder-recent" placeholder="/home/you/projects/app" aria-label="Folder path" />
@@ -48,10 +32,6 @@
       </form>
       <div id="folder-error" class="notice error" hidden></div>
       <div id="folder-warning" class="notice error" hidden>Auto-approve is on: the agent can edit files and run commands in this folder without asking.</div>
-      <div class="bar-row tabs-row">
-        <div id="tab" class="tab-line" title="The tab this chat controls"></div>
-        <button id="group-tabs" class="btn small" type="button" title="Put this tab in a Chrome tab group; drag other tabs into the group to let the agent use them">Group tabs</button>
-      </div>
     </header>
 
     <div id="news" class="news" hidden></div>
@@ -61,7 +41,7 @@
         <h2>History</h2>
         <button id="history-close" class="btn small" type="button">Done</button>
       </div>
-      <p class="hint">Chats are saved on this computer. Open one to continue it — its page opens too — and connect any agent: it gets the whole conversation.</p>
+      <p class="hint">Chats are saved on this computer. Open one to continue it — its page opens too. ⬇ exports a chat with its action log.</p>
       <input id="history-search" class="history-search" type="search" placeholder="Search chats" aria-label="Search chats" />
       <p id="history-empty" class="hint" hidden>No saved chats yet.</p>
       <ul id="history-list" class="history-list"></ul>
@@ -75,17 +55,20 @@
 
       <h3>Skills</h3>
       <p class="hint">
-        Paste a link to a <code>SKILL.md</code> file or a skill folder on GitHub. TabHelm loads it from the link (cached for an hour) —
-        nothing is installed. The agent sees each skill's description and reads the full instructions when a task matches.
+        Instructions that make the agent better at a kind of task. Add a link to a <code>SKILL.md</code> file or a skill folder on GitHub (loaded from the link, nothing installed)<span id="skills-write-hint" hidden>, or write one here</span>.
         Only add skills you trust: they become instructions for the agent.
       </p>
       <form id="skill-form" class="skill-form">
         <input id="skill-url" type="url" placeholder="https://github.com/…/skills/…" aria-label="Skill link" />
-        <button class="btn primary" type="submit">Add</button>
+        <button class="btn primary" type="submit">Add link</button>
       </form>
       <div id="skill-error" class="notice error" hidden></div>
       <p id="skills-empty" class="hint">No skills yet. Try: <span id="skill-examples"></span></p>
       <ul id="skill-list" class="skill-list"></ul>
+      <div id="skills-authoring"></div>
+
+      <h3>Model options</h3>
+      <div id="config-extra" class="config-extra"><span class="hint">Effort and other options appear here once an agent is connected.</span></div>
 
       <h3>Experimental</h3>
       <p class="hint">New features, all off by default. Turn one on to see its settings.</p>
@@ -100,8 +83,8 @@
 
     <main id="log" class="log" aria-live="polite">
       <div class="empty" id="empty">
-        <p>Pick a terminal agent and press <b>Connect</b>.</p>
-        <p>The agent runs on your machine with its own login and can read, click and type on <b>this tab only</b>.</p>
+        <p>Pick an agent and describe what to do on this page.</p>
+        <p>The agent runs on your machine with its own login and can read, click and type on <b>this tab only</b>, unless you share more tabs.</p>
       </div>
     </main>
 
@@ -109,24 +92,30 @@
       <div id="slash-menu" class="slash-menu" hidden></div>
       <div id="voice-live" class="voice-live" hidden><span class="rec-dot"></span><span id="voice-status"></span><div id="voice-text"></div></div>
       <div id="attachments" class="attachments" hidden></div>
-      <textarea id="input" rows="3" placeholder="Ask the agent to do something on this page… (drop or paste images and text files)" disabled></textarea>
+      <textarea id="input" rows="3" placeholder="Ask the agent to do something on this page… (drop or paste images and text files)"></textarea>
       <input id="file-input" type="file" multiple hidden accept="image/*,.txt,.md,.markdown,.csv,.tsv,.json,.log,text/plain,text/markdown,text/csv" />
       <div class="composer-row">
-        <div class="toggles">
-          <button id="attach" class="btn small" type="button" title="Attach images or text files (txt, md, csv)" disabled>Attach</button>
-          <details class="menu" id="voice-menu" hidden>
-            <summary class="btn small" id="voice-button" title="Record a voice message or the tab's audio">🎤 Voice</summary>
-            <div class="menu-list">
-              <button type="button" data-voice="mic">Microphone</button>
-              <button type="button" data-voice="tab">Tab audio</button>
-            </div>
-          </details>
-          <button id="voice-stop" class="btn small primary" type="button" hidden>■ Stop</button>
-          <label class="auto"><input type="checkbox" id="auto" /> Auto-approve actions</label>
-          <label class="auto" title="Record a video of the tab while the agent works on each message"><input type="checkbox" id="record" /> Record video</label>
-        </div>
+        <details class="menu up" id="plus-menu">
+          <summary class="btn small" title="Attachments, voice, recording, folder, tabs">＋</summary>
+          <div class="menu-list">
+            <button type="button" id="attach">Attach files…</button>
+            <button type="button" data-voice="mic" hidden>Voice message</button>
+            <button type="button" data-voice="tab" hidden>Transcribe tab audio</button>
+            <label class="menu-check" title="Record a video of the tab while the agent works on each message"><input type="checkbox" id="record" /> Record video</label>
+            <div class="menu-sep"></div>
+            <button type="button" id="group-tabs">Share tabs (tab group)</button>
+            <div class="menu-sep"></div>
+            <button type="button" id="folder-pick">Choose working folder…</button>
+            <div id="folder-recent-list"></div>
+            <button type="button" id="folder-type">Type a folder path</button>
+            <button type="button" id="folder-clear" hidden>Remove working folder</button>
+          </div>
+        </details>
+        <button id="voice-stop" class="btn small primary" type="button" hidden>■ Stop</button>
+        <label class="auto"><input type="checkbox" id="auto" /> Auto-approve</label>
+        <span class="spacer"></span>
         <button id="pause" class="btn small" type="button" hidden>Pause</button>
-        <button id="send" class="btn primary" disabled>Send</button>
+        <button id="send" class="btn primary">Send</button>
       </div>
     </footer>
 
