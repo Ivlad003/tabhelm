@@ -45,6 +45,12 @@ SRC="$(find "$TMP" -mindepth 1 -maxdepth 1 -type d -name 'tabhelm-*' | head -n 1
 [ -n "$SRC" ] || fail "The archive does not contain a tabhelm-<version> folder."
 
 mkdir -p "$ROOT"
+# A running TabHelm host (started by Chrome) must be stopped before replacing the files.
+if [ -d "$APP" ] && pgrep -f "$APP/host" >/dev/null 2>&1; then
+  bold "Stopping the running TabHelm host"
+  pkill -f "$APP/host" || true
+  sleep 1
+fi
 rm -rf "$APP"
 mv "$SRC" "$APP"
 

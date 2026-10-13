@@ -44,7 +44,24 @@ try {
   if (-not $src) { Fail 'The archive does not contain a tabhelm-<version> folder.' }
 
   New-Item -ItemType Directory -Path $root -Force | Out-Null
-  if (Test-Path $app) { Remove-Item $app -Recurse -Force }
+  if (Test-Path $app) {
+    # A running TabHelm host (started by Chrome) keeps the folder busy: stop it first.
+    $running = Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -and $_.CommandLine -like "*$app\host*" }
+    if ($running) {
+      Step "Stopping the running TabHelm host ($($running.Count) process(es))"
+      $running | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+      Start-Sleep -Seconds 2
+    }
+    $tries = 0
+    while ($true) {
+      try { Remove-Item $app -Recurse -Force; break }
+      catch {
+        $tries++
+        if ($tries -ge 5) { Fail "Cannot replace $app (still in use). Close the TabHelm panel in Chrome and run the command again." }
+        Start-Sleep -Seconds 2
+      }
+    }
+  }
   Move-Item $src.FullName $app
 
   Step 'Installing host dependencies (this can take a minute)'
