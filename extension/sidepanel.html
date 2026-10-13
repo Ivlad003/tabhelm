@@ -56,7 +56,7 @@
 
       <h3>Skills</h3>
       <p class="hint">
-        Instructions that make the agent better at a kind of task. Add a link to a <code>SKILL.md</code> file or a skill folder on GitHub (loaded from the link, nothing installed)<span id="skills-write-hint" hidden>, or write one here</span>.
+        Instructions that make the agent better at a kind of task. Add a link to a <code>SKILL.md</code> file, a skill folder or a whole repository of skills on GitHub (loaded from the link, nothing installed)<span id="skills-write-hint" hidden>, or write one here</span>.
         Only add skills you trust: they become instructions for the agent.
       </p>
       <form id="skill-form" class="skill-form">
@@ -64,6 +64,7 @@
         <button class="btn primary" type="submit">Add link</button>
       </form>
       <div id="skill-error" class="notice error" hidden></div>
+      <div id="skill-picker" class="skill-picker" hidden></div>
       <p id="skills-empty" class="hint">No skills yet. Try: <span id="skill-examples"></span></p>
       <ul id="skill-list" class="skill-list"></ul>
       <div id="skills-authoring"></div>

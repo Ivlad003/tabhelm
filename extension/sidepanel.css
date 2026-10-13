@@ -1507,3 +1507,26 @@ button.chip:hover {
 .card.guide .hint {
   margin: 4px 0 6px;
 }
+
+.skill-picker {
+  border: 1px solid var(--accent);
+  border-radius: var(--th-radius-m);
+  padding: 8px;
+  margin: 6px 0;
+  display: grid;
+  gap: 6px;
+}
+
+.skill-picker .skill-list {
+  max-height: 50vh;
+  overflow: auto;
+  margin: 0;
+}
+
+.skill-picker .skill {
+  cursor: pointer;
+}
+
+.skill-picker[hidden] {
+  display: none;
+}

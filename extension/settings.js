@@ -18,8 +18,7 @@ const pending = new Map(); // requestId -> resolve
 
 export async function initSettings(panelPort) {
   port = panelPort;
-  skills = (await chrome.storage.local.get('skills')).skills || [];
-
+  // Handlers first, so a click right after the panel opens is not lost while storage loads.
   $('settings-open').onclick = () => toggle(true);
   $('settings-close').onclick = () => toggle(false);
   $('skill-form').onsubmit = (e) => {
@@ -28,8 +27,10 @@ export async function initSettings(panelPort) {
   };
   $('check-updates').onclick = checkUpdates;
   const hl = $('highlight-finds');
-  hl.checked = (await chrome.storage.local.get('highlightFinds')).highlightFinds !== false;
   hl.onchange = () => chrome.storage.local.set({ highlightFinds: hl.checked });
+  const stored = await chrome.storage.local.get(['skills', 'highlightFinds']);
+  skills = stored.skills || [];
+  hl.checked = stored.highlightFinds !== false;
   const examples = $('skill-examples');
   for (const ex of EXAMPLES) {
     const a = Object.assign(document.createElement('a'), { href: ex.url, textContent: ex.label });
@@ -147,6 +148,7 @@ async function addSkill(url) {
   button.disabled = false;
   button.textContent = 'Add';
   if (info.error) return showError(info.error);
+  if (info.collection) return showPicker(url, info.collection);
   if (skills.some((s) => s.name === info.name)) return showError(`A skill named "${info.name}" is already in the list.`);
 
   skills.push({ url, name: info.name, title: info.title, description: info.description, enabled: true });
@@ -157,6 +159,71 @@ async function addSkill(url) {
     error.textContent = text;
     error.hidden = false;
   }
+}
+
+// A repository with many skills: the user picks which ones to add.
+function showPicker(source, items) {
+  const box = $('skill-picker');
+  const present = new Set(skills.map((s) => s.url));
+  const rows = items.map((it) => {
+    const check = Object.assign(document.createElement('input'), { type: 'checkbox', checked: false, disabled: present.has(it.url) });
+    const li = document.createElement('li');
+    li.className = 'skill';
+    const textEl = document.createElement('div');
+    textEl.className = 'skill-text';
+    textEl.append(Object.assign(document.createElement('b'), { textContent: it.name }), Object.assign(document.createElement('div'), { className: 'skill-desc', textContent: it.description || it.path }));
+    if (present.has(it.url)) textEl.append(Object.assign(document.createElement('div'), { className: 'skill-url', textContent: 'already added' }));
+    li.append(check, textEl);
+    li.onclick = (e) => {
+      if (e.target !== check && !check.disabled) check.checked = !check.checked;
+      updateCount();
+    };
+    return { it, li, check };
+  });
+  const head = Object.assign(document.createElement('div'), { className: 'hint', textContent: `${items.length} skills found in ${source}. Pick the ones to add:` });
+  const filter = Object.assign(document.createElement('input'), { type: 'search', placeholder: 'Filter', className: 'history-search' });
+  filter.oninput = () => {
+    const q = filter.value.trim().toLowerCase();
+    for (const r of rows) r.li.hidden = Boolean(q) && !`${r.it.name} ${r.it.description} ${r.it.path}`.toLowerCase().includes(q);
+  };
+  const list = document.createElement('ul');
+  list.className = 'skill-list';
+  list.append(...rows.map((r) => r.li));
+  const all = Object.assign(document.createElement('button'), { className: 'btn small', type: 'button', textContent: 'Select all' });
+  all.onclick = () => {
+    const visible = rows.filter((r) => !r.li.hidden && !r.check.disabled);
+    const on = visible.some((r) => !r.check.checked);
+    for (const r of visible) r.check.checked = on;
+    all.textContent = on ? 'Select none' : 'Select all';
+    updateCount();
+  };
+  const add = Object.assign(document.createElement('button'), { className: 'btn small primary', type: 'button', textContent: 'Add selected' });
+  add.onclick = async () => {
+    const chosen = rows.filter((r) => r.check.checked && !r.check.disabled);
+    if (!chosen.length) return;
+    for (const { it } of chosen) {
+      if (skills.some((s) => s.url === it.url || s.name === it.name)) continue;
+      skills.push({ url: it.url, name: it.name, title: it.title, description: it.description, enabled: true });
+    }
+    box.hidden = true;
+    box.replaceChildren();
+    $('skill-url').value = '';
+    await save();
+  };
+  const cancel = Object.assign(document.createElement('button'), { className: 'btn small', type: 'button', textContent: 'Cancel' });
+  cancel.onclick = () => {
+    box.hidden = true;
+    box.replaceChildren();
+  };
+  const actions = document.createElement('div');
+  actions.className = 'options';
+  actions.append(all, add, cancel);
+  function updateCount() {
+    const n = rows.filter((r) => r.check.checked && !r.check.disabled).length;
+    add.textContent = n ? `Add ${n} selected` : 'Add selected';
+  }
+  box.replaceChildren(head, filter, actions, list);
+  box.hidden = false;
 }
 
 async function save() {

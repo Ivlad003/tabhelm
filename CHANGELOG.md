@@ -2,6 +2,14 @@
 
 All notable changes to TabHelm. The newest release is at the top; the panel's update banner links here.
 
+## [0.23.0] - 2026-10-13
+
+### Added
+- Settings → Skills accepts a link to a whole repository or folder of skills (e.g. `github.com/mattpocock/skills`): a picker lists every `SKILL.md` with its description; filter, select and add them in one go.
+
+### Fixed
+- Settings buttons pressed right after the panel opened could be ignored while stored settings were still loading.
+
 ## [0.22.1] - 2026-10-13
 
 ### Added

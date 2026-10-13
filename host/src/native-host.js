@@ -21,7 +21,7 @@ import { dirname, join, resolve } from 'node:path';
 import { createNativeChannel } from './native-messaging.js';
 import { listAgents, getAgent } from './agents.js';
 import { loadEnvFile } from './env.js';
-import { loadSkill, runSkillTool } from './skills.js';
+import { loadSkill, runSkillTool, listSkillCollection } from './skills.js';
 import { folderInfo, pickFolder, projectInstructions, projectSkills } from './folders.js';
 import { reviewAction } from './critic.js';
 import { providerReady } from './llm.js';
@@ -267,6 +267,16 @@ async function handleMessage(msg) {
           const s = await loadSkill(msg.url, { force: true });
           send({ type: 'skill_info', tabId, requestId: msg.requestId, url: msg.url, name: s.name, title: s.title, description: s.description });
         } catch (err) {
+          // Not a single skill: maybe a repository full of them.
+          try {
+            const col = await listSkillCollection(msg.url);
+            if (col?.items.length) {
+              send({ type: 'skill_info', tabId, requestId: msg.requestId, url: msg.url, collection: col.items });
+              break;
+            }
+          } catch (e) {
+            log(`skill collection lookup failed for ${msg.url}: ${e.message}`);
+          }
           send({ type: 'skill_info', tabId, requestId: msg.requestId, url: msg.url, error: err.message });
         }
         break;

@@ -259,7 +259,19 @@ if (process.env.E2E_SKILLS) {
   await panel.type('#skill-url', `${url}skills/signup-secret`);
   await panel.click('#skill-form button');
   await panel.waitForFunction(() => /signup-secret/.test(document.querySelector('#skill-list')?.innerText || ''), { timeout: 30000 });
+  // A repository full of skills offers a picker (real GitHub; needs network).
+  await panel.type('#skill-url', 'https://github.com/mattpocock/skills/tree/main/skills/productivity');
+  await panel.click('#skill-form button');
+  await panel.waitForFunction(() => !document.getElementById('skill-picker').hidden || !document.getElementById('skill-error').hidden, { timeout: 60000 });
+  const pickerRows = await panel.$$eval('#skill-picker .skill', (l) => l.map((x) => x.querySelector('b').textContent));
+  await panel.type('#skill-picker input[type=search]', 'grill');
+  await panel.evaluate(() => [...document.querySelectorAll('#skill-picker button')].find((b) => b.textContent === 'Select all').click());
+  await panel.evaluate(() => [...document.querySelectorAll('#skill-picker button')].find((b) => /Add \d+ selected/.test(b.textContent)).click());
+  await panel.waitForFunction(() => document.getElementById('skill-picker').hidden, { timeout: 5000 });
+  console.log('collection picker rows:', pickerRows.join(', '));
   const listed = await panel.$eval('#skill-list', (e) => e.innerText.replace(/\s+/g, ' '));
+  const pickerOk = pickerRows.length >= 5 && /grill-me/.test(listed) && /grilling/.test(listed) && !/handoff/.test(listed);
+  console.log('picker added the filtered selection:', pickerOk);
   const button = await panel.$eval('#settings-open', (e) => e.textContent);
   await panel.screenshot({ path: join(profile, 'settings.png') });
   console.log('settings screenshot:', join(profile, 'settings.png'));
@@ -278,7 +290,7 @@ if (process.env.E2E_SKILLS) {
   console.log('settings button:', button);
   console.log('agent read the skill:', readSkill);
   console.log('answer:', answer.replace(/\s+/g, ' ').slice(0, 200));
-  const ok = /signup-secret/.test(listed) && readSkill && /PURPLE-42/.test(answer);
+  const ok = /signup-secret/.test(listed) && pickerOk && readSkill && /PURPLE-42/.test(answer);
   console.log(ok ? 'E2E PASS' : 'E2E FAIL');
   await browser.close();
   server.close();

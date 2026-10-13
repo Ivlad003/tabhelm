@@ -137,3 +137,42 @@ export function skillsPreamble(skills) {
     .map((s) => `- ${s.name}: ${s.description}`)
     .join('\n')}\n\n`;
 }
+
+// A GitHub repository (or a folder in one) that holds many skills: every
+// SKILL.md under it becomes a candidate the user can pick in the panel.
+const MAX_COLLECTION = 150;
+export async function listSkillCollection(input) {
+  const url = new URL(String(input).trim());
+  if (url.hostname !== 'github.com') return null;
+  const [owner, repo, kind, refIn, ...rest] = url.pathname.replace(/^\/|\/$/g, '').split('/');
+  if (!owner || !repo || (kind && kind !== 'tree')) return null;
+  const api = async (path) => {
+    const res = await fetch(`https://api.github.com/repos/${owner}/${repo}${path}`, { headers: { accept: 'application/vnd.github+json', 'user-agent': 'tabhelm' } });
+    if (!res.ok) throw new Error(`GitHub API HTTP ${res.status}${res.status === 403 ? ' (rate limit — try again later)' : ''}`);
+    return res.json();
+  };
+  const ref = refIn || (await api('')).default_branch;
+  const prefix = rest.length ? `${rest.join('/')}/` : '';
+  const tree = (await api(`/git/trees/${encodeURIComponent(ref)}?recursive=1`)).tree || [];
+  const files = tree.filter((e) => e.type === 'blob' && /(^|\/)SKILL\.md$/.test(e.path) && e.path.startsWith(prefix)).slice(0, MAX_COLLECTION);
+  if (!files.length) return null;
+  const items = files.map((e) => {
+    const dir = e.path.replace(/\/?SKILL\.md$/, '');
+    return { url: `https://github.com/${owner}/${repo}/tree/${ref}/${dir}`, path: dir, name: slug(dir.split('/').pop() || repo), title: dir.split('/').pop() || repo, description: '' };
+  });
+  // Descriptions come from each SKILL.md (a few at a time); a failure just leaves it blank.
+  let i = 0;
+  await Promise.all(
+    Array.from({ length: 8 }, async () => {
+      while (i < items.length) {
+        const item = items[i++];
+        try {
+          const text = await fetchText(`https://raw.githubusercontent.com/${owner}/${repo}/${ref}/${item.path ? `${item.path}/` : ''}SKILL.md`);
+          const parsed = parseSkill(text, item.title);
+          Object.assign(item, { name: parsed.name, title: parsed.title, description: parsed.description });
+        } catch {}
+      }
+    }),
+  );
+  return { ref, items };
+}
