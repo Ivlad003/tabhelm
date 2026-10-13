@@ -52,7 +52,7 @@ The installer downloads the latest release into `~/.tabhelm/app` (`%USERPROFILE%
 
 **3. Use it.** Click the TabHelm icon on any page → pick an agent → write a task, e.g. *"Find the cheapest flight on this page and open it"* → **Send**. The agent starts with your first message.
 
-To update, run the install command again.
+To update, run the install command again (it stops a running host first), then press ↻ for TabHelm on `chrome://extensions`. Don't remove the extension to update — and if you do, your chats come back anyway: the host keeps a backup (see [History](#history)).
 
 ## User guide
 
@@ -67,7 +67,7 @@ To update, run the install command again.
 | **＋ menu** | Everything optional in one place: attach files (or drop / paste them), add the page selection, voice message and tab audio (Voice feature), record video, share tabs (tab group), choose / change / remove the working folder. |
 | **Auto-approve** | Lets the agent use tools without asking. Uploads, JavaScript, other tabs and the experimental gates still ask. |
 | **Send / Stop** | Sends a message (and starts the agent if needed); while the agent works, the button cancels the turn. |
-| **History** | Saved chats — open one to continue it (its page opens too) or export it (⬇ Markdown, `{ }` JSON). |
+| **History** | Saved chats — open one to continue it (its page opens too), export it (⬇ Markdown, `{ }` JSON) or delete it (🗑, **Clear all**). |
 | **Settings** | Skills (links and, with the flag, skills written here), model options, experimental features, version and updates. |
 | **New chat** | Clears the chat and starts a fresh session with the same agent and model. |
 
@@ -113,7 +113,9 @@ Every chat is saved on your computer (messages, steps, stats, the page, agent an
 - if its tab is still open, TabHelm switches to that tab and opens the chat in its panel;
 - otherwise the current tab goes back to the chat's page and the chat is shown here.
 
-To continue, connect any agent — it gets the whole conversation with your next message. Closing and reopening the panel on a tab restores that tab's chat. Delete chats with ×; up to 200 are kept.
+To continue, connect any agent — it gets the whole conversation with your next message. Closing and reopening the panel on a tab restores that tab's chat. 🗑 deletes one chat and **Clear all** deletes every saved chat except the open one (both ask first); up to 200 are kept.
+
+Chrome wipes an extension's storage when the extension is removed, so the host keeps a copy of the panel's data (chats, settings, skills, flags — never secrets) in `~/.tabhelm/state.json`, written a few seconds after every change. An extension that starts with empty storage restores from it, so reinstalling with *Load unpacked* keeps your history.
 
 ### Working folder (project)
 
@@ -393,7 +395,8 @@ extension/                     Chrome extension (Manifest V3, no build step)
   voice.js                     voice messages / tab audio with live transcription · permissions.html  microphone grant
   attachments.js               image / text attachments: picking, drop, paste, downscaling
   folder.js                    working folder: picker, typed path, recent folders, auto-approve warning
-  history.js                   saved chats: storage, list, search, opening in the chat's tab
+  history.js                   saved chats: storage, list, search, delete, opening in the chat's tab
+  markdown.js                  Markdown → HTML for agent replies (headings, lists, tables, quotes, code)
   tokens.css                   copy of design/tokens.css
 host/                          native host (Node 20+)
   src/native-host.js           entry point launched by Chrome; routes messages, saves recordings
@@ -406,6 +409,7 @@ host/                          native host (Node 20+)
   src/folders.js               working folder: native picker, AGENTS.md / project skills discovery
   src/critic.js                action critic (second model) · src/llm.js  OpenAI-compatible helper
   src/memory.js                memory notes across chats · src/passwords.js  1Password CLI hand-off
+  src/state.js                 backup of the panel's storage (~/.tabhelm/state.json) for reinstalls
   src/transcribe.js            speech to text: transcription API or whisper.cpp + ffmpeg
   src/tool-server.js           loopback HTTP endpoint with token
   src/mcp-bridge.js            stdio MCP server spawned by agents (24 tool definitions)
@@ -478,8 +482,8 @@ Logs: `~/.tabhelm/host.log`. Agents run in `~/.tabhelm/workspace`.
 - Background tabs may not render, so screenshots there can fail.
 - Cross-origin iframes are positioned by URL; if a frame navigated elsewhere, clicks fall back to DOM clicks and hover/drag are unavailable. File inputs inside iframes are not supported.
 - Console and network capture starts when the agent first touches a tab.
-- Closing the panel stops the agent; chat history is not kept.
+- Closing the panel stops the agent; the chat stays in History and continues when you reconnect.
 - Recordings capture only the visible tab and contain no audio.
-- Windows support is new and less tested than Linux/macOS; the folder picker uses a PowerShell dialog, 1Password needs `op.exe` on PATH, tab audio needs `ffmpeg`/`whisper-cli` or a transcription API. The Chrome Web Store version is not published yet (the manifest's `key` field must be removed for the store).
+- Windows support is new and less tested than Linux/macOS; agents installed by npm (`agent.cmd` and friends) are started through cmd.exe; the folder picker uses a PowerShell dialog, 1Password needs `op.exe` on PATH, tab audio needs `ffmpeg`/`whisper-cli` or a transcription API. The Chrome Web Store version is not published yet (the manifest's `key` field must be removed for the store).
 
 TabHelm is an independent project and is not affiliated with Google, Anthropic, OpenAI, Cursor, Qoder or xAI.
