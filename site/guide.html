@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>TabHelm — setup guide</title>
+    <meta name="description" content="Step-by-step setup of TabHelm: install the host, load the Chrome extension, connect an agent, update, run agents on another machine through a relay, Windows notes and troubleshooting." />
+    <link rel="icon" href="logo.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="tokens.css" />
+    <style>
+      :root {
+        --bg: var(--th-bg); --surface: var(--th-surface); --text: var(--th-text); --muted: var(--th-muted);
+        --border: var(--th-border); --accent: var(--th-accent); --accent-soft: var(--th-accent-soft); --code-bg: var(--th-code-bg);
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.6 var(--th-font); }
+      a { color: var(--accent); }
+      .wrap { max-width: 980px; margin: 0 auto; padding: 0 20px; }
+      header.top { display: flex; align-items: center; gap: 12px; padding: 18px 0; }
+      header.top img { width: 32px; height: 32px; }
+      header.top .name { font-weight: 700; font-size: 18px; flex: 1; text-decoration: none; color: var(--text); }
+      .lang { display: flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+      .lang button { font: inherit; font-size: 13px; padding: 4px 10px; border: 0; background: transparent; color: var(--muted); cursor: pointer; }
+      .lang button[aria-pressed='true'] { background: var(--accent-soft); color: var(--text); font-weight: 600; }
+      header.top .gh { font-size: 14px; color: var(--muted); text-decoration: none; }
+      code, pre { font-family: var(--th-font-mono); }
+      code { font-size: 14px; background: var(--code-bg); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+      pre { background: var(--code-bg); padding: 12px 14px; border-radius: 8px; overflow-x: auto; font-size: 14px; line-height: 1.5; margin: 8px 0 14px; }
+      pre code { background: none; padding: 0; }
+      h1 { font-size: clamp(28px, 4vw, 38px); margin: 24px 0 6px; letter-spacing: -0.02em; }
+      p.lead { color: var(--muted); font-size: 18px; margin: 0 0 20px; }
+      .layout { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 32px; align-items: start; }
+      .layout > main { min-width: 0; }
+      nav.toc { position: sticky; top: 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; font-size: 14px; box-shadow: var(--th-shadow); }
+      nav.toc b { display: block; margin-bottom: 6px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+      nav.toc a { display: block; padding: 3px 0; color: var(--text); text-decoration: none; }
+      nav.toc a:hover { color: var(--accent); }
+      section { padding: 22px 0; border-top: 1px solid var(--border); }
+      section:first-of-type { border-top: 0; padding-top: 0; }
+      section h2 { font-size: 24px; margin: 0 0 10px; letter-spacing: -0.01em; }
+      section h3 { font-size: 17px; margin: 18px 0 6px; }
+      ol.steps { padding-left: 22px; }
+      ol.steps li { margin: 6px 0; }
+      .note { background: var(--surface); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 8px; padding: 10px 14px; margin: 12px 0; font-size: 15px; }
+      .note.warn { border-left-color: var(--th-warn); }
+      table { border-collapse: collapse; width: 100%; font-size: 15px; margin: 8px 0 14px; }
+      th, td { border: 1px solid var(--border); padding: 7px 10px; text-align: left; vertical-align: top; }
+      th { background: var(--code-bg); }
+      kbd { font: 13px var(--th-font-mono); border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; background: var(--surface); }
+      .cmd { display: flex; gap: 8px; align-items: stretch; margin: 8px 0 14px; }
+      .cmd code { flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; padding: 12px 14px; border-radius: 8px; font-size: 14px; }
+      .cmd button { font: inherit; font-size: 14px; padding: 0 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer; }
+      footer { padding: 30px 0 50px; color: var(--muted); font-size: 14px; border-top: 1px solid var(--border); margin-top: 20px; }
+      [data-lang] { display: none; }
+      html[lang='en'] [data-lang='en'], html[lang='uk'] [data-lang='uk'] { display: revert; }
+      @media (max-width: 760px) {
+        .layout { grid-template-columns: 1fr; }
+        nav.toc { position: static; }
+        .cmd { flex-direction: column; }
+        header.top .gh { display: none; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header class="top">
+        <img src="logo.svg" alt="" />
+        <a class="name" href="./">TabHelm</a>
+        <div class="lang" role="group" aria-label="Language">
+          <button type="button" data-set-lang="en">EN</button>
+          <button type="button" data-set-lang="uk">UA</button>
+        </div>
+        <a class="gh" href="https://github.com/Ivlad003/tabhelm">GitHub ↗</a>
+      </header>
+
+      <h1><span data-lang="en">Setup guide</span><span data-lang="uk">Посібник із налаштування</span></h1>
+      <p class="lead">
+        <span data-lang="en">From zero to an agent clicking on your tab in about five minutes — then updates, more agents, a remote host, Windows notes and what to do when something does not work.</span>
+        <span data-lang="uk">Від нуля до агента, що клікає на вашій вкладці, за п'ять хвилин — а далі оновлення, інші агенти, віддалений хост, нюанси Windows і що робити, коли щось не працює.</span>
+      </p>
+
+      <div class="layout">
+        <nav class="toc" aria-label="Contents">
+          <b><span data-lang="en">Contents</span><span data-lang="uk">Зміст</span></b>
+          <a href="#requirements"><span data-lang="en">1. Requirements</span><span data-lang="uk">1. Що потрібно</span></a>
+          <a href="#install"><span data-lang="en">2. Install the host</span><span data-lang="uk">2. Встановіть хост</span></a>
+          <a href="#extension"><span data-lang="en">3. Load the extension</span><span data-lang="uk">3. Завантажте розширення</span></a>
+          <a href="#first"><span data-lang="en">4. First chat</span><span data-lang="uk">4. Перший чат</span></a>
+          <a href="#agents"><span data-lang="en">5. Agents and logins</span><span data-lang="uk">5. Агенти й логіни</span></a>
+          <a href="#update"><span data-lang="en">6. Updating</span><span data-lang="uk">6. Оновлення</span></a>
+          <a href="#panel"><span data-lang="en">7. Around the panel</span><span data-lang="uk">7. Що є в панелі</span></a>
+          <a href="#remote"><span data-lang="en">8. Remote host (relay)</span><span data-lang="uk">8. Віддалений хост (relay)</span></a>
+          <a href="#windows"><span data-lang="en">9. Windows notes</span><span data-lang="uk">9. Нюанси Windows</span></a>
+          <a href="#trouble"><span data-lang="en">10. Troubleshooting</span><span data-lang="uk">10. Якщо щось не так</span></a>
+        </nav>
+
+        <main>
+          <section id="requirements">
+            <h2><span data-lang="en">1. Requirements</span><span data-lang="uk">1. Що потрібно</span></h2>
+            <ul>
+              <li><span data-lang="en"><b>Node.js 20+</b> — <a href="https://nodejs.org">nodejs.org</a>. Check with <code>node -v</code>.</span><span data-lang="uk"><b>Node.js 20+</b> — <a href="https://nodejs.org">nodejs.org</a>. Перевірка: <code>node -v</code>.</span></li>
+              <li><span data-lang="en"><b>Chrome, Chromium, Brave or Edge</b> on Linux, macOS or Windows 10/11.</span><span data-lang="uk"><b>Chrome, Chromium, Brave або Edge</b> на Linux, macOS чи Windows 10/11.</span></li>
+              <li><span data-lang="en"><b>At least one agent</b>: a CLI you already use (Claude Code, Codex, Cursor <code>agent</code>, OpenCode, Qoder, Antigravity, Kilo, Cline, CodeBuddy, Grok) <i>or</i> a free OpenRouter key for the built-in agent <i>or</i> Ollama with a model. Nothing else — no accounts with TabHelm, no cloud.</span><span data-lang="uk"><b>Хоча б один агент</b>: CLI, яким ви вже користуєтесь (Claude Code, Codex, Cursor <code>agent</code>, OpenCode, Qoder, Antigravity, Kilo, Cline, CodeBuddy, Grok), <i>або</i> безкоштовний ключ OpenRouter для вбудованого агента, <i>або</i> Ollama з моделлю. Більше нічого — жодних акаунтів TabHelm чи хмари.</span></li>
+            </ul>
+          </section>
+
+          <section id="install">
+            <h2><span data-lang="en">2. Install the host</span><span data-lang="uk">2. Встановіть хост</span></h2>
+            <p><span data-lang="en">The host is a small Node program that Chrome starts on demand; it launches your agents and bridges them to the panel. One command installs it into <code>~/.tabhelm/app</code> and registers it with every supported browser.</span><span data-lang="uk">Хост — маленька програма на Node, яку Chrome запускає за потреби; вона запускає ваших агентів і з'єднує їх із панеллю. Одна команда встановлює його в <code>~/.tabhelm/app</code> і реєструє в усіх підтримуваних браузерах.</span></p>
+            <h3>Linux / macOS</h3>
+            <div class="cmd"><code id="c1">curl -fsSL https://ivlad003.github.io/tabhelm/install.sh | bash</code><button type="button" class="copy" data-copy="c1"><span data-lang="en">Copy</span><span data-lang="uk">Копіювати</span></button></div>
+            <h3>Windows — PowerShell</h3>
+            <div class="cmd"><code id="c2">irm https://ivlad003.github.io/tabhelm/install.ps1 | iex</code><button type="button" class="copy" data-copy="c2"><span data-lang="en">Copy</span><span data-lang="uk">Копіювати</span></button></div>
+            <h3>Windows — Command Prompt (cmd)</h3>
+            <div class="cmd"><code id="c3">powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://ivlad003.github.io/tabhelm/install.ps1 | iex"</code><button type="button" class="copy" data-copy="c3"><span data-lang="en">Copy</span><span data-lang="uk">Копіювати</span></button></div>
+            <p><span data-lang="en">The installer downloads the latest release, runs <code>npm ci</code> for the host and writes the native-messaging manifest (files under <code>~/.config/…/NativeMessagingHosts</code> on Linux, <code>~/Library/Application Support/…</code> on macOS, registry keys under <code>HKCU</code> on Windows). It ends by printing the folder to load in the next step.</span><span data-lang="uk">Інсталятор завантажує останній реліз, виконує <code>npm ci</code> для хоста й записує маніфест native messaging (файли в <code>~/.config/…/NativeMessagingHosts</code> на Linux, <code>~/Library/Application Support/…</code> на macOS, ключі реєстру в <code>HKCU</code> на Windows). Наприкінці він показує папку для наступного кроку.</span></p>
+            <div class="note"><span data-lang="en">The installer records your current <code>PATH</code>, because Chrome starts the host with a minimal environment. After installing a new CLI, run the installer again so the host can find it.</span><span data-lang="uk">Інсталятор запам'ятовує ваш поточний <code>PATH</code>, бо Chrome запускає хост із мінімальним оточенням. Після встановлення нового CLI запустіть інсталятор ще раз, щоб хост його знайшов.</span></div>
+          </section>
+
+          <section id="extension">
+            <h2><span data-lang="en">3. Load the extension</span><span data-lang="uk">3. Завантажте розширення</span></h2>
+            <ol class="steps">
+              <li><span data-lang="en">Open <code>chrome://extensions</code> (<code>brave://extensions</code>, <code>edge://extensions</code>).</span><span data-lang="uk">Відкрийте <code>chrome://extensions</code> (<code>brave://extensions</code>, <code>edge://extensions</code>).</span></li>
+              <li><span data-lang="en">Turn on <b>Developer mode</b> (top right).</span><span data-lang="uk">Увімкніть <b>Developer mode</b> (праворуч угорі).</span></li>
+              <li><span data-lang="en">Click <b>Load unpacked</b> and choose <code>~/.tabhelm/app/extension</code> (<code>%USERPROFILE%\.tabhelm\app\extension</code> on Windows).</span><span data-lang="uk">Натисніть <b>Load unpacked</b> і виберіть <code>~/.tabhelm/app/extension</code> (<code>%USERPROFILE%\.tabhelm\app\extension</code> на Windows).</span></li>
+              <li><span data-lang="en">Optional: pin TabHelm in the toolbar (puzzle icon → pin).</span><span data-lang="uk">За бажанням закріпіть TabHelm на панелі інструментів (іконка пазла → шпилька).</span></li>
+            </ol>
+            <div class="note"><span data-lang="en">The extension's ID is fixed by a key in its manifest, so the host's manifest always matches it — no need to copy IDs around.</span><span data-lang="uk">ID розширення зафіксований ключем у маніфесті, тож маніфест хоста завжди йому відповідає — нічого копіювати не треба.</span></div>
+          </section>
+
+          <section id="first">
+            <h2><span data-lang="en">4. First chat</span><span data-lang="uk">4. Перший чат</span></h2>
+            <ol class="steps">
+              <li><span data-lang="en">Open any page and click the TabHelm icon — the side panel opens for <i>this tab</i>.</span><span data-lang="uk">Відкрийте будь-яку сторінку й натисніть іконку TabHelm — бічна панель відкриється для <i>цієї вкладки</i>.</span></li>
+              <li><span data-lang="en">Pick an agent in the list (only installed ones are enabled; the others show how to install them) and, if you like, a model next to it.</span><span data-lang="uk">Оберіть агента в списку (активні лише встановлені, решта показує, як їх поставити) і за бажанням модель поруч.</span></li>
+              <li><span data-lang="en">Type a task — <i>“Find the cheapest item on this page and open it”</i> — and press <b>Send</b>. The agent starts with your first message; the first run may ask you to sign in (a browser window opens).</span><span data-lang="uk">Напишіть завдання — <i>«Знайди найдешевший товар на цій сторінці й відкрий його»</i> — і натисніть <b>Send</b>. Агент стартує з першим повідомленням; перший запуск може попросити увійти (відкриється вікно браузера).</span></li>
+              <li><span data-lang="en">Watch the <b>Steps</b> block: every click, typed text and navigation is listed. Actions that change the page ask for approval unless <b>Auto-approve</b> is on.</span><span data-lang="uk">Стежте за блоком <b>Steps</b>: кожен клік, введений текст і перехід у списку. Дії, що змінюють сторінку, потребують підтвердження, якщо не ввімкнено <b>Auto-approve</b>.</span></li>
+            </ol>
+            <div class="note warn"><span data-lang="en">The agent works in your real, logged-in browser. Give it tasks the way you would give them to a colleague at your keyboard, and keep <b>Auto-approve</b> off on sites where a wrong click costs money.</span><span data-lang="uk">Агент працює у вашому справжньому браузері з вашими логінами. Давайте йому завдання так, як дали б колезі за вашою клавіатурою, і не вмикайте <b>Auto-approve</b> на сайтах, де хибний клік коштує грошей.</span></div>
+          </section>
+
+          <section id="agents">
+            <h2><span data-lang="en">5. Agents and logins</span><span data-lang="uk">5. Агенти й логіни</span></h2>
+            <table>
+              <tr><th><span data-lang="en">Agent</span><span data-lang="uk">Агент</span></th><th><span data-lang="en">How TabHelm finds it</span><span data-lang="uk">Як TabHelm його знаходить</span></th><th><span data-lang="en">Sign-in</span><span data-lang="uk">Вхід</span></th></tr>
+              <tr><td>Claude Code</td><td><code>claude</code> on PATH</td><td><code>claude</code> → /login (<span data-lang="en">or</span><span data-lang="uk">або</span> <code>ANTHROPIC_API_KEY</code>)</td></tr>
+              <tr><td>Codex</td><td><code>codex</code> on PATH</td><td><code>codex login</code></td></tr>
+              <tr><td>Cursor Agent CLI</td><td><code>agent</code> / <code>cursor-agent</code></td><td><code>agent login</code></td></tr>
+              <tr><td>OpenCode</td><td><code>opencode</code></td><td><code>opencode auth login</code> (<span data-lang="en">free models too</span><span data-lang="uk">є безкоштовні моделі</span>)</td></tr>
+              <tr><td>Qoder, Antigravity, Kilo, Cline, CodeBuddy</td><td><code>npm run install-agent -- &lt;name&gt;</code> <span data-lang="en">in</span><span data-lang="uk">у</span> <code>~/.tabhelm/app/host</code></td><td><span data-lang="en">the agent asks on first use</span><span data-lang="uk">агент попросить при першому використанні</span></td></tr>
+              <tr><td>OpenRouter (<span data-lang="en">built-in</span><span data-lang="uk">вбудований</span>)</td><td><span data-lang="en">always</span><span data-lang="uk">завжди</span></td><td><code>npm run set-key -- openrouter</code> — <span data-lang="en">free <code>:free</code> models are listed first</span><span data-lang="uk">безкоштовні моделі <code>:free</code> йдуть першими</span></td></tr>
+              <tr><td>Ollama (<span data-lang="en">built-in, local</span><span data-lang="uk">вбудований, локально</span>)</td><td><code>ollama</code> <span data-lang="en">running</span><span data-lang="uk">запущений</span></td><td><code>ollama pull qwen3:30b</code> (<span data-lang="en">needs tool calling</span><span data-lang="uk">потрібна підтримка tool calling</span>)</td></tr>
+            </table>
+            <p><span data-lang="en"><code>npm run install-agent -- --list</code> shows every agent in the official ACP registry (40+); any of them installs into <code>~/.tabhelm/agents/&lt;name&gt;</code> and appears in the panel automatically. API keys for the built-in agents live in <code>~/.tabhelm/env</code>.</span><span data-lang="uk"><code>npm run install-agent -- --list</code> показує всіх агентів з офіційного реєстру ACP (40+); будь-який ставиться в <code>~/.tabhelm/agents/&lt;name&gt;</code> і автоматично з'являється в панелі. Ключі API для вбудованих агентів зберігаються в <code>~/.tabhelm/env</code>.</span></p>
+          </section>
+
+          <section id="update">
+            <h2><span data-lang="en">6. Updating</span><span data-lang="uk">6. Оновлення</span></h2>
+            <ol class="steps">
+              <li><span data-lang="en">Run the same install command again. It stops a running host, replaces <code>~/.tabhelm/app</code> and re-registers the host.</span><span data-lang="uk">Запустіть ту саму команду встановлення. Вона зупинить запущений хост, замінить <code>~/.tabhelm/app</code> і перереєструє хост.</span></li>
+              <li><span data-lang="en">On <code>chrome://extensions</code> press <b>↻</b> on the TabHelm card, then reopen the panel.</span><span data-lang="uk">На <code>chrome://extensions</code> натисніть <b>↻</b> на картці TabHelm і знову відкрийте панель.</span></li>
+            </ol>
+            <p><span data-lang="en">The panel checks this site's <code>news.json</code> once an hour and shows an <b>Update</b> banner when a newer release exists (<b>Settings → Check for updates</b> checks right away). Do not remove the extension to update — and if you do, your chats come back: the host keeps a backup in <code>~/.tabhelm/state.json</code>.</span><span data-lang="uk">Панель раз на годину перевіряє <code>news.json</code> цього сайту й показує банер <b>Update</b>, коли є новіший реліз (<b>Settings → Check for updates</b> перевіряє одразу). Видаляти розширення для оновлення не потрібно — а якщо видалите, чати повернуться: хост тримає резервну копію в <code>~/.tabhelm/state.json</code>.</span></p>
+          </section>
+
+          <section id="panel">
+            <h2><span data-lang="en">7. Around the panel</span><span data-lang="uk">7. Що є в панелі</span></h2>
+            <table>
+              <tr><th></th><th><span data-lang="en">What it does</span><span data-lang="uk">Що робить</span></th></tr>
+              <tr><td><b>History</b></td><td><span data-lang="en">Saved chats with search; open one to continue it (its page opens too), export (⬇ Markdown, <code>{ }</code> JSON), delete (🗑, Clear all).</span><span data-lang="uk">Збережені чати з пошуком; відкрийте, щоб продовжити (сторінка теж відкриється), експорт (⬇ Markdown, <code>{ }</code> JSON), видалення (🗑, Clear all).</span></td></tr>
+              <tr><td><b>Settings</b></td><td><span data-lang="en">Skills from links or whole repositories, model options, page options (highlight finds), remote host, experimental flags (all off by default), version and updates.</span><span data-lang="uk">Скіли за посиланнями чи цілими репозиторіями, опції моделі, налаштування сторінки (підсвічування знахідок), віддалений хост, експериментальні прапорці (усі вимкнені), версія й оновлення.</span></td></tr>
+              <tr><td><b>＋</b></td><td><span data-lang="en">Attach files, add the page selection, voice (flag), record video, make a skill from this chat, share tabs (tab group), working folder.</span><span data-lang="uk">Вкладення, виділене на сторінці, голос (прапорець), запис відео, скіл із цього чату, спільні вкладки (група), робоча папка.</span></td></tr>
+              <tr><td><b>%</b></td><td><span data-lang="en">Context meter: how full the agent's context window is; click for tokens and cost.</span><span data-lang="uk">Індикатор контексту: наскільки заповнене вікно агента; клік — токени й вартість.</span></td></tr>
+              <tr><td><b>Guide mode</b></td><td><span data-lang="en">Ask <i>“guide me through …”</i> and the agent shows each step with an arrow on the page and waits for your click (Next / Back / Skip).</span><span data-lang="uk">Попросіть <i>«проведи мене через …»</i> — агент показує кожен крок стрілкою на сторінці й чекає вашого кліку (Next / Back / Skip).</span></td></tr>
+              <tr><td><kbd>Enter</kbd> <span data-lang="en">while working</span><span data-lang="uk">під час роботи</span></td><td><span data-lang="en">Queues a message; the agent gets it with its next step.</span><span data-lang="uk">Ставить повідомлення в чергу; агент отримає його з наступним кроком.</span></td></tr>
+              <tr><td><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>T</kbd></td><td><span data-lang="en">Send the selected text (or right-click an image) to the chat as context.</span><span data-lang="uk">Надіслати виділений текст (або картинку через правий клік) у чат як контекст.</span></td></tr>
+            </table>
+            <p><span data-lang="en">The full reference, with diagrams, is in the <a href="https://github.com/Ivlad003/tabhelm#readme">README</a> (<a href="https://github.com/Ivlad003/tabhelm/blob/main/README.uk.md">українською</a>).</span><span data-lang="uk">Повний опис із діаграмами — у <a href="https://github.com/Ivlad003/tabhelm/blob/main/README.uk.md">README українською</a> (<a href="https://github.com/Ivlad003/tabhelm#readme">English</a>).</span></p>
+          </section>
+
+          <section id="remote">
+            <h2><span data-lang="en">8. Remote host (relay)</span><span data-lang="uk">8. Віддалений хост (relay)</span></h2>
+            <p><span data-lang="en">Run the agents on a VPS or another computer while the panel stays in your Chrome. Both sides connect <i>out</i> to a tiny relay you host, so no SSH or open ports are needed.</span><span data-lang="uk">Агенти працюють на VPS чи іншому комп'ютері, а панель лишається у вашому Chrome. Обидві сторони підключаються <i>назовні</i> до маленького relay на вашому сервері, тож SSH чи відкриті порти не потрібні.</span></p>
+            <h3><span data-lang="en">Deploy the relay (Dokploy or any Docker host)</span><span data-lang="uk">Розгорніть relay (Dokploy або будь-який Docker)</span></h3>
+            <ol class="steps">
+              <li><span data-lang="en">Application from the <a href="https://github.com/Ivlad003/tabhelm">repository</a>, build path <code>relay</code> (Dockerfile).</span><span data-lang="uk">Application з <a href="https://github.com/Ivlad003/tabhelm">репозиторію</a>, build path <code>relay</code> (Dockerfile).</span></li>
+              <li><span data-lang="en">Environment: <code>RELAY_KEY</code> = a long random string (<code>openssl rand -base64 24</code>).</span><span data-lang="uk">Змінна середовища <code>RELAY_KEY</code> — довгий випадковий рядок (<code>openssl rand -base64 24</code>).</span></li>
+              <li><span data-lang="en">Domain <code>relay.yourdomain.com</code> → port <code>8080</code>, HTTPS on. Check: <code>curl https://relay.yourdomain.com/</code> → <code>TabHelm relay: 0 host(s)</code>.</span><span data-lang="uk">Домен <code>relay.ваш.домен</code> → порт <code>8080</code>, HTTPS увімкнено. Перевірка: <code>curl https://relay.ваш.домен/</code> → <code>TabHelm relay: 0 host(s)</code>.</span></li>
+            </ol>
+            <h3><span data-lang="en">Start the host on the remote machine</span><span data-lang="uk">Запустіть хост на віддаленій машині</span></h3>
+            <p><span data-lang="en">Install TabHelm there with the same command as in step 2 (registering it with a browser is not needed), sign the agents in once, then:</span><span data-lang="uk">Встановіть там TabHelm тією самою командою, що в кроці 2 (реєструвати в браузері не треба), один раз залогіньте агентів, а потім:</span></p>
+            <pre><code>cd ~/.tabhelm/app/host
+npm run relay -- wss://relay.yourdomain.com --key &lt;RELAY_KEY&gt; --name my-vps</code></pre>
+            <p><span data-lang="en">The host prints a pairing code such as <code>K7PM-3QWX</code> (10 minutes, single use) and keeps running; keep it alive with <code>tmux</code>, <code>systemd</code> or run the agents in a container built from <code>host/Dockerfile.agent</code> (the code appears in the container log).</span><span data-lang="uk">Хост друкує код парування на кшталт <code>K7PM-3QWX</code> (10 хвилин, одноразовий) і працює далі; тримайте його живим через <code>tmux</code>, <code>systemd</code> або запустіть агентів у контейнері з <code>host/Dockerfile.agent</code> (код буде в логах контейнера).</span></p>
+            <h3><span data-lang="en">Pair the panel</span><span data-lang="uk">Спаруйте панель</span></h3>
+            <p><span data-lang="en"><b>Settings → Remote host</b>: relay URL + the code → <b>Connect</b>. The remote agents appear in the list. <b>Use local host</b> switches back (the pairing is kept), <b>Forget pairing</b> drops it.</span><span data-lang="uk"><b>Settings → Remote host</b>: URL relay + код → <b>Connect</b>. Віддалені агенти з'являться в списку. <b>Use local host</b> повертає до локального (парування зберігається), <b>Forget pairing</b> видаляє його.</span></p>
+            <div class="note warn"><span data-lang="en">The relay forwards page snapshots and screenshots in clear text inside TLS. Keep <code>RELAY_KEY</code> private and use only a relay you run yourself.</span><span data-lang="uk">Relay пересилає знімки сторінок і скриншоти у відкритому вигляді всередині TLS. Тримайте <code>RELAY_KEY</code> у секреті й користуйтеся лише власним relay.</span></div>
+          </section>
+
+          <section id="windows">
+            <h2><span data-lang="en">9. Windows notes</span><span data-lang="uk">9. Нюанси Windows</span></h2>
+            <ul>
+              <li><span data-lang="en">Use the PowerShell command, or the <code>cmd</code> variant from a Command Prompt; <code>curl … | bash</code> does not work there.</span><span data-lang="uk">Використовуйте команду для PowerShell або варіант для <code>cmd</code>; <code>curl … | bash</code> там не працює.</span></li>
+              <li><span data-lang="en">The host is registered in the registry (<code>HKCU\Software\Google\Chrome\NativeMessagingHosts\com.tabhelm.host</code>, same for Edge, Chromium, Brave) and started through <code>tabhelm-host.cmd</code>.</span><span data-lang="uk">Хост реєструється в реєстрі (<code>HKCU\Software\Google\Chrome\NativeMessagingHosts\com.tabhelm.host</code>, так само для Edge, Chromium, Brave) і запускається через <code>tabhelm-host.cmd</code>.</span></li>
+              <li><span data-lang="en">Agents installed by npm (<code>agent.cmd</code>, Kilo, Cline…) are launched through <code>cmd.exe</code> — needed since Node 20.12.</span><span data-lang="uk">Агенти, встановлені через npm (<code>agent.cmd</code>, Kilo, Cline…), запускаються через <code>cmd.exe</code> — так вимагає Node від 20.12.</span></li>
+              <li><span data-lang="en">The folder picker is a PowerShell dialog; 1Password hand-off needs <code>op.exe</code> on PATH; tab-audio transcription needs <code>ffmpeg</code> + <code>whisper-cli</code> or a transcription API.</span><span data-lang="uk">Вибір папки — діалог PowerShell; передача з 1Password потребує <code>op.exe</code> у PATH; транскрипція звуку вкладки — <code>ffmpeg</code> + <code>whisper-cli</code> або API транскрипції.</span></li>
+            </ul>
+          </section>
+
+          <section id="trouble">
+            <h2><span data-lang="en">10. Troubleshooting</span><span data-lang="uk">10. Якщо щось не так</span></h2>
+            <table>
+              <tr><th><span data-lang="en">Symptom</span><span data-lang="uk">Симптом</span></th><th><span data-lang="en">What to do</span><span data-lang="uk">Що робити</span></th></tr>
+              <tr><td><span data-lang="en"><b>Host offline</b> / “Specified native messaging host not found”</span><span data-lang="uk"><b>Host offline</b> / «Specified native messaging host not found»</span></td><td><span data-lang="en">Run the installer again (it re-registers the host), restart the browser, reopen the panel. Chrome loaded from a different profile needs the manifest in that profile's config dir.</span><span data-lang="uk">Запустіть інсталятор ще раз (він перереєструє хост), перезапустіть браузер, знову відкрийте панель. Для іншого профілю Chrome маніфест має лежати в конфігу того профілю.</span></td></tr>
+              <tr><td><span data-lang="en">The agent is greyed out in the list</span><span data-lang="uk">Агент сірий у списку</span></td><td><span data-lang="en">Its CLI is not on the PATH the host saw. Install it, then run the installer again. <code>npm run install-agent -- &lt;name&gt;</code> works for registry agents.</span><span data-lang="uk">Його CLI немає в PATH, який бачив хост. Встановіть, потім ще раз запустіть інсталятор. Для агентів із реєстру — <code>npm run install-agent -- &lt;name&gt;</code>.</span></td></tr>
+              <tr><td><code>spawn EINVAL</code> (Windows)</td><td><span data-lang="en">Fixed in 0.19.1 — update.</span><span data-lang="uk">Виправлено в 0.19.1 — оновіться.</span></td></tr>
+              <tr><td><span data-lang="en">“Cannot remove item … app\host” while updating</span><span data-lang="uk">«Cannot remove item … app\host» під час оновлення</span></td><td><span data-lang="en">The installer now stops the running host; if it still fails, close the TabHelm panel and run it again.</span><span data-lang="uk">Інсталятор тепер зупиняє запущений хост; якщо не допомогло — закрийте панель TabHelm і запустіть ще раз.</span></td></tr>
+              <tr><td><span data-lang="en">Version mismatch warning</span><span data-lang="uk">Попередження про різні версії</span></td><td><span data-lang="en">Extension and host differ: press ↻ on <code>chrome://extensions</code> after updating. Make sure Chrome loads <code>~/.tabhelm/app/extension</code>, not an old copy.</span><span data-lang="uk">Розширення й хост різних версій: натисніть ↻ на <code>chrome://extensions</code> після оновлення. Переконайтеся, що Chrome завантажує <code>~/.tabhelm/app/extension</code>, а не стару копію.</span></td></tr>
+              <tr><td><span data-lang="en">Nothing happens on a <code>chrome://</code> page or the Web Store</span><span data-lang="uk">Нічого не відбувається на сторінці <code>chrome://</code> чи у Web Store</span></td><td><span data-lang="en">Chrome does not let extensions act there. Open a normal web page.</span><span data-lang="uk">Chrome не дозволяє розширенням діяти там. Відкрийте звичайну веб-сторінку.</span></td></tr>
+              <tr><td><span data-lang="en">Where are the logs?</span><span data-lang="uk">Де логи?</span></td><td><code>~/.tabhelm/host.log</code>; <span data-lang="en">the extension's service worker console is on <code>chrome://extensions</code> → TabHelm → “service worker”.</span><span data-lang="uk">консоль service worker розширення — <code>chrome://extensions</code> → TabHelm → «service worker».</span></td></tr>
+            </table>
+            <p><span data-lang="en">Still stuck? <a href="https://github.com/Ivlad003/tabhelm/issues">Open an issue</a> with the panel version, OS and the tail of <code>host.log</code>.</span><span data-lang="uk">Не допомогло? <a href="https://github.com/Ivlad003/tabhelm/issues">Відкрийте issue</a> з версією панелі, ОС і кінцем <code>host.log</code>.</span></p>
+          </section>
+        </main>
+      </div>
+
+      <footer>
+        <a href="./"><span data-lang="en">← Home</span><span data-lang="uk">← На головну</span></a> ·
+        <span data-lang="en">TabHelm is an independent open project and is not affiliated with Google, Anthropic, OpenAI, Cursor, Qoder or xAI.</span>
+        <span data-lang="uk">TabHelm — незалежний відкритий проєкт, не пов'язаний із Google, Anthropic, OpenAI, Cursor, Qoder чи xAI.</span>
+      </footer>
+    </div>
+
+    <script>
+      const setLang = (lang) => {
+        document.documentElement.lang = lang;
+        for (const b of document.querySelectorAll('[data-set-lang]')) b.setAttribute('aria-pressed', String(b.dataset.setLang === lang));
+        try { localStorage.setItem('lang', lang); } catch {}
+      };
+      let initial = 'en';
+      try { initial = localStorage.getItem('lang') || (/^(uk|ru)/i.test(navigator.language) ? 'uk' : 'en'); } catch {}
+      setLang(initial);
+      for (const b of document.querySelectorAll('[data-set-lang]')) b.onclick = () => setLang(b.dataset.setLang);
+      for (const b of document.querySelectorAll('.copy')) b.onclick = async (e) => {
+        const button = e.currentTarget;
+        try {
+          await navigator.clipboard.writeText(document.getElementById(button.dataset.copy).textContent);
+          const spans = button.querySelectorAll('span');
+          const old = [...spans].map((s) => s.textContent);
+          spans.forEach((s) => (s.textContent = s.dataset.lang === 'uk' ? 'Скопійовано' : 'Copied'));
+          setTimeout(() => spans.forEach((s, i) => (s.textContent = old[i])), 1500);
+        } catch {}
+      };
+    </script>
+  </body>
+</html>
