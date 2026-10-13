@@ -43,6 +43,11 @@ export function handleExperimentalMessage(msg) {
     renderPasswordStatus();
     return true;
   }
+  if (msg.type === 'transcribe_status') {
+    const line = $('voice-status-line');
+    if (line) line.textContent = msg.ready ? `Host engine ready: ${msg.api ? `API ${msg.apiBase}` : `whisper.cpp (${msg.whisperModel})`}.` : 'Host engine not set up (needed for tab audio).';
+    return true;
+  }
   if (msg.type === 'critic_status') {
     criticReady = msg.ready;
     renderCriticStatus();
@@ -318,6 +323,27 @@ const PANELS = {
 
   notifications(panel) {
     panel.append(hint('A badge on the tab (✓ done, ! stopped, ? needs you) and a system notification; clicking it opens the tab.'));
+  },
+
+  async voice(panel) {
+    const s = await getSetting('voice');
+    const engine = el('select');
+    for (const [v, n] of [['browser', 'Chrome speech recognition (microphone only, no setup)'], ['host', 'TabHelm host: whisper.cpp or a transcription API']]) engine.append(new Option(n, v, false, s.engine === v));
+    const language = el('select');
+    for (const [v, n] of [['auto', 'Auto'], ['uk-UA', 'Українська'], ['en-US', 'English'], ['de-DE', 'Deutsch'], ['pl-PL', 'Polski'], ['es-ES', 'Español'], ['fr-FR', 'Français']]) language.append(new Option(n, v, false, s.language === v));
+    const chunk = el('input', { type: 'number', min: 3, max: 30, value: s.chunkSeconds || 8 });
+    const save = async () => {
+      await setSetting('voice', { engine: engine.value, language: language.value, chunkSeconds: Math.min(30, Math.max(3, Number(chunk.value) || 8)) });
+      onChange('voice');
+    };
+    engine.onchange = language.onchange = chunk.onchange = save;
+    const mic = el('button', { className: 'btn small', type: 'button', textContent: 'Grant microphone access' });
+    mic.onclick = () => chrome.tabs.create({ url: chrome.runtime.getURL('permissions.html') });
+    panel.append(
+      hint('Microphone: Chrome\'s own recognition transcribes live without any setup (needs internet; auto language uses the panel language). Tab audio always goes through the host: install whisper-cli + ffmpeg and a ggml model, or set TABHELM_TRANSCRIBE_BASE_URL / _API_KEY / _MODEL in ~/.tabhelm/env (e.g. Groq or OpenAI Whisper).'),
+      field('Engine for the microphone', engine), field('Language', language), field('Chunk length for the host engine (seconds)', chunk), mic, el('div', { id: 'voice-status-line', className: 'hint' }),
+    );
+    port.postMessage({ type: 'transcribe_status' });
   },
 };
 

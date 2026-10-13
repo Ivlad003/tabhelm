@@ -13,12 +13,20 @@ export async function initFolder(panelPort, chatTabId, { changed }) {
   port = panelPort;
   tabId = chatTabId;
   onChange = changed;
-  $('folder-pick').onclick = pick;
-  $('folder-type').onclick = () => {
-    $('folder-form').hidden = !$('folder-form').hidden;
-    if (!$('folder-form').hidden) $('folder-path').focus();
+  const closeMenu = () => ($('folder-menu').open = false);
+  $('folder-pick').onclick = () => {
+    closeMenu();
+    pick();
   };
-  $('folder-clear').onclick = () => setFolder(null);
+  $('folder-type').onclick = () => {
+    closeMenu();
+    $('folder-form').hidden = false;
+    $('folder-path').focus();
+  };
+  $('folder-clear').onclick = () => {
+    closeMenu();
+    setFolder(null);
+  };
   $('folder-form').onsubmit = async (e) => {
     e.preventDefault();
     const info = await request({ type: 'folder_info', path: $('folder-path').value });
@@ -103,12 +111,26 @@ function render() {
     label.title = `${folder.path}${folder.skills.length ? `\nSkills: ${folder.skills.join(', ')}` : ''}`;
   }
   $('folder-clear').hidden = !folder;
+  $('folder-menu').querySelector('summary').textContent = folder ? 'Change folder…' : 'Folder…';
   updateFolderWarning($('auto').checked);
 }
 
 async function renderRecent() {
   const { recentFolders = [] } = await chrome.storage.local.get('recentFolders');
   $('folder-recent').replaceChildren(...recentFolders.map((p) => new Option(p)));
+  // Recent folders in the Folder… menu: one click to reuse.
+  $('folder-recent-list').replaceChildren(
+    ...recentFolders.slice(0, 5).map((p) => {
+      const b = Object.assign(document.createElement('button'), { type: 'button', textContent: p.split('/').filter(Boolean).pop() || p, title: p });
+      b.onclick = async () => {
+        $('folder-menu').open = false;
+        const info = await request({ type: 'folder_info', path: p });
+        if (info.error) return showError(info.error);
+        setFolder(info);
+      };
+      return b;
+    }),
+  );
 }
 
 function showError(text) {

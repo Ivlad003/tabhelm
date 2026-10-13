@@ -225,6 +225,14 @@ export async function fromPanel(tabId, msg, port) {
     runScheduled(msg.id, scheduleDeps);
     return;
   }
+  // Voice: a stream id for capturing the chat tab's audio (consumed by the panel).
+  if (msg.type === 'tab_capture_id') {
+    chrome.tabCapture.getMediaStreamId({ targetTabId: tabId }).then(
+      (streamId) => port?.postMessage({ type: 'tab_capture_id', requestId: msg.requestId, streamId }),
+      (err) => port?.postMessage({ type: 'tab_capture_id', requestId: msg.requestId, error: err?.message || String(err) }),
+    );
+    return;
+  }
   if (msg.type === 'prompt') {
     const info = chatInfo.get(tabId) || { task: '', actions: [] };
     info.task = msg.text;

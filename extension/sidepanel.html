@@ -31,9 +31,15 @@
       <div id="config" class="bar-row config" hidden></div>
       <div class="bar-row folder-row">
         <span id="folder-label" class="folder-label">No working folder</span>
-        <button id="folder-pick" class="btn small" type="button" title="Choose a project folder for the agent">Folder…</button>
-        <button id="folder-type" class="btn small" type="button" title="Type a folder path">Path</button>
-        <button id="folder-clear" class="btn small" type="button" title="Stop using this folder" hidden>×</button>
+        <details class="menu" id="folder-menu">
+          <summary class="btn small" title="Working folder for the agent (optional)">Folder…</summary>
+          <div class="menu-list">
+            <button type="button" id="folder-pick">Choose folder…</button>
+            <div id="folder-recent-list"></div>
+            <button type="button" id="folder-type">Type a path</button>
+            <button type="button" id="folder-clear" hidden>Remove folder</button>
+          </div>
+        </details>
       </div>
       <form id="folder-form" class="folder-form" hidden>
         <input id="folder-path" list="folder-recent" placeholder="/home/you/projects/app" aria-label="Folder path" />
@@ -101,12 +107,21 @@
 
     <footer class="composer">
       <div id="slash-menu" class="slash-menu" hidden></div>
+      <div id="voice-live" class="voice-live" hidden><span class="rec-dot"></span><span id="voice-status"></span><div id="voice-text"></div></div>
       <div id="attachments" class="attachments" hidden></div>
       <textarea id="input" rows="3" placeholder="Ask the agent to do something on this page… (drop or paste images and text files)" disabled></textarea>
       <input id="file-input" type="file" multiple hidden accept="image/*,.txt,.md,.markdown,.csv,.tsv,.json,.log,text/plain,text/markdown,text/csv" />
       <div class="composer-row">
         <div class="toggles">
           <button id="attach" class="btn small" type="button" title="Attach images or text files (txt, md, csv)" disabled>Attach</button>
+          <details class="menu" id="voice-menu" hidden>
+            <summary class="btn small" id="voice-button" title="Record a voice message or the tab's audio">🎤 Voice</summary>
+            <div class="menu-list">
+              <button type="button" data-voice="mic">Microphone</button>
+              <button type="button" data-voice="tab">Tab audio</button>
+            </div>
+          </details>
+          <button id="voice-stop" class="btn small primary" type="button" hidden>■ Stop</button>
           <label class="auto"><input type="checkbox" id="auto" /> Auto-approve actions</label>
           <label class="auto" title="Record a video of the tab while the agent works on each message"><input type="checkbox" id="record" /> Record video</label>
         </div>

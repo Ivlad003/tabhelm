@@ -1,6 +1,20 @@
 {
   "news": [
     {
+      "id": "2026-10-voice",
+      "date": "2026-10-13",
+      "minVersion": "0.16.0",
+      "title": {
+        "en": "Voice messages and tab audio transcription",
+        "uk": "Голосові повідомлення і транскрипція звуку вкладки"
+      },
+      "text": {
+        "en": "Turn on Voice in Settings → Experimental: speak a message or capture what the tab is playing; the live transcript becomes one message you can edit.",
+        "uk": "Увімкніть Voice у Settings → Experimental: продиктуйте повідомлення або захопіть звук вкладки; живий транскрипт стає одним повідомленням, яке можна відредагувати."
+      },
+      "url": "https://github.com/Ivlad003/tabhelm#experimental-features-all-off-by-default"
+    },
+    {
       "id": "2026-10-experimental",
       "date": "2026-10-13",
       "minVersion": "0.15.0",

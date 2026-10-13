@@ -1,6 +1,7 @@
 import { showNews } from './news.js';
 import { initSettings, handleSettingsMessage, hostVersionMismatch, skillPayload, slashSkills, onFeaturesChanged, setAgents } from './settings.js';
 import { getFeatures } from './features.js';
+import { initVoice, handleVoiceMessage, stop as stopVoice } from './voice.js';
 import { initAttachments, takeAttachments, hasAttachments, chip } from './attachments.js';
 import { initFolder, currentFolder, handleFolderMessage, updateFolderWarning, restoreFolder } from './folder.js';
 import { initHistory, saveChat, loadChat, newChatId, setCurrentChat, closeHistory } from './history.js';
@@ -110,7 +111,7 @@ function onMessage(msg) {
     hostWaits.delete(`${msg.type}:${msg.requestId}`);
     return;
   }
-  if (handleSettingsMessage(msg) || handleFolderMessage(msg)) return;
+  if (handleVoiceMessage(msg) || handleSettingsMessage(msg) || handleFolderMessage(msg)) return;
   switch (msg.type) {
     case 'agents':
       fillAgents(msg.agents);
@@ -695,6 +696,7 @@ function offerContinue(reason) {
 
 els.newChat.onclick = () => {
   if (busy) stop();
+  stopVoice(true);
   stopRecording(true);
   journal = [];
   chatId = null;
@@ -1099,7 +1101,11 @@ function syncControls() {
   $('attach').disabled = !connected;
   els.send.disabled = !connected;
   els.send.textContent = busy ? 'Stop' : 'Send';
-  getFeatures().then((f) => ($('pause').hidden = !(f.takeOver && busy)));
+  getFeatures().then((f) => {
+    $('pause').hidden = !(f.takeOver && busy);
+    if (!$('voice-stop').hidden) return;
+    $('voice-menu').hidden = !f.voice;
+  });
   for (const select of els.config.querySelectorAll('select')) select.disabled = busy;
 }
 
@@ -1454,6 +1460,17 @@ syncControls();
 showNews($('news'));
 initSettings(port);
 onFeaturesChanged(() => syncControls());
+// Voice: the transcript becomes one message in the box; the user edits and sends it.
+initVoice(port, {
+  text(text, source) {
+    if (!text) return notice('Nothing was transcribed.', true);
+    const prefix = source === 'tab' ? '[Transcript of the tab audio]\n' : '';
+    els.input.value = `${els.input.value.trim() ? `${els.input.value.trim()}\n\n` : ''}${prefix}${text}`;
+    els.input.focus();
+    record('voice', { source, chars: text.length });
+  },
+  error: (text) => notice(text, true),
+});
 // Changing the folder restarts the agent there; the conversation is handed over.
 initFolder(port, tabId, {
   changed(folder) {

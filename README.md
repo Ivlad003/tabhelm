@@ -56,7 +56,7 @@ To update, run the install command again.
 | **Send / Stop** | Sends a message; while the agent works, the button cancels the turn. |
 | **History** | Saved chats — open one to continue it; its page opens too. |
 | **Group tabs** | Puts the chat's tab in a Chrome tab group; tabs you drag into the group are shared with the agent (see *Several tabs*). |
-| **Folder…** | Optional working folder (project) for the chat — see below. |
+| **Folder…** | Optional working folder (project) for the chat: system dialog, recent folders or a typed path — see below. |
 | **Attach** | Adds images and text files (txt, md, csv, tsv, json, log) to the message. You can also drop files on the panel or paste an image. |
 | **New chat** | Clears the chat and starts a fresh session with the same agent and model. |
 | **Export** | Downloads the chat with the agent's action log as Markdown, or the full event log as JSON. |
@@ -109,7 +109,7 @@ To continue, connect any agent — it gets the whole conversation with your next
 
 ### Working folder (project)
 
-By default agents run in an empty `~/.tabhelm/workspace`. Press **Folder…** (system folder dialog) or **Path** (type or pick a recent path) to bind the chat to a project folder:
+By default agents run in an empty `~/.tabhelm/workspace`. **Folder…** opens a menu: choose a folder with the system dialog, pick a recent one, or type a path. This binds the chat to a project folder:
 
 - agents start in that folder, so they pick up the project's own **AGENTS.md / CLAUDE.md / rules** and can **create and edit files, write code and run scripts** there when you ask — for example with documentation open in the tab and your code in the folder;
 - the project's skills (`.claude/skills`, `.agents/skills`, `.opencode/skills`, `.cursor/skills`, `skills/` — each `*/SKILL.md`) are added for every agent and read with `skill_read`;
@@ -151,6 +151,7 @@ Only add skills you trust: their text becomes instructions for the agent.
 | **Password manager hand-off** | For sign-in forms the agent calls `browser_request_login`; you pick **Fill with 1Password** (host runs `op`, the extension types the values, the model never sees them) or **Chrome's passwords — I'll sign in** (you use Chrome's saved login, then press Done). | 1Password CLI (`op signin`) for the first path |
 | **Action database** | Steps keep timestamps; a recording lists its steps and clicking one jumps to that moment in the video; History search also searches steps. | — |
 | **Notifications** | Badge on the chat's tab (✓ done, ! stopped, ? needs you) and a system notification; clicking it opens the tab. | — |
+| **Voice** | **🎤 Voice → Microphone** records a voice message; **Tab audio** captures what the tab is playing (a video, a call) — the tab keeps playing for you. Text appears live and, on **Stop**, the whole transcript becomes one message in the box to edit and send. Microphone uses Chrome's own recognition (no setup) or the host; tab audio always uses the host: `whisper-cli` + `ffmpeg` + a ggml model, or an OpenAI-compatible transcription API via `TABHELM_TRANSCRIBE_BASE_URL` / `_API_KEY` / `_MODEL` in `~/.tabhelm/env` (e.g. Groq's Whisper). First microphone use opens a page to grant Chrome access. | whisper.cpp or an API for the host engine |
 
 Security notes: the critic, site rules and the sensitive gate run in the extension before a tool executes, so they also cover agents that auto-approve their own tools. Secrets live in this browser profile's extension storage. Scheduled runs are unattended by design — give them narrow tasks.
 
@@ -377,6 +378,7 @@ extension/                     Chrome extension (Manifest V3, no build step)
   features.js                  feature flags and settings storage (all off by default)
   policy.js                    action policy: site rules, sensitive gate, critic bridge, secrets, pause
   scheduler.js                 scheduled tasks (chrome.alarms, background runs)
+  voice.js                     voice messages / tab audio with live transcription · permissions.html  microphone grant
   attachments.js               image / text attachments: picking, drop, paste, downscaling
   folder.js                    working folder: picker, typed path, recent folders, auto-approve warning
   history.js                   saved chats: storage, list, search, opening in the chat's tab
@@ -392,6 +394,7 @@ host/                          native host (Node 20+)
   src/folders.js               working folder: native picker, AGENTS.md / project skills discovery
   src/critic.js                action critic (second model) · src/llm.js  OpenAI-compatible helper
   src/memory.js                memory notes across chats · src/passwords.js  1Password CLI hand-off
+  src/transcribe.js            speech to text: transcription API or whisper.cpp + ffmpeg
   src/tool-server.js           loopback HTTP endpoint with token
   src/mcp-bridge.js            stdio MCP server spawned by agents (24 tool definitions)
   scripts/install.js           registers the native host (Chrome, Chromium, Brave, Edge)
@@ -432,7 +435,7 @@ Load `extension/` unpacked in Chrome. After editing extension files press ↻ on
 | `E2E_FOLDER=1 npm run e2e -- claude` | binds a project folder (AGENTS.md + skill) and checks the agent follows it and creates a file there |
 | `E2E_ATTACH=1 npm run e2e -- claude` | attaches an image and a CSV and checks the agent reads both |
 | `E2E_SKILLS=1 npm run e2e -- claude` | adds a skill in Settings and checks the agent reads and follows it |
-| `npm run test:flags` | every experimental feature with the built-in agent against a scripted mock model (18 checks) |
+| `npm run test:flags` | every experimental feature with the built-in agent against a scripted mock model and a fake microphone (20 checks) |
 | `npm run test:builtin` | built-in agent against a mock OpenAI-compatible API (streaming, tool calls, 429 retry, missing key) |
 | `TABHELM_RELEASE=../dist/tabhelm-x.y.z npm run e2e -- claude` | the built release |
 

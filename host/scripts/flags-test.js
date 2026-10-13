@@ -40,6 +40,11 @@ const mock = http.createServer(async (req, res) => {
   if (req.url === '/v1/models') {
     return res.end(JSON.stringify({ data: [{ id: 'mock/agent:free', name: 'Mock agent', supported_parameters: ['tools'], pricing: { prompt: '0', completion: '0' }, context_length: 100000, architecture: { input_modalities: ['text'] } }] }));
   }
+  // Transcription API for the Voice feature: every chunk becomes a numbered phrase.
+  if (req.url === '/v1/audio/transcriptions') {
+    seen.audioChunks = (seen.audioChunks || 0) + 1;
+    return res.end(JSON.stringify({ text: `phrase ${seen.audioChunks}` }));
+  }
   if (req.url !== '/v1/chat/completions') return res.writeHead(404).end();
   const { messages, stream } = JSON.parse(body);
   const system = messages[0]?.content || '';
@@ -133,8 +138,9 @@ const browser = await puppeteer.launch({
   userDataDir: profile,
   pipe: true,
   enableExtensions: [EXT],
-  args: ['--no-first-run'],
-  env: { ...process.env, HOME: fakeHome, TABHELM_OPENROUTER_BASE_URL: base, OPENROUTER_API_KEY: 'test-key', TABHELM_RECORDINGS_DIR: join(profile, 'videos') },
+  // Fake microphone so the Voice feature can be exercised headlessly.
+  args: ['--no-first-run', '--use-fake-device-for-media-capture', '--use-fake-ui-for-media-capture'],
+  env: { ...process.env, HOME: fakeHome, TABHELM_OPENROUTER_BASE_URL: base, OPENROUTER_API_KEY: 'test-key', TABHELM_RECORDINGS_DIR: join(profile, 'videos'), TABHELM_TRANSCRIBE_BASE_URL: base, TABHELM_TRANSCRIBE_API_KEY: 'test-key', TABHELM_TRANSCRIBE_MODEL: 'mock-whisper' },
   protocolTimeout: 300_000,
 });
 const page = (await browser.pages())[0] || (await browser.newPage());
@@ -292,7 +298,31 @@ for (let i = 0; i < 60 && !scheduledChat; i++) {
 const sched = await sw.evaluate(() => chrome.storage.local.get('featureSettings'));
 check('scheduled run saved to History with the result', Boolean(scheduledChat) && /page read/.test(sched.featureSettings?.schedules?.items?.[0]?.lastResult || ''), JSON.stringify({ scheduledChat, last: sched.featureSettings?.schedules?.items?.[0]?.lastResult }));
 
-// 10. Action database: History search finds steps
+// 10. Voice: fake microphone → host engine (mock transcription API) → one message in the box
+await setStorage({ features: { voice: true }, featureSettings: { voice: { engine: 'host', language: 'en-US', chunkSeconds: 3 } } });
+// Extension pages need an explicit microphone grant in headless Chrome.
+await browser.defaultBrowserContext().overridePermissions(`chrome-extension://${extId}`, ['microphone']);
+await connect();
+await panel.waitForFunction(() => !document.querySelector('#voice-menu').hidden, { timeout: 5000 });
+await panel.click('#voice-button');
+await panel.click('[data-voice="mic"]');
+await panel.waitForFunction(() => !document.querySelector('#voice-live').hidden, { timeout: 5000 });
+try {
+  await panel.waitForFunction(() => /phrase 2/.test(document.querySelector('#voice-text').textContent), { timeout: 20000 });
+} catch (err) {
+  console.log('voice diag:', JSON.stringify(await panel.evaluate(() => ({ live: document.querySelector('#voice-live').hidden, status: document.querySelector('#voice-status').textContent, text: document.querySelector('#voice-text').textContent, notices: [...document.querySelectorAll('.notice.error')].map((n) => n.textContent) }))), 'audio chunks at mock:', seen.audioChunks || 0, 'panel errors:', panelErrors.join(' | '));
+  throw err;
+}
+const live = await panel.$eval('#voice-text', (e) => e.textContent);
+await panel.click('#voice-stop');
+await panel.waitForFunction(() => /phrase 1/.test(document.querySelector('#input').value), { timeout: 20000 });
+const boxed = await panel.$eval('#input', (e) => e.value);
+console.log('voice live:', live, '| message box:', boxed);
+check('voice: live transcript while recording', /phrase 1 phrase 2/.test(live), live);
+check('voice: whole transcript becomes one message on Stop', /^phrase 1 phrase 2( phrase \d+)*$/.test(boxed.trim()), boxed);
+await panel.$eval('#input', (e) => (e.value = ''));
+
+// 11. Action database: History search finds steps
 await setStorage({ features: { actionDb: true } });
 await panel.click('#history-open');
 await panel.type('#history-search', 'highlight');

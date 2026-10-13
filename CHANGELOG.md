@@ -2,6 +2,14 @@
 
 All notable changes to TabHelm. The newest release is at the top; the panel's update banner links here.
 
+## [0.16.0] - 2026-10-13
+
+### Added
+- **Voice** (experimental, off by default): record a voice message from the microphone or capture the tab's audio, transcribed live; on Stop the transcript becomes one editable message. Engines: Chrome speech recognition (microphone), whisper.cpp or an OpenAI-compatible transcription API on the host.
+
+### Changed
+- One **Folder…** button with a menu (system dialog, recent folders, type a path) replaces the Folder/Path pair.
+
 ## [0.15.0] - 2026-10-13
 
 ### Added
@@ -116,6 +124,7 @@ All notable changes to TabHelm. The newest release is at the top; the panel's up
 ### Added
 - First version: side-panel chat that drives terminal agents over ACP, with browser tools over MCP.
 
+[0.16.0]: https://github.com/Ivlad003/tabhelm/releases/tag/v0.16.0
 [0.15.0]: https://github.com/Ivlad003/tabhelm/releases/tag/v0.15.0
 [0.14.0]: https://github.com/Ivlad003/tabhelm/releases/tag/v0.14.0
 [0.13.0]: https://github.com/Ivlad003/tabhelm/releases/tag/v0.13.0

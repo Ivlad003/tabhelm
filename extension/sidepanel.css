@@ -1213,3 +1213,48 @@ input[type='checkbox'] {
   font-variant-numeric: tabular-nums;
   margin-right: 6px;
 }
+
+/* ---- Voice ---- */
+#voice-menu[hidden],
+#voice-stop[hidden] {
+  display: none;
+}
+
+.voice-live {
+  border: 1px solid var(--accent);
+  border-radius: var(--th-radius-m);
+  background: var(--th-accent-softer);
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+.voice-live[hidden] {
+  display: none;
+}
+
+#voice-status {
+  color: var(--muted);
+  margin-left: 4px;
+}
+
+#voice-text {
+  margin-top: 4px;
+  white-space: pre-wrap;
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+#voice-text .interim {
+  color: var(--muted);
+}
+
+#folder-recent-list button {
+  color: var(--muted);
+}
+
+#folder-recent-list:not(:empty) {
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  margin: 2px 0;
+  padding: 2px 0;
+}

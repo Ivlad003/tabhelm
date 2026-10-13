@@ -146,6 +146,7 @@ if (process.env.E2E_FOLDER) {
   );
 
   await panel.waitForFunction((id) => [...document.querySelectorAll('#agent option')].some((o) => o.value === id && !o.disabled), { timeout: 20000 }, agent);
+  await panel.click('#folder-menu summary');
   await panel.click('#folder-type');
   await panel.type('#folder-path', project);
   await panel.click('#folder-form button');

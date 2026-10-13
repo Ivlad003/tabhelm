@@ -15,6 +15,7 @@ export const FEATURES = [
   { id: 'passwordManager', name: 'Password manager hand-off', desc: 'Sign-in help: fill credentials from 1Password (op CLI) without the model seeing them, or hand over to Chrome\'s password manager.' },
   { id: 'actionDb', name: 'Action database', desc: 'Every step with a timestamp, jump-to-step in recordings, and search across steps in History.' },
   { id: 'notifications', name: 'Notifications', desc: 'A badge on the tab and a system notification when a task finishes or needs you.' },
+  { id: 'voice', name: 'Voice', desc: 'Record a voice message from the microphone, or capture what the tab is playing, with live transcription; the text becomes one message you can edit and send.' },
 ];
 
 export const DEFAULT_SETTINGS = {
@@ -24,6 +25,7 @@ export const DEFAULT_SETTINGS = {
   schedules: { items: [] },
   secrets: { names: [] }, // values live under secret:<name>
   passwordManager: { onePassword: true, chrome: true },
+  voice: { engine: 'browser', language: 'auto', chunkSeconds: 8 },
 };
 
 export async function getFeatures() {

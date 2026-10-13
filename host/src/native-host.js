@@ -8,6 +8,7 @@
 //                save_recording {tabId, id, filename, seq, last, data(base64)}
 //                set_skills {tabId, skills} | skill_preview {tabId, requestId, url} | delete_recording {tabId, id, path}
 //                pick_folder {tabId, requestId} | folder_info {tabId, requestId, path}   (start may carry folder)
+//                transcribe {tabId, requestId, seq, data, mimeType, language} | transcribe_status {tabId}
 //   host -> ext: agents {agents} | status {tabId, state} | update {tabId, update} | config {tabId, options}
 //                auth {tabId, agent, methods} | recording_saved {tabId, id, path}
 //                skill_info {tabId, requestId, name, description | error}
@@ -27,6 +28,7 @@ import { providerReady } from './llm.js';
 import { loadMemory, addNote, deleteNote, clearMemory, runMemoryTool } from './memory.js';
 import { onePasswordAvailable, onePasswordItems, onePasswordCredential } from './passwords.js';
 import { parseSkill } from './skills.js';
+import { transcribe, transcribeStatus } from './transcribe.js';
 import { startToolServer } from './tool-server.js';
 import { AgentSession } from './session.js';
 
@@ -184,6 +186,20 @@ async function handleMessage(msg) {
 
       case 'critic_status':
         send({ type: 'critic_status', tabId, ready: providerReady(msg.provider || 'openrouter') });
+        break;
+
+      // Voice feature: transcribe one audio chunk; status for Settings.
+      case 'transcribe': {
+        try {
+          const { text } = await transcribe({ data: msg.data, mimeType: msg.mimeType, language: msg.language });
+          send({ type: 'transcript', tabId, requestId: msg.requestId, seq: msg.seq, text });
+        } catch (err) {
+          send({ type: 'transcript', tabId, requestId: msg.requestId, seq: msg.seq, error: err.message });
+        }
+        break;
+      }
+      case 'transcribe_status':
+        send({ type: 'transcribe_status', tabId, ...(await transcribeStatus()) });
         break;
 
       // Memory view in Settings.

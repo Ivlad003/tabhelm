@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>TabHelm microphone</title>
+    <link rel="stylesheet" href="tokens.css" />
+    <style>
+      body { font: 15px/1.5 var(--th-font); background: var(--th-bg); color: var(--th-text); margin: 0; display: grid; place-items: center; min-height: 100vh; }
+      main { max-width: 440px; padding: 24px; background: var(--th-surface); border: 1px solid var(--th-border); border-radius: 14px; }
+      button { font: inherit; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--th-accent); background: var(--th-accent); color: var(--th-accent-text); cursor: pointer; }
+      p.status { color: var(--th-muted); }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Microphone access for TabHelm</h1>
+      <p>Chrome asks for microphone permission once, from this page. After allowing, close this tab and use <b>🎤 Voice → Microphone</b> in the panel.</p>
+      <button id="grant">Allow microphone</button>
+      <p class="status" id="status"></p>
+    </main>
+    <script src="permissions.js"></script>
+  </body>
+</html>
