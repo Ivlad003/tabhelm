@@ -204,6 +204,9 @@ function onMessage(msg) {
       endTurn(null, busy ? msg.message : null);
       if (!connected) setStatus('error', 'Error');
       break;
+    case 'state_restored':
+      if (msg.count) notice(`Restored ${msg.count} item(s) of chat history and settings from the host backup.`);
+      break;
     case 'host_disconnected':
       connected = false;
       endTurn();

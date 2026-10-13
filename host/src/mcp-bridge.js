@@ -10,7 +10,7 @@ import { z } from 'zod';
 const { TABHELM_URL, TABHELM_TOKEN, TABHELM_TAB } = process.env;
 const tabId = Number(TABHELM_TAB);
 
-const server = new McpServer({ name: 'tabhelm-browser', version: '0.19.2' });
+const server = new McpServer({ name: 'tabhelm-browser', version: '0.19.3' });
 
 async function call(tool, args = {}) {
   try {

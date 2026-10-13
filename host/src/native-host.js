@@ -31,6 +31,7 @@ import { parseSkill } from './skills.js';
 import { transcribe, transcribeStatus } from './transcribe.js';
 import { startToolServer } from './tool-server.js';
 import { AgentSession } from './session.js';
+import { saveState, loadState } from './state.js';
 
 // API keys and endpoints from ~/.tabhelm/env reach every agent the host starts.
 loadEnvFile();
@@ -290,6 +291,22 @@ async function handleMessage(msg) {
         break;
 
       // Only files inside the recordings folder can be deleted this way.
+      // Extension state (chat history, settings) mirrored to ~/.tabhelm/state.json,
+      // so reinstalling the extension does not lose it. Sent back one key per frame
+      // (Chrome rejects host->extension frames above 1 MB).
+      case 'backup_state':
+        saveState(msg.data || {});
+        break;
+      case 'restore_state': {
+        const data = loadState();
+        for (const [key, value] of Object.entries(data)) {
+          if (Buffer.byteLength(JSON.stringify(value)) > 900_000) continue;
+          send({ type: 'state_item', key, value });
+        }
+        send({ type: 'state_done', keys: Object.keys(data).length });
+        break;
+      }
+
       case 'delete_recording': {
         const path = resolve(String(msg.path || ''));
         if (dirname(path) !== resolve(recordingsDir) || !/\.(webm|mp4)$/.test(path)) throw new Error('Not a TabHelm recording');

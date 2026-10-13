@@ -16,7 +16,7 @@ let nextCriticId = 1;
 let nativePort = null;
 
 // Dev hook for scripts/tools-test.js: lets the test call tools directly from the service worker.
-self.tabhelmDebug = { runTool, ensureGroup, chatDebugState, runSchedule: (id) => runScheduled(id, scheduleDeps), sendPageContext };
+self.tabhelmDebug = { runTool, ensureGroup, chatDebugState, runSchedule: (id) => runScheduled(id, scheduleDeps), sendPageContext, backupState, restoreState };
 
 // ---------- Page context: selection / image → chat ----------
 const pendingPageContext = new Map(); // tabId -> [payload]
@@ -202,6 +202,10 @@ async function onHostMessage(msg) {
     nativePort?.postMessage(reply);
     return;
   }
+  if (msg.type === 'state_item' || msg.type === 'state_done') {
+    onStateRestore(msg);
+    return;
+  }
   if (msg.type === 'critic_result') {
     criticWaits.get(msg.requestId)?.({ decision: msg.decision, reason: msg.reason });
     criticWaits.delete(msg.requestId);
@@ -337,6 +341,73 @@ chrome.runtime.onConnect.addListener((port) => {
     }
   });
 });
+
+// ---------- State backup: chrome.storage.local → ~/.tabhelm/state.json ----------
+// Chrome wipes storage when the extension is removed (a reinstall via "Load
+// unpacked" does that), so the host keeps a copy and the panel restores it.
+const BACKUP_SKIP = /^(secret:|newsCache$)/; // secrets stay in Chrome only; news is re-fetched
+let backupTimer = null;
+let restoring = null;
+
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'local' || restoring) return;
+  if (!Object.keys(changes).some((k) => !BACKUP_SKIP.test(k))) return;
+  clearTimeout(backupTimer);
+  backupTimer = setTimeout(backupState, 5000);
+});
+
+async function backupState() {
+  const all = await chrome.storage.local.get(null);
+  const data = Object.fromEntries(Object.entries(all).filter(([k]) => !BACKUP_SKIP.test(k)));
+  const hadPort = Boolean(nativePort);
+  try {
+    ensureNative().postMessage({ type: 'backup_state', data });
+  } catch (err) {
+    console.warn('TabHelm: backup failed', err);
+  }
+  // A host started only for the backup is released again.
+  if (!hadPort && !panels.size && !runners.size) setTimeout(() => dropIdleNative(), 2000);
+}
+
+function dropIdleNative() {
+  if (!panels.size && !runners.size && nativePort) {
+    nativePort.disconnect();
+    nativePort = null;
+  }
+}
+
+// After a (re)install with empty storage, ask the host for its copy.
+chrome.runtime.onInstalled.addListener(async () => {
+  const { chatIndex } = await chrome.storage.local.get('chatIndex');
+  if (!chatIndex) restoreState();
+});
+
+function restoreState() {
+  restoring = { items: {} };
+  try {
+    ensureNative().postMessage({ type: 'restore_state' });
+  } catch (err) {
+    restoring = null;
+    console.warn('TabHelm: restore failed', err);
+  }
+}
+
+async function onStateRestore(msg) {
+  if (!restoring) return;
+  if (msg.type === 'state_item') {
+    restoring.items[msg.key] = msg.value;
+    return;
+  }
+  const items = restoring.items;
+  // Never overwrite what the user already created since the install.
+  const existing = await chrome.storage.local.get(Object.keys(items));
+  const fresh = Object.fromEntries(Object.entries(items).filter(([k]) => !(k in existing)));
+  if (Object.keys(fresh).length) await chrome.storage.local.set(fresh);
+  restoring = null;
+  console.log(`TabHelm: restored ${Object.keys(fresh).length} item(s) from the host backup`);
+  for (const port of panels.values()) port.postMessage({ type: 'state_restored', count: Object.keys(fresh).length });
+  setTimeout(() => dropIdleNative(), 2000);
+}
 
 chrome.tabs.onRemoved.addListener((tabId) => {
   if (!panels.has(tabId) && !runners.has(tabId)) return;

@@ -2,6 +2,11 @@
 
 All notable changes to TabHelm. The newest release is at the top; the panel's update banner links here.
 
+## [0.19.3] - 2026-10-13
+
+### Fixed
+- **Chat history survives reinstalling the extension.** The host keeps a copy of the panel's storage (chats, settings, skills — never secrets) in `~/.tabhelm/state.json` and restores it when the extension starts with empty storage.
+
 ## [0.19.2] - 2026-10-13
 
 ### Fixed

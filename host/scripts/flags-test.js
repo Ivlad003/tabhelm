@@ -330,6 +330,18 @@ await panel.waitForFunction(() => [...document.querySelectorAll('.history-item')
 const hist = await panel.$$eval('.history-item', (i) => i.map((x) => x.innerText.replace(/\s+/g, ' ')));
 check('History search matches steps (action database)', hist.some((h) => /step\(s\) match/.test(h)), `${hist.join(' | ')} / panel errors: ${panelErrors.join(' | ')}`);
 
+// ---- state backup: chat history survives a reinstall ----------------------
+await sw.evaluate(() => self.tabhelmDebug.backupState());
+await new Promise((r) => setTimeout(r, 1500));
+const stateFile = join(fakeHome, '.tabhelm', 'state.json');
+const backup = existsSync(stateFile) ? JSON.parse(readFileSync(stateFile, 'utf8')).data : {};
+check('state backup written to ~/.tabhelm/state.json with chats', Array.isArray(backup.chatIndex) && backup.chatIndex.length > 0 && !Object.keys(backup).some((k) => k.startsWith('secret:')), Object.keys(backup).join(','));
+await sw.evaluate(() => chrome.storage.local.remove(['chatIndex']));
+await sw.evaluate(() => self.tabhelmDebug.restoreState());
+await new Promise((r) => setTimeout(r, 2500));
+const restored = await sw.evaluate(() => chrome.storage.local.get('chatIndex'));
+check('state restored from the host backup after storage was wiped', (restored.chatIndex || []).length === backup.chatIndex?.length, JSON.stringify(restored.chatIndex?.length));
+
 console.log(failures ? `\n${failures} check(s) failed` : '\nFLAG CHECKS PASSED');
 await browser.close();
 mock.close();
