@@ -95,7 +95,7 @@ const tabId = await sw.evaluate(async (u) => (await chrome.tabs.query({ url: `${
 async function tool(name, args = {}, { allow = true } = {}) {
   return sw.evaluate(
     async (tabId, name, args, allow) => {
-      const ui = { confirm: async () => allow, onTarget() {}, ask: () => new Promise(() => {}), resolveAsks() {}, skillsChanged() {} };
+      const ui = { confirm: async () => allow, onTarget() {}, ask: () => new Promise(() => {}), resolveAsks() {}, skillsChanged() {}, guideProgress() {}, guideDone() {} };
       try {
         const r = await self.tabhelmDebug.runTool(tabId, name, args, ui);
         return { ok: true, text: r.content.filter((c) => c.type === 'text').map((c) => c.text).join('\n'), images: r.content.filter((c) => c.type === 'image').length, label: r.label };
@@ -138,10 +138,10 @@ await sw.evaluate(() => chrome.storage.local.set({ highlightFinds: true }));
   const guide = tool('browser_guide', { ref: refFor(found.text, 'Hover me'), text: 'Click the Hover me button', step: 1 });
   await page.waitForFunction(() => document.getElementById('tabhelm-guide')?.shadowRoot?.querySelector('.bubble'), { timeout: 5000 });
   const bubble = await page.evaluate(() => document.getElementById('tabhelm-guide').shadowRoot.querySelector('.bubble').textContent);
-  check('guide shows the instruction on the page', /Step 1[\s\S]*Click the Hover me button/.test(bubble), bubble);
+  check('guide shows the instruction on the page', /Your turn[\s\S]*Click the Hover me button/.test(bubble), bubble);
   await page.click('#hoverTarget');
   const g = await guide;
-  check('guide completes when the user clicks the element', g.ok && /clicked “Hover me”/.test(g.text), g.text);
+  check('guide completes when the user clicks the element', g.ok && /Click the Hover me button → clicked/.test(g.text), g.text);
   check('guide overlay removed afterwards', !(await page.evaluate(() => document.getElementById('tabhelm-guide'))));
   const skipRun = tool('browser_guide', { ref: refFor(found.text, 'Hover me'), text: 'Now skip this', step: 2 });
   await page.waitForFunction(() => document.getElementById('tabhelm-guide'), { timeout: 5000 });
@@ -153,6 +153,25 @@ await sw.evaluate(() => chrome.storage.local.set({ highlightFinds: true }));
   await page.evaluate(() => [...document.getElementById('tabhelm-guide').shadowRoot.querySelectorAll('button')].find((b) => b.textContent.includes('Back')).click());
   const bk = await backRun;
   check('guide Back button asks for the previous step', bk.ok && /previous step again .*step 2/.test(bk.text), bk.text);
+  // A tour: all steps badged at once, Next moves (and scrolls) to the next one, Back returns.
+  const refs2 = [refFor(found.text, 'Hover me'), refFor(snap.text, 'Log')];
+  const tourRun = tool('browser_guide', { steps: [{ ref: refs2[0], text: 'First: hover button' }, { ref: refs2[1], text: 'Second: the Save button' }] });
+  const readTour = () => page.evaluate(() => { const r = document.getElementById('tabhelm-guide')?.shadowRoot; return r ? { badges: [...r.querySelectorAll('.badge')].map((b) => b.textContent + (b.classList.contains('active') ? '*' : '')), head: r.querySelector('.step')?.textContent, text: r.querySelector('.text')?.textContent } : null; });
+  await page.waitForFunction(() => document.getElementById('tabhelm-guide'), { timeout: 5000 });
+  const t1 = await readTour();
+  check('tour shows every step as a badge, first active', t1?.badges.join(',') === '1*,2' && /Step 1 of 2/.test(t1.head), JSON.stringify(t1));
+  await page.evaluate(() => [...document.getElementById('tabhelm-guide').shadowRoot.querySelectorAll('button')].find((b) => /Next/.test(b.textContent)).click());
+  await page.waitForFunction(() => /Step 2 of 2/.test(document.getElementById('tabhelm-guide')?.shadowRoot?.querySelector('.step')?.textContent || ''), { timeout: 5000 });
+  const t2 = await readTour();
+  check('Next moves to the second step', t2?.badges.join(',') === '1,2*' && /Second/.test(t2.text), JSON.stringify(t2));
+  await page.evaluate(() => [...document.getElementById('tabhelm-guide').shadowRoot.querySelectorAll('button')].find((b) => /Back/.test(b.textContent)).click());
+  await page.waitForFunction(() => /Step 1 of 2/.test(document.getElementById('tabhelm-guide')?.shadowRoot?.querySelector('.step')?.textContent || ''), { timeout: 5000 });
+  check('Back returns to the first step', /Step 1 of 2/.test((await readTour()).head));
+  await page.evaluate(() => [...document.getElementById('tabhelm-guide').shadowRoot.querySelectorAll('button')].find((b) => /Next/.test(b.textContent)).click());
+  await page.waitForFunction(() => /Step 2 of 2/.test(document.getElementById('tabhelm-guide')?.shadowRoot?.querySelector('.step')?.textContent || ''), { timeout: 5000 });
+  await page.evaluate(() => [...document.getElementById('tabhelm-guide').shadowRoot.querySelectorAll('button')].find((b) => /Finish/.test(b.textContent)).click());
+  const tr = await tourRun;
+  check('tour returns a summary of all steps', tr.ok && /1\. First.*→ done/.test(tr.text) && /2\. Second.*→ done/.test(tr.text), tr.text);
 }
 
 // --- skill_save: stored as an authored skill, flag switched on

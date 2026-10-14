@@ -154,6 +154,12 @@ function onMessage(msg) {
     case 'interjected':
       markInterjected(msg.texts || []);
       break;
+    case 'guide_progress':
+      showGuideStep(msg);
+      break;
+    case 'guide_done':
+      finishGuideCard(msg);
+      break;
     case 'ask_resolved':
       askCards.get(msg.id)?.(msg.reply?.done ? 'Clicked on the page' : 'Closed');
       askCards.delete(msg.id);
@@ -1093,7 +1099,45 @@ function setPaused(on) {
   }
 }
 
-// Requests from the agent that the panel answers (Take over / Password manager flags, guide steps).
+// Guide mode: one card for the whole tour, updated per step; its buttons drive the tour.
+let guideCard = null;
+function showGuideStep(msg) {
+  if (!guideCard || !guideCard.el.isConnected) {
+    breakActivity();
+    agentBubble = null;
+    const el = add('div', 'card ask guide');
+    const title = Object.assign(document.createElement('div'), { className: 'title' });
+    const hint = Object.assign(document.createElement('div'), { className: 'hint' });
+    const options = Object.assign(document.createElement('div'), { className: 'options' });
+    el.append(title, hint, options);
+    guideCard = { el, title, hint, options, steps: [] };
+  }
+  const g = guideCard;
+  g.title.textContent = `${msg.total > 1 ? `Step ${msg.index + 1} of ${msg.total}` : `Step ${msg.number || 1}`}: ${msg.text}`;
+  g.hint.textContent = msg.found ? `Waiting for you to click “${msg.target || 'the highlighted element'}”${msg.tabTitle ? ` on “${msg.tabTitle}”` : ''}…` : 'The element is not on this page any more — follow the instruction, then press Next.';
+  const act = (action) => port.postMessage({ type: 'guide_action', action });
+  const btn = (label, action, cls = 'btn') => Object.assign(document.createElement('button'), { className: cls, textContent: label, onclick: () => act(action) });
+  g.options.replaceChildren(
+    ...(msg.index > 0 || msg.number > 1 ? [btn('← Back', 'back')] : []),
+    btn(msg.index + 1 >= msg.total ? 'Finish ✓' : 'Next →', 'done', 'btn primary'),
+    btn('Skip', 'skipped'),
+    btn('Stop guide', 'stop'),
+  );
+  record('ask', { kind: 'guide', message: g.title.textContent });
+  scrollDown();
+}
+
+function finishGuideCard(msg) {
+  if (!guideCard) return;
+  const g = guideCard;
+  guideCard = null;
+  g.el.classList.add('resolved');
+  const label = msg.stopped ? 'Stopped' : msg.back ? 'Back to the agent' : `Finished${msg.results ? ` (${msg.results.filter((r) => r === 'skipped').length} skipped)` : ''}`;
+  g.options.replaceChildren(Object.assign(document.createElement('span'), { textContent: `→ ${label}` }));
+  record('ask', { kind: 'guide', answer: label });
+}
+
+// Requests from the agent that the panel answers (Take over / Password manager flags).
 const askCards = new Map(); // ask id -> mark resolved (when settled from the page side)
 async function addAsk(msg) {
   breakActivity();
@@ -1119,29 +1163,6 @@ async function addAsk(msg) {
     options.append(done, cancel);
     card.append(title, note, options);
     record('ask', { kind: 'human', message: msg.message });
-  } else if (msg.kind === 'guide') {
-    card.classList.add('guide');
-    title.textContent = `${msg.step ? `Step ${msg.step}: ` : ''}${msg.message}`;
-    const hint = Object.assign(document.createElement('div'), { className: 'hint', textContent: `Waiting for you to click “${msg.target || 'the highlighted element'}” on the page…` });
-    const done = Object.assign(document.createElement('button'), { className: 'btn primary', textContent: 'Next →', title: 'I did this step — show the next one' });
-    done.onclick = () => reply({ done: true }, 'Next');
-    const skip = Object.assign(document.createElement('button'), { className: 'btn', textContent: 'Skip step' });
-    skip.onclick = () => reply({ skip: true }, 'Skipped');
-    const stop = Object.assign(document.createElement('button'), { className: 'btn', textContent: 'Stop guide' });
-    stop.onclick = () => reply(null, 'Stopped');
-    if (msg.step > 1) {
-      const back = Object.assign(document.createElement('button'), { className: 'btn', textContent: '← Back', title: 'Show the previous step again' });
-      back.onclick = () => reply({ back: true }, 'Back');
-      options.append(back);
-    }
-    options.append(done, skip, stop);
-    card.append(title, hint, options);
-    askCards.set(msg.id, (label) => {
-      card.classList.add('resolved');
-      options.replaceChildren(Object.assign(document.createElement('span'), { textContent: `→ ${label}` }));
-      record('ask', { kind: 'guide', answer: label });
-    });
-    record('ask', { kind: 'guide', message: `${msg.step ? `Step ${msg.step}: ` : ''}${msg.message}` });
   } else if (msg.kind === 'login') {
     title.textContent = `Sign in needed on ${msg.tab?.title || 'this page'}${msg.note ? ` — ${msg.note}` : ''}`;
     const { getSetting } = await import('./features.js');

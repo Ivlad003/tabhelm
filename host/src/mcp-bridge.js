@@ -10,7 +10,7 @@ import { z } from 'zod';
 const { TABHELM_URL, TABHELM_TOKEN, TABHELM_TAB } = process.env;
 const tabId = Number(TABHELM_TAB);
 
-const server = new McpServer({ name: 'tabhelm-browser', version: '0.25.1' });
+const server = new McpServer({ name: 'tabhelm-browser', version: '0.26.0' });
 
 async function call(tool, args = {}) {
   try {
@@ -161,8 +161,13 @@ const tools = {
   },
   browser_guide: {
     description:
-      'Guide mode: show the user what to do instead of doing it. Draws an arrow and your instruction next to the element and waits until the user clicks it (or presses Skip / I did it). Use when the user asks to be guided, taught or walked through something; one call per step, snapshot again after each. Returns what the user did.',
-    inputSchema: { ref, text: z.string().describe('Short instruction for the user, e.g. "Click Settings"'), step: z.number().optional().describe('Step number shown on the page') },
+      'Guide mode: show the user what to do instead of doing it. Pass ALL steps you can see at once (steps[]): every step gets a numbered badge on the page, the active one an arrow and your instruction; Next/Back move between steps (scrolling to them, switching tabs for steps on other tabs) and a click on the element counts as done. The call returns when the user finishes, with what they did or skipped. Steps on pages that only appear after a click cannot have refs yet: give them text only, or start a new browser_guide after a snapshot. Single-step form (ref, text, step) still works.',
+    inputSchema: {
+      steps: z.array(z.object({ ref: z.string().optional().describe('Element ref from the latest browser_snapshot of that tab; omit for a text-only step'), text: z.string().describe('Instruction for this step'), tabId: z.number().optional().describe('Tab of this step (default: current tab)') })).optional(),
+      ref: z.string().optional().describe('Single-step form: element ref'),
+      text: z.string().optional().describe('Single-step form: instruction'),
+      step: z.number().optional().describe('Single-step form: step number shown on the page'),
+    },
   },
   skill_save: {
     description:

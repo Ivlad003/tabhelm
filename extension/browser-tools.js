@@ -544,6 +544,94 @@ export async function runTool(chatTabId, tool, args, ui) {
   return result;
 }
 
+// Guide mode: a tour of steps (or one step) shown on the page. Every step on a
+// page gets a numbered badge; Next/Back move the active step — scrolling to it and
+// switching tabs when a step lives on another tab — and a click on the active
+// element counts as done. The panel mirrors the step and its buttons.
+async function guideTour(chatTabId, defaultTab, args, ui) {
+  const c = chatState(chatTabId);
+  const steps = (args.steps?.length ? args.steps : [{ ref: args.ref, text: args.text }]).map((st, i) => ({
+    index: i,
+    ref: st.ref || null,
+    text: String(st.text || ''),
+    tabId: st.tabId != null ? Number(st.tabId) : defaultTab,
+  }));
+  const single = !args.steps?.length;
+  const startNumber = args.step || 1;
+  const results = steps.map(() => null);
+  let i = 0;
+  let shownTab = null;
+  let shownFrame = 0;
+  const started = Date.now();
+  const hide = () => (shownTab != null ? inject(shownTab, P.guideHide, [], shownFrame).catch(() => {}) : null);
+
+  while (i < steps.length && Date.now() - started < 30 * 60_000) {
+    const step = steps[i];
+    const tabId = step.tabId;
+    if (!c.owned.has(tabId) && !(await inGroup(c, tabId))) throw new Error(`Step ${i + 1} points at tab ${tabId}, which this chat cannot use.`);
+    // Steps on another tab bring that tab to the front.
+    const tab = await chrome.tabs.get(tabId).catch(() => null);
+    if (!tab) throw new Error(`Tab ${tabId} of step ${i + 1} is gone.`);
+    if (!tab.active) await chrome.tabs.update(tabId, { active: true }).catch(() => {});
+    await attach(tabId);
+    let frameId = 0;
+    let ref = null;
+    let label = '';
+    if (step.ref) {
+      const parsed = parseRef(step.ref);
+      frameId = parsed.frameId;
+      ref = parsed.ref;
+    }
+    const sameFrame = steps.filter((st) => st.tabId === tabId && (st.ref ? parseRef(st.ref).frameId === frameId : true)).map((st) => ({ index: st.index, ref: st.ref ? parseRef(st.ref).ref : null, text: st.text, canBack: single && startNumber > 1 }));
+    const shown = await inject(tabId, P.guideTour, [sameFrame, i, steps.length], frameId).catch(() => null);
+    label = shown?.label || '';
+    shownTab = tabId;
+    shownFrame = frameId;
+    c.guideAction = null;
+    ui.guideProgress?.(chatTabId, { index: i, total: steps.length, text: step.text, target: label, found: Boolean(shown?.found), tabId, tabTitle: tab.title, number: single ? startNumber : i + 1 });
+
+    let status = 'waiting';
+    while (status === 'waiting' && Date.now() - started < 30 * 60_000) {
+      await sleep(400);
+      if (c.guideAction) {
+        status = c.guideAction;
+        c.guideAction = null;
+        break;
+      }
+      const st = await inject(tabId, P.guideStatus, [], frameId).catch(() => ({ status: 'navigated' }));
+      status = st?.status === 'gone' || st?.index !== i ? 'navigated' : st?.status || 'navigated';
+    }
+    await hide();
+    if (status === 'stop') {
+      ui.guideDone?.(chatTabId, { stopped: true });
+      throw new Error('The user stopped the guide.');
+    }
+    if (status === 'back') {
+      if (i === 0) {
+        // Nothing earlier in this tour: hand it back to the agent.
+        ui.guideDone?.(chatTabId, { back: true });
+        if (single) return { content: text(`The user pressed Back: show the previous step again (call browser_guide with step ${Math.max(1, startNumber - 1)}, its element and its instruction; snapshot first if the page changed), then continue from there.`), label: `step ${startNumber} → back` };
+        return { content: text('The user pressed Back on the first step: there is nothing earlier in this guide. Ask what they want to revisit, or show the previous guide again.'), label: 'guide → back' };
+      }
+      i--;
+      continue;
+    }
+    results[i] = status === 'skipped' ? 'skipped' : status === 'navigated' ? 'clicked (page changed)' : status === 'clicked' ? 'clicked' : 'done';
+    i++;
+  }
+  ui.guideDone?.(chatTabId, { results });
+  if (i < steps.length) throw new Error('The guide timed out after 30 minutes.');
+  const summary = steps.map((st, k) => `${single ? startNumber : k + 1}. ${st.text} → ${results[k]}`).join('\n');
+  const skipped = results.filter((r) => r === 'skipped').length;
+  const labelText = single ? `step ${startNumber} → ${results[0]}` : `${steps.length} steps, ${skipped} skipped`;
+  return { content: text(`${single ? 'The user finished the step' : 'The user finished the guide'}:\n${summary}\n${skipped ? 'Ask whether the skipped steps need help. ' : ''}Take a new browser_snapshot before continuing.`), label: labelText };
+}
+
+export function setGuideAction(chatTabId, action) {
+  const c = chats.get(chatTabId);
+  if (c) c.guideAction = action;
+}
+
 export function interject(chatTabId, text) {
   chatState(chatTabId).interjections.push(text);
 }
@@ -909,31 +997,8 @@ async function runPageTool(tabId, tab, tool, args, ui, chatTabId) {
 
     // ---- Take over / password manager flags: the panel does the work ----
     // Guide mode: an arrow and instruction on the page, then wait for the user's click.
-    case 'browser_guide': {
-      const loc = await locate(tabId, args.ref);
-      const shown = checked(await inject(tabId, P.guideShow, [loc.ref, args.text, args.step || 0], loc.frameId));
-      const card = ui.ask(chatTabId, 'guide', { message: args.text, step: args.step || 0, target: shown.label, tab: { title: tab.title, url: tab.url } });
-      let panelReply;
-      card.then((r) => (panelReply = r ?? { cancelled: true }));
-      let status = 'waiting';
-      const started = Date.now();
-      // Poll the page until the user clicks the element, presses a bubble button,
-      // answers in the panel, navigates away, or 15 minutes pass.
-      while (status === 'waiting' && !panelReply && Date.now() - started < 15 * 60_000) {
-        await sleep(400);
-        const s = await inject(tabId, P.guideStatus, [], loc.frameId).catch(() => ({ status: 'navigated' }));
-        status = s?.status === 'gone' ? 'navigated' : s?.status || 'navigated';
-      }
-      await inject(tabId, P.guideHide, [], loc.frameId).catch(() => {});
-      ui.resolveAsks(chatTabId, { done: status === 'clicked' || status === 'done' || status === 'navigated' });
-      if (panelReply?.cancelled) throw new Error('The user stopped the guide.');
-      const outcome = panelReply?.back || status === 'back' ? 'back' : panelReply?.skip || status === 'skipped' ? 'skipped' : status === 'navigated' ? 'clicked' : status === 'done' || panelReply?.done ? 'done' : status;
-      const nav = status === 'navigated' ? ' The page changed afterwards.' : '';
-      const label = `step ${args.step || ''} “${shown.label}” → ${outcome}`.replace(/\s+/g, ' ');
-      if (outcome === 'skipped') return { content: text(`The user skipped this step (${shown.label}). Continue with the next step or ask what they need.`), label };
-      if (outcome === 'back') return { content: text(`The user pressed Back: show the previous step again (call browser_guide with step ${Math.max(1, (args.step || 2) - 1)}, its element and its instruction; snapshot first if the page changed), then continue from there.`), label };
-      return { content: text(`The user ${outcome === 'clicked' ? 'clicked' : 'completed'} “${shown.label}”.${nav} Take a new browser_snapshot before the next step.`), label };
-    }
+    case 'browser_guide':
+      return guideTour(chatTabId, tabId, args, ui);
 
     case 'browser_request_human': {
       await requireFlag('takeOver', 'Take over');

@@ -496,19 +496,21 @@ export function webStorage(kind, action, key, value) {
   return { text: `${kind}.${key} ${action === 'set' ? 'set' : 'removed'}.` };
 }
 
-// Guide mode (browser_guide): points at an element with an arrow and an
-// instruction, then waits for the user to click it. State lives in
-// window.__tabhelm.guide and is read by guideStatus() from the extension.
+// Guide mode (browser_guide): a tour of steps. Every step on this page gets a
+// numbered badge at once; the active one gets a pulsing ring, an arrow and the
+// instruction with Back / Next / Skip / Stop. Button presses and a click on the
+// active element land in window.__tabhelm.guide, which guideStatus() reports.
 // The overlay is in the page, so recordings show it too.
-export function guideShow(ref, text, step) {
+export function guideTour(steps, active, total) {
   const ID = 'tabhelm-guide';
-  document.getElementById(ID)?.remove();
   const state = (window.__tabhelm ||= { refs: new Map(), next: 1 });
-  const el = state.refs.get(ref);
-  if (!el || !el.isConnected) return { error: `Ref ${ref} is stale or unknown. Take a new browser_snapshot.` };
+  document.getElementById(ID)?.remove();
   if (state.guideListener) document.removeEventListener('click', state.guideListener, true);
   clearInterval(state.guideTimer);
-  state.guide = { status: 'waiting', ref };
+  const current = steps.find((st) => st.index === active);
+  const el = current?.ref ? state.refs.get(current.ref) : null;
+  const target = el?.isConnected ? el : null;
+  state.guide = { status: 'waiting', index: active };
 
   const host = document.createElement('div');
   host.id = ID;
@@ -519,64 +521,77 @@ export function guideShow(ref, text, step) {
     :host { position: absolute; left: 0; top: 0; width: 0; height: 0; }
     .ring { position: absolute; border: 3px solid #2a9d76; border-radius: 6px; pointer-events: none; z-index: 2147483645; animation: pulse 1.2s ease-in-out infinite; }
     @keyframes pulse { 0%, 100% { box-shadow: 0 0 0 4px rgba(42,157,118,.35); } 50% { box-shadow: 0 0 0 12px rgba(42,157,118,0); } }
+    .badge { position: absolute; width: 22px; height: 22px; border-radius: 50%; background: #1c7d5c; color: #fff; font: 700 12px/22px system-ui, sans-serif; text-align: center; pointer-events: none; z-index: 2147483646; box-shadow: 0 2px 6px rgba(0,0,0,.3); opacity: .85; }
+    .badge.done { background: #8aa39b; }
+    .badge.active { background: #ff9f1c; color: #1a1a1a; opacity: 1; transform: scale(1.15); }
     .arrow { position: absolute; width: 0; height: 0; pointer-events: none; z-index: 2147483646; animation: bob 1s ease-in-out infinite; }
     .arrow.down { border-left: 12px solid transparent; border-right: 12px solid transparent; border-top: 18px solid #1c7d5c; }
     .arrow.up { border-left: 12px solid transparent; border-right: 12px solid transparent; border-bottom: 18px solid #1c7d5c; }
     @keyframes bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(5px); } }
     .bubble { position: absolute; max-width: 360px; background: #1c7d5c; color: #fff; font: 14px/1.4 system-ui, sans-serif; padding: 10px 12px; border-radius: 10px; box-shadow: 0 6px 24px rgba(0,0,0,.25); z-index: 2147483647; pointer-events: auto; }
-    .text { max-height: 40vh; overflow: auto; white-space: pre-wrap; }
+    .bubble.floating { position: fixed; right: 16px; bottom: 16px; }
     .step { font-size: 11px; opacity: .8; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 2px; }
-    .row { display: flex; gap: 6px; margin-top: 8px; }
+    .text { max-height: 40vh; overflow: auto; white-space: pre-wrap; }
+    .row { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
     button { font: 600 12px system-ui, sans-serif; border: 0; border-radius: 6px; padding: 5px 10px; cursor: pointer; background: #fff; color: #1c7d5c; }
     button.ghost { background: rgba(255,255,255,.18); color: #fff; }
   `);
   root.adoptedStyleSheets = [sheet];
 
+  // Badges for every step of the tour that lives on this page.
+  const badges = [];
+  for (const st of steps) {
+    const node = st.ref ? state.refs.get(st.ref) : null;
+    if (!node?.isConnected) continue;
+    const b = document.createElement('div');
+    b.className = `badge${st.index === active ? ' active' : st.index < active ? ' done' : ''}`;
+    b.textContent = String(st.index + 1);
+    root.append(b);
+    badges.push({ node, b });
+  }
+
   const ring = document.createElement('div');
   ring.className = 'ring';
   const arrow = document.createElement('div');
   const bubble = document.createElement('div');
-  bubble.className = 'bubble';
+  bubble.className = `bubble${target ? '' : ' floating'}`;
   const head = document.createElement('div');
   head.className = 'step';
-  head.textContent = step ? `Step ${step}` : 'Your turn';
+  head.textContent = total > 1 ? `Step ${active + 1} of ${total}` : 'Your turn';
   const body = document.createElement('div');
   body.className = 'text';
-  body.textContent = text;
+  body.textContent = current?.text || '';
   const row = document.createElement('div');
   row.className = 'row';
-  const done = document.createElement('button');
-  done.textContent = 'Next →';
-  done.title = 'I did this step — show the next one';
-  done.onclick = () => finish('done');
-  const skip = document.createElement('button');
-  skip.className = 'ghost';
-  skip.textContent = 'Skip';
-  skip.onclick = () => finish('skipped');
-  if (step > 1) {
-    const back = document.createElement('button');
-    back.className = 'ghost';
-    back.textContent = '← Back';
-    back.title = 'Show the previous step again';
-    back.onclick = () => finish('back');
-    row.append(back);
-  }
-  row.append(done, skip);
+  const mk = (label, status, ghost, title) => {
+    const b = document.createElement('button');
+    b.textContent = label;
+    if (ghost) b.className = 'ghost';
+    if (title) b.title = title;
+    b.onclick = () => finish(status);
+    return b;
+  };
+  if (active > 0 || current?.canBack) row.append(mk('← Back', 'back', true, 'Show the previous step again'));
+  row.append(mk(active + 1 >= total ? 'Finish ✓' : 'Next →', 'done', false, 'I did this step — show the next one'));
+  row.append(mk('Skip', 'skipped', true), mk('Stop', 'stop', true, 'End the guide'));
   bubble.append(head, body, row);
-  root.append(ring, arrow, bubble);
+  if (target) root.append(ring, arrow);
+  root.append(bubble);
   document.documentElement.append(host);
 
-  // Everything is placed in document coordinates (the host is absolute at 0,0),
-  // so it scrolls with the page natively; re-placing handles inner scroll
-  // containers, layout shifts and resizes.
   let last = '';
   function place() {
-    const r = el.getBoundingClientRect();
-    const key = [r.left, r.top, r.width, r.height, scrollX, scrollY, innerWidth, innerHeight].join(',');
-    if (key === last) return;
-    last = key;
     const X = scrollX;
     const Y = scrollY;
+    const r = target?.getBoundingClientRect();
+    const key = [r?.left, r?.top, r?.width, r?.height, X, Y, innerWidth, innerHeight, badges.map((x) => x.node.getBoundingClientRect().top).join('/')].join(',');
+    if (key === last) return;
+    last = key;
+    for (const { node, b } of badges) {
+      const nr = node.getBoundingClientRect();
+      Object.assign(b.style, { left: `${nr.left + X - 11}px`, top: `${nr.top + Y - 11}px` });
+    }
+    if (!r) return;
     Object.assign(ring.style, { left: `${r.left + X - 4}px`, top: `${r.top + Y - 4}px`, width: `${r.width + 8}px`, height: `${r.height + 8}px` });
     const below = r.bottom + 120 < innerHeight || r.top < 140;
     arrow.className = `arrow ${below ? 'up' : 'down'}`;
@@ -588,25 +603,28 @@ export function guideShow(ref, text, step) {
     bubble.style.top = below ? `${r.bottom + 26 + Y}px` : `${Math.max(Y + 8, r.top - 26 - bubble.offsetHeight + Y)}px`;
   }
   function finish(status) {
-    state.guide = { status, ref };
+    state.guide = { status, index: active };
     document.removeEventListener('click', state.guideListener, true);
     removeEventListener('scroll', place, true);
     removeEventListener('resize', place);
     clearInterval(state.guideTimer);
     host.remove();
   }
-  state.guideTimer = setInterval(place, 250);
-  // The user's click on the target (or inside it) completes the step; the
-  // event itself is left alone so the page reacts normally.
+  // The user's click on the active element completes the step; the event itself
+  // is left alone so the page reacts normally.
   state.guideListener = (e) => {
-    const path = e.composedPath();
-    if (path.includes(el)) finish('clicked');
+    if (target && e.composedPath().includes(target)) finish('clicked');
   };
   document.addEventListener('click', state.guideListener, true);
   addEventListener('scroll', place, true);
   addEventListener('resize', place);
+  state.guideTimer = setInterval(place, 250);
+  if (target) {
+    const r = target.getBoundingClientRect();
+    if (r.bottom < 0 || r.top > innerHeight) target.scrollIntoView({ block: 'center', inline: 'nearest' });
+  }
   place();
-  return { ok: true, label: (el.getAttribute('aria-label') || el.innerText || el.value || '').replace(/\s+/g, ' ').trim().slice(0, 80) };
+  return { ok: true, found: Boolean(target), label: target ? (target.getAttribute('aria-label') || target.innerText || target.value || '').replace(/\s+/g, ' ').trim().slice(0, 80) : '' };
 }
 
 export function guideStatus() {

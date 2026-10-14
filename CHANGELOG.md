@@ -2,6 +2,11 @@
 
 All notable changes to TabHelm. The newest release is at the top; the panel's update banner links here.
 
+## [0.26.0] - 2026-10-14
+
+### Changed
+- **Guide mode is a tour:** the agent passes all steps at once; every step gets a numbered badge on the page, Next / Back move between them (scrolling to the element, switching tabs for steps on other tabs), Finish ends the guide. One panel card follows the tour instead of one card per step.
+
 ## [0.25.1] - 2026-10-14
 
 ### Changed

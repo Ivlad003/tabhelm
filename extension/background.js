@@ -1,4 +1,4 @@
-import { runTool, releaseChat, startRecording, stopRecording, ensureGroup, groupInfo, chatForGroupTab, chatDebugState, previewTarget, interject, dropInterjections, markWorking } from './browser-tools.js';
+import { runTool, releaseChat, startRecording, stopRecording, ensureGroup, groupInfo, chatForGroupTab, chatDebugState, previewTarget, interject, dropInterjections, markWorking, setGuideAction } from './browser-tools.js';
 import { checkPolicy, pauseChat, resumeChat, isPaused, READ_ONLY } from './policy.js';
 import { getFeatures, getSetting, hostFeaturePayload } from './features.js';
 import { runScheduled, SCHEDULE_PREFIX } from './scheduler.js';
@@ -120,6 +120,12 @@ const ui = {
       asks.delete(id);
       deliver(chatTabId, { type: 'ask_resolved', id, reply });
     }
+  },
+  guideProgress(chatTabId, step) {
+    deliver(chatTabId, { type: 'guide_progress', ...step });
+  },
+  guideDone(chatTabId, info) {
+    deliver(chatTabId, { type: 'guide_done', ...info });
   },
   onInterjected(chatTabId, texts) {
     deliver(chatTabId, { type: 'interjected', texts });
@@ -336,6 +342,10 @@ export async function fromPanel(tabId, msg, port) {
   }
   if (msg.type === 'interject') {
     interject(tabId, msg.text);
+    return;
+  }
+  if (msg.type === 'guide_action') {
+    setGuideAction(tabId, msg.action);
     return;
   }
   if (msg.type === 'pause') {

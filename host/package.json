@@ -1,6 +1,6 @@
 {
   "name": "tabhelm-host",
-  "version": "0.25.1",
+  "version": "0.26.0",
   "description": "TabHelm native host: bridges the Chrome side panel to terminal coding agents over ACP",
   "private": true,
   "type": "module",
