@@ -535,6 +535,26 @@ if (process.env.E2E_SWITCH) {
   await panel.waitForFunction(() => document.querySelector('#status').dataset.state === 'ready' && document.querySelectorAll('.msg').length === 0, { timeout: 90000 });
   console.log('new chat: log cleared, agent reconnected');
 }
+// Copy buttons under the reply: Markdown source and text with links written out.
+await browser.defaultBrowserContext().overridePermissions(`chrome-extension://${extId}`, ['clipboard-read', 'clipboard-write']);
+let copyOk = true;
+{
+  const bubbles = await panel.$$('.msg.agent');
+  const lastBubble = bubbles[bubbles.length - 1];
+  if (lastBubble) {
+    await panel.bringToFront();
+    await lastBubble.$eval('.msg-copy:nth-child(1)', (b) => b.click());
+    await new Promise((r) => setTimeout(r, 300));
+    const md = await panel.evaluate(() => navigator.clipboard.readText());
+    const src = await lastBubble.evaluate((el) => el.markdown);
+    await lastBubble.$eval('.msg-copy:nth-child(2)', (b) => b.click());
+    await new Promise((r) => setTimeout(r, 300));
+    const txt = await panel.evaluate(() => navigator.clipboard.readText());
+    copyOk = md === src && txt.length > 0 && !/[*#`]/.test(txt.slice(0, 2));
+    console.log('copy markdown matches source:', md === src, '| text copy:', txt.replace(/\s+/g, ' ').slice(0, 80));
+  }
+}
+
 // Context & usage popup (shown once the agent reported usage).
 const usageBtn = await panel.$eval('#usage-open', (b) => (b.hidden ? null : b.textContent.trim()));
 let usagePopup = '';
@@ -561,7 +581,7 @@ if (process.env.E2E_SHOTS) {
   console.log('extra screenshots in', profile);
 }
 for (const p of relayProcs) p.kill();
-const pass = out === 'Saved: Ada Lovelace / blue / agreed' && extraOk && usageOk;
+const pass = out === 'Saved: Ada Lovelace / blue / agreed' && extraOk && usageOk && copyOk;
 console.log(pass ? 'E2E PASS' : 'E2E FAIL');
 await browser.close();
 server.close();

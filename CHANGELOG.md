@@ -2,6 +2,11 @@
 
 All notable changes to TabHelm. The newest release is at the top; the panel's update banner links here.
 
+## [0.26.1] - 2026-10-14
+
+### Added
+- **Copy** / **Text** buttons under every agent reply: Markdown source, or plain text with links written out as *label (url)* (and rich text with clickable links for docs and mail).
+
 ## [0.26.0] - 2026-10-14
 
 ### Changed

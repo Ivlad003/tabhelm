@@ -1628,3 +1628,33 @@ button.chip:hover {
   width: 100%;
   box-sizing: border-box;
 }
+
+/* Copy buttons under agent replies */
+.msg-tools {
+  display: flex;
+  gap: 4px;
+  margin-top: 4px;
+  opacity: 0.55;
+  transition: opacity 0.15s;
+}
+
+.msg.agent:hover .msg-tools,
+.msg-tools:focus-within {
+  opacity: 1;
+}
+
+.msg-copy {
+  font: inherit;
+  font-size: 11px;
+  padding: 1px 7px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.msg-copy:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}

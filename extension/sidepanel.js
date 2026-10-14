@@ -310,13 +310,13 @@ function onUpdate(u) {
       thoughtEl = null;
       if (!agentBubble) {
         breakActivity();
-        agentBubble = add('div', 'msg agent');
+        agentBubble = agentMessage('');
         agentText = '';
         if (turn?.text) turn.text += '\n\n'; // separate answers split by tool calls
       }
       agentText += u.text;
       if (turn) turn.text += u.text;
-      agentBubble.innerHTML = renderMarkdown(agentText);
+      agentBubble.setMarkdown(agentText);
       break;
     case 'agent_thought_chunk':
       if (!thoughtEl) {
@@ -1307,6 +1307,66 @@ $('usage-open').onclick = () => {
 };
 $('usage-close').onclick = () => ($('usage-popup').hidden = true);
 
+// An agent reply: rendered Markdown plus Copy buttons — the Markdown source, or
+// the text as shown with every link spelled out as "label (url)".
+function agentMessage(markdown) {
+  const el = add('div', 'msg agent');
+  const body = Object.assign(document.createElement('div'), { className: 'md-body' });
+  const tools = Object.assign(document.createElement('div'), { className: 'msg-tools' });
+  const mk = (label, title, fn) => {
+    const b = Object.assign(document.createElement('button'), { type: 'button', className: 'msg-copy', textContent: label, title });
+    b.onclick = async () => {
+      try {
+        await fn();
+        b.textContent = 'Copied ✓';
+      } catch {
+        b.textContent = 'Copy failed';
+      }
+      setTimeout(() => (b.textContent = label), 1500);
+    };
+    return b;
+  };
+  tools.append(
+    mk('Copy', 'Copy as Markdown (links as [text](url))', () => copyText(el.markdown)),
+    mk('Text', 'Copy as plain text with links written out; pastes as rich text with links into docs and mail', () => copyRich(plainTextWithLinks(body), body.innerHTML)),
+  );
+  el.append(body, tools);
+  el.markdown = markdown;
+  el.setMarkdown = (md) => {
+    el.markdown = md;
+    body.innerHTML = renderMarkdown(md);
+  };
+  el.setMarkdown(markdown);
+  return el;
+}
+
+function plainTextWithLinks(body) {
+  const clone = body.cloneNode(true);
+  for (const a of clone.querySelectorAll('a[href]')) {
+    const label = a.textContent.trim();
+    if (label && label !== a.href && !a.href.startsWith(label)) a.textContent = `${label} (${a.href})`;
+    else a.textContent = a.href;
+  }
+  for (const li of clone.querySelectorAll('li')) li.prepend(li.parentElement.tagName === 'OL' ? `${[...li.parentElement.children].indexOf(li) + 1}. ` : '• ');
+  for (const code of clone.querySelectorAll('pre')) code.textContent = `\n${code.textContent}\n`;
+  document.body.append(clone); // innerText needs layout
+  const text = clone.innerText.replace(/\n{3,}/g, '\n\n').trim();
+  clone.remove();
+  return text;
+}
+
+async function copyText(text) {
+  await navigator.clipboard.writeText(text);
+}
+
+async function copyRich(text, html) {
+  try {
+    await navigator.clipboard.write([new ClipboardItem({ 'text/plain': new Blob([text], { type: 'text/plain' }), 'text/html': new Blob([html], { type: 'text/html' }) })]);
+  } catch {
+    await navigator.clipboard.writeText(text);
+  }
+}
+
 // Time, tokens and cost of one turn. Tokens and cost appear only for agents
 // that report them (Claude Code, OpenCode, Codex tokens, the built-in agent…).
 function turnStats(t) {
@@ -1833,7 +1893,7 @@ function replayChat(chat) {
           d.innerHTML = '<summary>Thinking</summary><div></div>';
           d.querySelector('div').textContent = e.thought;
         }
-        if (e.text) add('div', 'msg agent').innerHTML = renderMarkdown(e.text);
+        if (e.text) agentMessage(e.text);
         if (e.failure) notice(`${e.agent || 'Agent'} stopped before finishing: ${e.failure}`, true);
         if (e.stats) {
           showStats(e.stats);

@@ -71,6 +71,7 @@ To update, run the install command again (it stops a running host first), then p
 | **Settings** | Skills (links and, with the flag, skills written here), model options, page options (highlight finds), experimental features, version and updates. |
 | **New chat** | Clears the chat and starts a fresh session with the same agent and model. |
 | **Context meter** | How full the context window is; click for usage details (window, tokens, cost for this chat). |
+| **Copy / Text** under a reply | Copy the reply as Markdown source, or as text with every link written out as *label (url)* — the Text variant also carries rich text, so links stay clickable when pasted into docs or mail. |
 
 ### Approvals
 
