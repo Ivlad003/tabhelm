@@ -2,6 +2,11 @@
 
 All notable changes to TabHelm. The newest release is at the top; the panel's update banner links here.
 
+## [0.25.1] - 2026-10-14
+
+### Changed
+- The tab the agent works on is grouped from its first task: a *TabHelm* tab group that is yellow with ⏳ while a task runs and green when it is done, so the agent's tab stands out in the tab strip.
+
 ## [0.25.0] - 2026-10-13
 
 ### Added

@@ -215,7 +215,7 @@ The agents do not have to run on the computer where Chrome is. Deploy the tiny *
 
 Each tab has its own panel and its own agent session, and by default the agent works on that tab only. To let it work across tabs — move data from one page to another, compare pages, search several pages at once:
 
-- press **Group tabs**: the chat's tab goes into a green Chrome tab group named *TabHelm*. **Drag any tab into that group** and the agent can use it without asking; drag it out to stop sharing. The button shows how many tabs are in the group, and the TabHelm icon on a grouped tab opens the chat.
+- as soon as the agent starts its first task, the chat's tab goes into a Chrome tab group named *TabHelm* — **yellow with ⏳ while a task runs, green when it is done** — so you always see where the agent is working (**Group tabs** in the ＋ menu does the same before the first task). **Drag any tab into that group** and the agent can use it without asking; drag it out to stop sharing. The button shows how many tabs are in the group, and the TabHelm icon on a grouped tab opens the chat.
 - tabs the agent opens itself (`browser_tabs` → `new`) and pop-ups that appear while it acts are **always put into the chat's *TabHelm* group** (created on the spot if needed), so you can tell the agent's tabs from your own at a glance; any other tab still needs your approval.
 - every page tool takes a `tabId`, so the agent reads one tab and types into another without switching; `browser_search_tabs` finds text in all the tabs it can use.
 

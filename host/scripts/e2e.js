@@ -149,6 +149,8 @@ if (process.env.E2E_TABS) {
   const out = await page.$eval('#out', (e) => e.textContent);
   const answer = (await panel.$$eval('.msg.agent', (m) => m.map((x) => x.innerText).join(' '))).replace(/\s+/g, ' ');
   const actions = await panel.$$eval('.action', (a) => a.map((x) => x.innerText.replace(/\s+/g, ' ')));
+  const groupState = await sw.evaluate(async (id) => { const t = await chrome.tabs.get(id); return t.groupId === -1 ? null : await chrome.tabGroups.get(t.groupId); }, tabId);
+  console.log('tab group after the task:', JSON.stringify(groupState));
   const confirms = await panel.$$eval('.card', (c) => c.length);
   console.log('actions:', actions.join(' | '));
   console.log('answer:', answer.slice(0, 160));

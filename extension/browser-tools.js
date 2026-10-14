@@ -68,6 +68,13 @@ export async function ensureGroup(chatTabId) {
   return groupInfo(chatTabId);
 }
 
+// The group shows what the agent is up to: yellow while it works, green when it is done.
+export async function markWorking(chatTabId, working) {
+  const c = chats.get(chatTabId);
+  if (c?.groupId == null) return;
+  await chrome.tabGroups.update(c.groupId, { title: working ? 'TabHelm ⏳' : 'TabHelm', color: working ? 'yellow' : 'green' }).catch(() => {});
+}
+
 export async function groupInfo(chatTabId) {
   const c = chatState(chatTabId);
   if (c.groupId == null) {

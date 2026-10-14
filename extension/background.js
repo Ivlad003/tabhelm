@@ -1,4 +1,4 @@
-import { runTool, releaseChat, startRecording, stopRecording, ensureGroup, groupInfo, chatForGroupTab, chatDebugState, previewTarget, interject, dropInterjections } from './browser-tools.js';
+import { runTool, releaseChat, startRecording, stopRecording, ensureGroup, groupInfo, chatForGroupTab, chatDebugState, previewTarget, interject, dropInterjections, markWorking } from './browser-tools.js';
 import { checkPolicy, pauseChat, resumeChat, isPaused, READ_ONLY } from './policy.js';
 import { getFeatures, getSetting, hostFeaturePayload } from './features.js';
 import { runScheduled, SCHEDULE_PREFIX } from './scheduler.js';
@@ -305,6 +305,7 @@ async function onHostMessage(msg) {
     return;
   }
   if (msg.type === 'done') {
+    markWorking(msg.tabId, false);
     dropInterjections(msg.tabId); // whatever was not picked up is sent by the panel as the next message
     notify(msg.tabId, msg.stopReason === 'end_turn' ? 'done' : 'failed', 'Task finished');
   }
@@ -389,6 +390,12 @@ export async function fromPanel(tabId, msg, port) {
     info.actions = [];
     chatInfo.set(tabId, info);
     resumeChat(tabId);
+    // The tab the agent works on is grouped (green "TabHelm" group) from the first
+    // task on, so it is obvious in the tab strip; yellow while a task runs.
+    ensureGroup(tabId)
+      .then(() => markWorking(tabId, true))
+      .then(() => postGroupInfo(tabId))
+      .catch(() => {}); // popup windows cannot group tabs
   }
   // Settings → Remote host changed: drop the current host and connect to the new one.
   if (msg.type === 'host_switch') {
