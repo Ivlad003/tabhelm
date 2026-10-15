@@ -3,7 +3,9 @@ import { renderMarkdown } from './markdown.js';
 import { initSettings, handleSettingsMessage, hostVersionMismatch, skillPayload, slashSkills, onFeaturesChanged, setAgents, skillsChanged } from './settings.js';
 import { getFeatures } from './features.js';
 import { initVoice, handleVoiceMessage, stop as stopVoice } from './voice.js';
-import { initAttachments, takeAttachments, hasAttachments, chip, addQuote, addImageUrl } from './attachments.js';
+import { initAttachments, takeAttachments, hasAttachments, chip, addQuote, addImageUrl, addElements } from './attachments.js';
+import { pickElements } from './page-scripts.js';
+import { scriptMatches } from './scripts-lib.js';
 import { initFolder, currentFolder, handleFolderMessage, updateFolderWarning, restoreFolder } from './folder.js';
 import { initHistory, saveChat, loadChat, newChatId, setCurrentChat, closeHistory } from './history.js';
 
@@ -159,6 +161,11 @@ function onMessage(msg) {
       break;
     case 'guide_done':
       finishGuideCard(msg);
+      break;
+    case 'page_script_result':
+      if (msg.ok) notice(`Ran “${msg.name}”${msg.result ? `: ${String(msg.result).slice(0, 300)}` : '.'}`);
+      else notice(`Script “${msg.name || ''}” failed: ${msg.error}`, true);
+      record('page_script', { name: msg.name, ok: msg.ok, error: msg.error });
       break;
     case 'ask_resolved':
       askCards.get(msg.id)?.(msg.reply?.done ? 'Clicked on the page' : 'Closed');
@@ -900,7 +907,7 @@ function composeMessage() {
   const quotes = attachments.filter((a) => a.kind === 'quote');
   attachments = attachments.filter((a) => a.kind !== 'quote');
   if (quotes.length) {
-    const block = quotes.map((q) => `[Selected on the page${q.source?.url ? ` ${q.source.url}` : ''}]\n${q.text.split('\n').map((l) => `> ${l}`).join('\n')}`).join('\n\n');
+    const block = quotes.map((q) => (q.raw ? `[${q.header}]\n${q.text}` : `[Selected on the page${q.source?.url ? ` ${q.source.url}` : ''}]\n${q.text.split('\n').map((l) => `> ${l}`).join('\n')}`)).join('\n\n');
     text = text ? `${text}\n\n${block}` : `${block}\n\nLet's discuss this.`;
   }
   if (!text) text = 'Please look at the attached file(s).';
@@ -1114,12 +1121,13 @@ function showGuideStep(msg) {
   }
   const g = guideCard;
   g.title.textContent = `${msg.total > 1 ? `Step ${msg.index + 1} of ${msg.total}` : `Step ${msg.number || 1}`}: ${msg.text}`;
-  g.hint.textContent = msg.found ? `Waiting for you to click “${msg.target || 'the highlighted element'}”${msg.tabTitle ? ` on “${msg.tabTitle}”` : ''}…` : 'The element is not on this page any more — follow the instruction, then press Next.';
+  g.hint.textContent = msg.auto ? `Auto-play: the agent clicks “${msg.target || 'the step'}” after a pause…` : msg.found ? `Waiting for you to click “${msg.target || 'the highlighted element'}”${msg.tabTitle ? ` on “${msg.tabTitle}”` : ''}…` : 'The element is not on this page any more — follow the instruction, then press Next.';
   const act = (action) => port.postMessage({ type: 'guide_action', action });
   const btn = (label, action, cls = 'btn') => Object.assign(document.createElement('button'), { className: cls, textContent: label, onclick: () => act(action) });
   g.options.replaceChildren(
     ...(msg.index > 0 || msg.number > 1 ? [btn('← Back', 'back')] : []),
     btn(msg.index + 1 >= msg.total ? 'Finish ✓' : 'Next →', 'done', 'btn primary'),
+    msg.auto ? btn('⏸ Pause', 'pause') : btn('▶ Auto', 'auto'),
     btn('Skip', 'skipped'),
     btn('Stop guide', 'stop'),
   );
@@ -1957,6 +1965,49 @@ $('make-skill').onclick = () => {
     'Turn what we did in this chat into a reusable skill: the goal, the site, and the exact steps that worked (elements to click, what to type, what to check, pitfalls), written as instructions another agent can follow next time, including steps I did myself in guide mode. Save it with skill_save (short kebab-case name, one-sentence description, Markdown body), then tell me its name.';
   send();
 };
+
+// ＋ → Pick element / Select area: a picker on the page; the result becomes a chip.
+async function pickOnPage(mode) {
+  $('plus-menu').open = false;
+  const tab = await chrome.tabs.get(targetTabId).catch(() => null);
+  if (!tab || !/^(https?|file):/.test(tab.url || '')) return notice('Elements can be picked only on web pages.', true);
+  await chrome.tabs.update(targetTabId, { active: true }).catch(() => {});
+  notice(mode === 'area' ? 'Drag a rectangle on the page to pick everything inside it (Esc cancels).' : 'Click an element on the page to pick it (Esc cancels).');
+  try {
+    const [r] = await chrome.scripting.executeScript({ target: { tabId: targetTabId }, func: pickElements, args: [mode] });
+    const res = r?.result;
+    if (!res?.items?.length) return notice('Nothing was picked.');
+    addElements(res);
+    record('pick', { mode, count: res.items.length });
+    els.input.focus();
+  } catch (err) {
+    notice(`Cannot pick on this page: ${err.message}`, true);
+  }
+}
+$('pick-element').onclick = () => pickOnPage('one');
+$('pick-area').onclick = () => pickOnPage('area');
+
+// ＋ menu: saved page scripts (Page scripts & styles flag), matching ones first.
+async function fillScriptsMenu() {
+  const box = $('scripts-menu');
+  const { pageScripts = [], features = {} } = await chrome.storage.local.get(['pageScripts', 'features']);
+  box.hidden = !features.pageScripts || !pageScripts.length;
+  if (box.hidden) return box.replaceChildren();
+  const tab = await chrome.tabs.get(targetTabId).catch(() => null);
+  const list = pageScripts.filter((p) => p.enabled !== false).sort((a, b) => scriptMatches(b, tab?.url) - scriptMatches(a, tab?.url));
+  box.replaceChildren(
+    Object.assign(document.createElement('div'), { className: 'menu-sep' }),
+    ...list.slice(0, 12).map((p) => {
+      const b = Object.assign(document.createElement('button'), { type: 'button', textContent: `▶ ${p.name}${scriptMatches(p, tab?.url) ? '' : ' (other site)'}`, title: `${p.description || ''}\nmatch: ${p.match}` });
+      b.onclick = () => {
+        $('plus-menu').open = false;
+        port.postMessage({ type: 'run_page_script', id: p.id, targetTabId });
+      };
+      return b;
+    }),
+  );
+}
+$('plus-menu').addEventListener('toggle', () => $('plus-menu').open && fillScriptsMenu());
 
 $('add-selection').onclick = async () => {
   $('plus-menu').open = false;

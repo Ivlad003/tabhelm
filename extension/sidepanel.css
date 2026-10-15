@@ -1658,3 +1658,12 @@ button.chip:hover {
   color: var(--text);
   border-color: var(--accent);
 }
+
+.usage-btn[hidden],
+.skill-picker[hidden] {
+  display: none;
+}
+
+.usage-fill {
+  width: 0;
+}

@@ -123,6 +123,21 @@ Chrome wipes an extension's storage when the extension is removed, so the host k
 
 Ask to be shown instead of served — *"guide me through enabling two-factor auth here"*, *"show me how to create a project"* — and the agent stops clicking for you. It calls `browser_guide` with **all the steps it can already point at**: every step gets a numbered badge on the page at once, the active one a pulsing outline, an arrow and the instruction; the panel shows the same step. **Next →** / **← Back** move through the steps — the page scrolls to the element and, for a step on another tab, that tab comes to the front — and a click on the active element counts as done. When a step opens a new page, the agent snapshots it and continues the guide from there. **Next →** (I did this step) / **Skip** on the page or in the panel move on without clicking, **← Back** shows the previous step again; **Stop guide** ends the task. The overlay scrolls with the page. With the **Detailed guide** flag (Settings → Experimental) every step comes with a fuller explanation: what the element is, why, what happens after the click and what to check. If your click navigates, the step counts as done. The arrows are part of the page, so a recording of a guided session shows them. Works in iframes.
 
+**Auto-play.** **▶ Auto** (on the page or in the panel) lets the agent click through the steps itself: each step is shown with a countdown, then clicked after a pause (Settings → Page → *Guide auto-play pause*, 3 s by default); **⏸ Pause** hands control back. The agent can offer auto-play itself (`auto: true`) — the panel asks you first. Recorded, this makes a narrated demo video.
+
+### Picking elements
+
+**＋ → Pick element**: hover outlines the element under the mouse, a click picks it (the page does not receive the click). **＋ → Select area**: drag a rectangle; every button, link, field, heading, cell or text element inside it is picked (up to 60). Esc cancels. The picked elements go into your next message as one chip with, for each, its ref (the agent can click or read it right away), a unique CSS selector, its text, link and a short HTML excerpt — e.g. *“why is this disabled?”*, *“extract these rows”*, *“write a script that hides these”*.
+
+### Page scripts & styles (flag)
+
+With **Page scripts & styles** on (Settings → Experimental) you keep a library of your own presets — CSS, JavaScript or both, each with a URL pattern (`*`, `github.com`, `*://*.example.com/admin/*`):
+
+- run one on any page from the **＋** menu (presets for the current site are listed first) or with ▶ in Settings; **Run on this tab** tries unsaved edits;
+- tick *Run automatically* to apply it whenever a matching page finishes loading (hide banners, restyle a tool, prefill a field);
+- JS runs in the page itself (through the debugger, so the site's CSP does not block it) as the body of an async function — `return` a value to see it in the panel;
+- the agent gets `browser_style` (apply / remove CSS right now), `browser_script_save`, `browser_script_list` and `browser_script_run` (JS presets ask you first). Presets the agent saves never run automatically until you tick it.
+
 ### Skills from a chat
 
 **＋ → Make a skill from this chat** asks the connected agent to write down what was done — goal, site, exact steps (including the ones you did yourself in guide mode), checks and pitfalls — and save it with `skill_save`. The skill lands in **Settings → Experimental → Skill authoring** (the flag is switched on for you), goes to every agent as an inline skill and runs with `/name` in the message box. Agents can also call `skill_save` whenever you ask for a skill in your own words.

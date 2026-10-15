@@ -7,7 +7,7 @@ import { getFeatures, getSetting } from './features.js';
 export const READ_ONLY = new Set([
   'browser_snapshot', 'browser_find', 'browser_get_text', 'browser_screenshot', 'browser_wait', 'browser_console',
   'browser_network', 'browser_tabs', 'browser_search_tabs', 'browser_handle_dialog', 'browser_network_body',
-  'browser_highlight', 'browser_request_human', 'browser_request_login', 'browser_guide', 'skill_save', 'memory_search', 'memory_save',
+  'browser_highlight', 'browser_request_human', 'browser_request_login', 'browser_guide', 'skill_save', 'browser_script_list', 'browser_script_save', 'memory_search', 'memory_save',
   'skill_list', 'skill_read', 'skill_read_file',
 ]);
 

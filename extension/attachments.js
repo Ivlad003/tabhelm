@@ -112,6 +112,17 @@ export function addQuote({ text, pageUrl, pageTitle }) {
   render();
 }
 
+// Elements picked on the page (＋ → Pick element / Select area): one chip whose
+// text tells the agent each element's ref, selector, text and HTML.
+export function addElements({ items, url, title }) {
+  if (!items?.length) return report('Nothing was picked.');
+  if (pending.length >= MAX_FILES) return report(`Up to ${MAX_FILES} items per message.`);
+  const lines = items.map((it) => `- [${it.ref}] <${it.tag}> ${it.text ? `"${it.text}"` : '(no text)'}\n  selector: ${it.selector}${it.href ? `\n  link: ${it.href}` : ''}\n  html: ${it.html}`);
+  const label = items.length === 1 ? `⌖ ${items[0].tag}${items[0].text ? ` “${items[0].text.slice(0, 30)}”` : ''}` : `⬚ ${items.length} elements`;
+  pending.push({ id: crypto.randomUUID(), kind: 'quote', header: `Element${items.length > 1 ? 's' : ''} picked on the page${url ? ` ${url}` : ''} (refs work with the browser tools until the page changes)`, name: label, text: lines.join('\n').slice(0, MAX_TEXT_BYTES), size: lines.join('').length, source: { url, title }, raw: true });
+  render();
+}
+
 // An image on a page (context menu) → fetched here and attached like a file.
 export async function addImageUrl(srcUrl, pageUrl) {
   try {

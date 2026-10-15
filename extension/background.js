@@ -1,4 +1,5 @@
-import { runTool, releaseChat, startRecording, stopRecording, ensureGroup, groupInfo, chatForGroupTab, chatDebugState, previewTarget, interject, dropInterjections, markWorking, setGuideAction } from './browser-tools.js';
+import { runTool, releaseChat, startRecording, stopRecording, ensureGroup, groupInfo, chatForGroupTab, chatDebugState, previewTarget, interject, dropInterjections, markWorking, setGuideAction, runScript } from './browser-tools.js';
+import { listScripts, scriptMatches } from './scripts-lib.js';
 import { checkPolicy, pauseChat, resumeChat, isPaused, READ_ONLY } from './policy.js';
 import { getFeatures, getSetting, hostFeaturePayload } from './features.js';
 import { runScheduled, SCHEDULE_PREFIX } from './scheduler.js';
@@ -344,6 +345,18 @@ export async function fromPanel(tabId, msg, port) {
     interject(tabId, msg.text);
     return;
   }
+  // ＋ menu / Settings: run a saved page script on this chat's tab.
+  if (msg.type === 'run_page_script') {
+    const preset = msg.id === 'draft' ? (await chrome.storage.local.get('pageScriptsDraft')).pageScriptsDraft : (await listScripts()).find((p) => p.id === msg.id);
+    try {
+      if (!preset) throw new Error('That script no longer exists.');
+      const out = await runScript(msg.targetTabId || tabId, preset);
+      port?.postMessage({ type: 'page_script_result', name: preset.name, ok: true, result: out });
+    } catch (err) {
+      port?.postMessage({ type: 'page_script_result', name: preset?.name, ok: false, error: err.message });
+    }
+    return;
+  }
   if (msg.type === 'guide_action') {
     setGuideAction(tabId, msg.action);
     return;
@@ -540,6 +553,16 @@ async function onStateRestore(msg) {
   for (const port of panels.values()) port.postMessage({ type: 'state_restored', count: Object.keys(fresh).length });
   setTimeout(() => dropIdleNative(), 2000);
 }
+
+// Page scripts with "run automatically" on: run them when a matching page finishes loading.
+chrome.tabs.onUpdated.addListener(async (id, info, tab) => {
+  if (info.status !== 'complete' || !/^https?:/.test(tab.url || '')) return;
+  if (!(await getFeatures()).pageScripts) return;
+  for (const p of await listScripts()) {
+    if (!p.autoRun || p.enabled === false || !scriptMatches(p, tab.url)) continue;
+    runScript(id, p).catch((err) => console.warn(`TabHelm: page script "${p.name}" failed on ${tab.url}: ${err.message}`));
+  }
+});
 
 // Keep the panel's "Tab group: N tabs" chip current when tabs join or leave a group.
 chrome.tabs.onUpdated.addListener((_id, info) => {

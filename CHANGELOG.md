@@ -2,6 +2,16 @@
 
 All notable changes to TabHelm. The newest release is at the top; the panel's update banner links here.
 
+## [0.27.0] - 2026-10-15
+
+### Added
+- **Guide auto-play:** ▶ Auto in a guide lets the agent click each step itself after a pause (Settings → Page); ⏸ Pause takes over again. The agent can offer it with `auto: true` after you agree.
+- **Pick element** and **Select area** in the ＋ menu: pick one element by clicking or many by dragging a rectangle; they go into your message with refs, CSS selectors, text and HTML.
+- **Page scripts & styles** (Experimental flag): a library of CSS / JS presets with URL patterns — run from the ＋ menu on any page, or automatically on matching pages; agent tools `browser_style`, `browser_script_save`, `browser_script_list`, `browser_script_run`.
+
+### Fixed
+- The context meter no longer shows an empty "ctx" button before the agent reports usage.
+
 ## [0.26.1] - 2026-10-14
 
 ### Added

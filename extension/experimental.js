@@ -4,6 +4,7 @@
 import { FEATURES, getFeatures, setFeature, getSetting, setSetting } from './features.js';
 import { CATEGORIES } from './policy.js';
 import { syncAlarms } from './scheduler.js';
+import { listScripts, saveScript } from './scripts-lib.js';
 
 const $ = (id) => document.getElementById(id);
 let port;
@@ -256,6 +257,87 @@ const PANELS = {
     panel.append(hint('Notes saved by you or the agent (memory_save) in ~/.tabhelm/memory.json. Global notes go to every chat; site notes only to chats on that site.'), list, field('Note', text), field('Site', site), el('div', { className: 'options' }, add, clear));
     port.postMessage({ type: 'memory_list' });
     renderMemoryList();
+  },
+
+  // Page scripts & styles: the presets library (run, auto-run on matching sites, edit).
+  async pageScripts(panel) {
+    let items = await listScripts();
+    const list = el('ul', { className: 'skill-list' });
+    const store = async () => {
+      await chrome.storage.local.set({ pageScripts: items });
+      renderList();
+    };
+    let editing = null;
+    const name = el('input', { placeholder: 'name, e.g. hide-cookie-banners' });
+    const desc = el('input', { placeholder: 'What it does (optional)' });
+    const match = el('input', { placeholder: 'Where: * (all), github.com, *://*.example.com/admin/*', value: '*' });
+    const css = el('textarea', { rows: 4, placeholder: 'CSS (optional), e.g. .cookie-banner { display: none !important; }' });
+    const js = el('textarea', { rows: 6, placeholder: 'JavaScript (optional) — runs in the page as an async function body; `return` a value to see it, e.g.\ndocument.querySelectorAll("tr").length' });
+    const auto = el('input', { type: 'checkbox' });
+    const save = el('button', { className: 'btn small primary', type: 'button', textContent: 'Save script' });
+    const runNow = el('button', { className: 'btn small', type: 'button', textContent: 'Run on this tab' });
+    const clear = el('button', { className: 'btn small', type: 'button', textContent: 'New' });
+    const fill = (p) => {
+      editing = p?.id || null;
+      name.value = p?.name || '';
+      desc.value = p?.description || '';
+      match.value = p?.match || '*';
+      css.value = p?.css || '';
+      js.value = p?.js || '';
+      auto.checked = Boolean(p?.autoRun);
+      save.textContent = editing ? 'Save changes' : 'Save script';
+    };
+    const current = () => ({ id: editing || undefined, name: name.value.trim(), description: desc.value.trim(), match: match.value.trim() || '*', css: css.value, js: js.value, autoRun: auto.checked, enabled: true, source: 'user' });
+    save.onclick = async () => {
+      const p = current();
+      if (!p.name || (!p.css.trim() && !p.js.trim())) return;
+      const saved = await saveScript(p);
+      items = await listScripts();
+      fill(saved);
+      renderList();
+    };
+    runNow.onclick = () => {
+      const p = current();
+      if (!p.css.trim() && !p.js.trim()) return;
+      // Unsaved edits run as a one-off preset.
+      chrome.storage.local.set({ pageScriptsDraft: { ...p, id: 'draft', name: p.name || 'draft' } }).then(() => port.postMessage({ type: 'run_page_script', id: 'draft' }));
+    };
+    clear.onclick = () => fill(null);
+    function renderList() {
+      list.replaceChildren(
+        ...items.map((p, i) => {
+          const on = el('input', { type: 'checkbox', checked: p.enabled !== false, title: 'Enabled' });
+          on.onchange = () => {
+            items[i].enabled = on.checked;
+            store();
+          };
+          const run = el('button', { className: 'btn small', type: 'button', textContent: '▶', title: 'Run on this tab' });
+          run.onclick = () => port.postMessage({ type: 'run_page_script', id: p.id });
+          const edit = el('button', { className: 'btn small', type: 'button', textContent: 'Edit' });
+          edit.onclick = () => fill(p);
+          const del = el('button', { className: 'banner-close', textContent: '×', title: 'Delete' });
+          del.onclick = () => {
+            if (!confirm(`Delete the script “${p.name}”?`)) return;
+            items.splice(i, 1);
+            store();
+          };
+          const meta = `${p.match || '*'}${p.autoRun ? ' · runs automatically' : ''}${p.js ? ' · JS' : ''}${p.css ? ' · CSS' : ''}${p.source === 'agent' ? ' · saved by the agent' : ''}`;
+          return el('li', { className: 'skill' }, on, el('div', { className: 'skill-text' }, el('b', { textContent: p.name }), el('div', { className: 'skill-desc', textContent: p.description || '' }), el('div', { className: 'skill-url', textContent: meta })), run, edit, del);
+        }),
+      );
+    }
+    renderList();
+    panel.append(
+      hint('Your own CSS / JavaScript presets. Run one from the ＋ menu on any page, or tick "run automatically" to apply it whenever a matching page loads. JS runs in the page with your login — only save code you understand. The agent can save presets too (never set to run automatically).'),
+      list,
+      field('Name', name),
+      field('Description', desc),
+      field('Match', match),
+      field('CSS', css),
+      field('JavaScript', js),
+      el('label', { className: 'check' }, auto, document.createTextNode(' Run automatically on matching pages')),
+      el('div', { className: 'options' }, save, runNow, clear),
+    );
   },
 
   async skillAuthoring(panel) {

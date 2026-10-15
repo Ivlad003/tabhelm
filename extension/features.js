@@ -16,6 +16,7 @@ export const FEATURES = [
   { id: 'actionDb', name: 'Action database', desc: 'Every step with a timestamp, jump-to-step in recordings, and search across steps in History.' },
   { id: 'notifications', name: 'Notifications', desc: 'A badge on the tab and a system notification when a task finishes or needs you.' },
   { id: 'guideDetail', name: 'Detailed guide', desc: 'In guide mode the agent explains every step: what the element is, why this step, what will happen after the click and what to check — instead of a one-line instruction.' },
+  { id: 'pageScripts', name: 'Page scripts & styles', desc: 'A library of your own JavaScript and CSS presets: run one on the current page from the ＋ menu, run it automatically on matching sites, and let the agent save, list and run presets or restyle a page.' },
   { id: 'voice', name: 'Voice', desc: 'Record a voice message from the microphone, or capture what the tab is playing, with live transcription; the text becomes one message you can edit and send.' },
 ];
 

@@ -5,6 +5,7 @@
 
 import { cdp, attach, detach, dialogs, consoleLogs, requests, fileChoosers, dragData, screencastListeners } from './cdp.js';
 import { getFeatures, setFeature } from './features.js';
+import { listScripts, scriptMatches, saveScript } from './scripts-lib.js';
 import * as P from './page-scripts.js';
 
 const chats = new Map(); // chatTabId -> { chatTabId, current, owned: Set, notes: [] }
@@ -564,6 +565,14 @@ async function guideTour(chatTabId, defaultTab, args, ui) {
   let shownFrame = 0;
   const started = Date.now();
   const hide = () => (shownTab != null ? inject(shownTab, P.guideHide, [], shownFrame).catch(() => {}) : null);
+  // Auto-play: the agent clicks each step itself after a pause the user can read.
+  // Started by the ▶ Auto button, or by the agent's auto:true after the user agrees.
+  const { guidePause = 3 } = await chrome.storage.local.get('guidePause');
+  const pauseMs = Math.max(1, Number(args.pause || guidePause) || 3) * 1000;
+  let auto = false;
+  if (args.auto) {
+    auto = await ui.confirm(chatTabId, `Play this guide automatically (${steps.length} step${steps.length > 1 ? 's' : ''})?`, `The agent will click each highlighted element itself, pausing ${pauseMs / 1000} s before every click. Press ⏸ Pause on the page or in the panel to take over.`);
+  }
 
   while (i < steps.length && Date.now() - started < 30 * 60_000) {
     const step = steps[i];
@@ -583,16 +592,21 @@ async function guideTour(chatTabId, defaultTab, args, ui) {
       ref = parsed.ref;
     }
     const sameFrame = steps.filter((st) => st.tabId === tabId && (st.ref ? parseRef(st.ref).frameId === frameId : true)).map((st) => ({ index: st.index, ref: st.ref ? parseRef(st.ref).ref : null, text: st.text, canBack: single && startNumber > 1 }));
-    const shown = await inject(tabId, P.guideTour, [sameFrame, i, steps.length], frameId).catch(() => null);
+    const shown = await inject(tabId, P.guideTour, [sameFrame, i, steps.length, { auto, pauseMs }], frameId).catch(() => null);
     label = shown?.label || '';
     shownTab = tabId;
     shownFrame = frameId;
     c.guideAction = null;
-    ui.guideProgress?.(chatTabId, { index: i, total: steps.length, text: step.text, target: label, found: Boolean(shown?.found), tabId, tabTitle: tab.title, number: single ? startNumber : i + 1 });
+    ui.guideProgress?.(chatTabId, { index: i, total: steps.length, text: step.text, target: label, found: Boolean(shown?.found), tabId, tabTitle: tab.title, number: single ? startNumber : i + 1, auto });
 
     let status = 'waiting';
+    const shownAt = Date.now();
     while (status === 'waiting' && Date.now() - started < 30 * 60_000) {
-      await sleep(400);
+      await sleep(auto ? 200 : 400);
+      if (auto && Date.now() - shownAt >= pauseMs && !c.guideAction) {
+        status = 'autoplay';
+        break;
+      }
       if (c.guideAction) {
         status = c.guideAction;
         c.guideAction = null;
@@ -602,6 +616,29 @@ async function guideTour(chatTabId, defaultTab, args, ui) {
       status = st?.status === 'gone' || st?.index !== i ? 'navigated' : st?.status || 'navigated';
     }
     await hide();
+    if (status === 'auto' || status === 'pause') {
+      auto = status === 'auto';
+      continue; // show the same step again in the new mode
+    }
+    if (status === 'autoplay') {
+      // The agent clicks the highlighted element itself, like the user would.
+      if (ref) {
+        try {
+          const loc = await locate(tabId, step.ref);
+          const urlBefore = (await chrome.tabs.get(tabId)).url;
+          await pointer(tabId, loc.x, loc.y, 'click');
+          await mouseClick(tabId, loc.x, loc.y);
+          await settle(tabId, urlBefore);
+          results[i] = 'auto-clicked';
+        } catch (err) {
+          results[i] = `auto-click failed: ${err.message}`;
+          auto = false; // let the user take over this step
+          continue;
+        }
+      } else results[i] = 'shown';
+      i++;
+      continue;
+    }
     if (status === 'stop') {
       ui.guideDone?.(chatTabId, { stopped: true });
       throw new Error('The user stopped the guide.');
@@ -625,6 +662,34 @@ async function guideTour(chatTabId, defaultTab, args, ui) {
   const skipped = results.filter((r) => r === 'skipped').length;
   const labelText = single ? `step ${startNumber} → ${results[0]}` : `${steps.length} steps, ${skipped} skipped`;
   return { content: text(`${single ? 'The user finished the step' : 'The user finished the guide'}:\n${summary}\n${skipped ? 'Ask whether the skipped steps need help. ' : ''}Take a new browser_snapshot before continuing.`), label: labelText };
+}
+
+// CSS goes in as a removable <style>; JS runs in the page's own context through
+// the debugger (so page CSP does not block it), wrapped in an async function.
+export async function runScript(tabId, preset) {
+  if (preset.css) {
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      func: (k, css) => {
+        let el = document.getElementById(k);
+        if (!el) {
+          el = document.createElement('style');
+          el.id = k;
+          (document.head || document.documentElement).append(el);
+        }
+        el.textContent = css;
+      },
+      args: [`tabhelm-preset-${preset.id}`, preset.css],
+    });
+  }
+  if (!preset.js) return '';
+  await attach(tabId);
+  const res = await cdp(tabId, 'Runtime.evaluate', { expression: `(async () => {\n${preset.js}\n})()`, awaitPromise: true, returnByValue: true, userGesture: true });
+  if (res.exceptionDetails) throw new Error(res.exceptionDetails.exception?.description || res.exceptionDetails.text);
+  const v = res.result;
+  if (v.type === 'undefined') return '';
+  const out = 'value' in v ? JSON.stringify(v.value) : v.description || v.type;
+  return out.length > 5000 ? `${out.slice(0, 5000)}…` : out;
 }
 
 export function setGuideAction(chatTabId, action) {
@@ -999,6 +1064,54 @@ async function runPageTool(tabId, tab, tool, args, ui, chatTabId) {
     // Guide mode: an arrow and instruction on the page, then wait for the user's click.
     case 'browser_guide':
       return guideTour(chatTabId, tabId, args, ui);
+
+    // ---- Page scripts & styles flag: presets library ----
+    case 'browser_script_list': {
+      await requireFlag('pageScripts', 'Page scripts & styles');
+      const all = await listScripts();
+      const lines = all.map((p) => `- ${p.name}${p.enabled === false ? ' (disabled)' : ''}: ${p.description || ''} [match ${p.match || '*'}${p.autoRun ? ', runs automatically' : ''}${p.js ? ', JS' : ''}${p.css ? ', CSS' : ''}]${scriptMatches(p, tab.url) ? ' ← matches this page' : ''}`);
+      return { content: text(lines.length ? lines.join('\n') : 'No saved page scripts yet. Save one with browser_script_save.') };
+    }
+
+    case 'browser_script_save': {
+      await requireFlag('pageScripts', 'Page scripts & styles');
+      if (!args.js && !args.css) throw new Error('Give js and/or css.');
+      const saved = await saveScript({ name: args.name, description: args.description, match: args.match, js: args.js, css: args.css, source: 'agent' });
+      return { content: text(`Saved page script "${saved.name}" (match ${saved.match}). Automatic running stays off until the user turns it on in Settings → Experimental → Page scripts; they can run it from the ＋ menu, or you can with browser_script_run.`), label: saved.name };
+    }
+
+    case 'browser_script_run': {
+      await requireFlag('pageScripts', 'Page scripts & styles');
+      const preset = (await listScripts()).find((p) => p.name === args.name);
+      if (!preset) throw new Error(`No page script named "${args.name}". See browser_script_list.`);
+      if (preset.js) {
+        const ok = await ui.confirm(chatTabId, `Run saved script “${preset.name}” on ${new URL(tab.url).host}?`, preset.js.slice(0, 2000));
+        if (!ok) throw new Error('The user declined running this script.');
+      }
+      const out = await runScript(tabId, preset);
+      return { content: text(`Ran "${preset.name}" on ${tab.url}.${out ? `\nResult: ${out}` : ''}`), label: preset.name };
+    }
+
+    case 'browser_style': {
+      await requireFlag('pageScripts', 'Page scripts & styles');
+      const key = `tabhelm-style-${args.id || 'agent'}`;
+      if (args.remove) {
+        await inject(tabId, (k) => document.getElementById(k)?.remove(), [key]);
+        return { content: text(`Removed style "${args.id || 'agent'}".`) };
+      }
+      // A <style> element (replaced on repeat calls with the same id) keeps it removable.
+      await inject(tabId, (k, css) => {
+        let el = document.getElementById(k);
+        if (!el) {
+          el = document.createElement('style');
+          el.id = k;
+          el.setAttribute('data-tabhelm-overlay', '');
+          (document.head || document.documentElement).append(el);
+        }
+        el.textContent = css;
+      }, [key, String(args.css || '')]);
+      return { content: text(`Applied CSS "${args.id || 'agent'}" to this page (only in this tab, until reload). Remove it with browser_style {id, remove: true}.`), label: args.id || 'css' };
+    }
 
     case 'browser_request_human': {
       await requireFlag('takeOver', 'Take over');

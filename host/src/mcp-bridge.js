@@ -10,7 +10,7 @@ import { z } from 'zod';
 const { TABHELM_URL, TABHELM_TOKEN, TABHELM_TAB } = process.env;
 const tabId = Number(TABHELM_TAB);
 
-const server = new McpServer({ name: 'tabhelm-browser', version: '0.26.1' });
+const server = new McpServer({ name: 'tabhelm-browser', version: '0.27.0' });
 
 async function call(tool, args = {}) {
   try {
@@ -215,6 +215,22 @@ const tools = {
   browser_highlight: {
     description: 'Outline elements on the page for the user to see (Developer tools flag), e.g. to point at what you mean. Clears after a few seconds.',
     inputSchema: { refs: z.array(z.string()).min(1), label: z.string().optional() },
+  },
+  browser_script_list: {
+    description: 'List the user\'s saved page scripts & styles presets (Page scripts & styles flag), marking which match the current page.',
+    inputSchema: {},
+  },
+  browser_script_save: {
+    description: 'Save a reusable page script preset (Page scripts & styles flag): JavaScript (runs as the body of an async function in the page; may `return` a value) and/or CSS, for pages matching a URL glob (e.g. "*://*.github.com/*" or "github.com", "*" for all). Use when the user asks to keep an automation or a restyle for later. Automatic running stays off until the user enables it.',
+    inputSchema: { name: z.string(), description: z.string().optional(), match: z.string().optional().describe('URL glob(s), space separated; default "*"'), js: z.string().optional(), css: z.string().optional() },
+  },
+  browser_script_run: {
+    description: 'Run a saved page script preset on the current tab (Page scripts & styles flag). JS presets ask the user first.',
+    inputSchema: { name: z.string(), tabId: z.number().optional() },
+  },
+  browser_style: {
+    description: 'Apply CSS to the current page right now (Page scripts & styles flag) — hide clutter, highlight, restyle. Same id replaces the previous CSS; remove:true takes it off. Lasts until reload; save with browser_script_save to reuse.',
+    inputSchema: { css: z.string().optional(), id: z.string().optional(), remove: z.boolean().optional(), tabId: z.number().optional() },
   },
   browser_request_human: {
     description: 'Ask the user to do something themselves in the browser (2FA code, captcha, payment choice) and wait until they say they are done (Take over flag). Explain exactly what you need.',

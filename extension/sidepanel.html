@@ -80,6 +80,7 @@
 
       <h3>Page</h3>
       <label class="check"><input id="highlight-finds" type="checkbox" checked /> Highlight what the agent finds on the page (browser_find) for a few seconds</label>
+      <label class="check">Guide auto-play: pause <input id="guide-pause" type="number" min="1" max="30" step="0.5" value="3" style="width: 4.5em" /> s before each click (▶ Auto in a guide)</label>
 
       <h3>Experimental</h3>
       <p class="hint">New features, all off by default. Turn one on to see its settings.</p>
@@ -124,10 +125,13 @@
           <div class="menu-list">
             <button type="button" id="attach">Attach files…</button>
             <button type="button" id="add-selection" title="Add the text selected on the page as a quote (also: right-click → TabHelm, or Alt+Shift+T)">Add page selection</button>
+            <button type="button" id="pick-element" title="Click an element on the page to add it (selector, text, HTML, ref) to your message">Pick element</button>
+            <button type="button" id="pick-area" title="Drag a rectangle on the page to add every element inside it">Select area</button>
             <button type="button" id="make-skill" title="Ask the agent to write a reusable skill from what was done in this chat">Make a skill from this chat</button>
             <button type="button" data-voice="mic" hidden>Voice message</button>
             <button type="button" data-voice="tab" hidden>Transcribe tab audio</button>
             <label class="menu-check" title="Record a video of the tab while the agent works on each message"><input type="checkbox" id="record" /> Record video</label>
+            <div id="scripts-menu" hidden></div>
             <div class="menu-sep"></div>
             <button type="button" id="group-tabs">Share tabs (tab group)</button>
             <div class="menu-sep"></div>

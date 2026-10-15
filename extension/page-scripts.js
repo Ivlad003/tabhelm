@@ -501,7 +501,7 @@ export function webStorage(kind, action, key, value) {
 // instruction with Back / Next / Skip / Stop. Button presses and a click on the
 // active element land in window.__tabhelm.guide, which guideStatus() reports.
 // The overlay is in the page, so recordings show it too.
-export function guideTour(steps, active, total) {
+export function guideTour(steps, active, total, opts = {}) {
   const ID = 'tabhelm-guide';
   const state = (window.__tabhelm ||= { refs: new Map(), next: 1 });
   document.getElementById(ID)?.remove();
@@ -573,8 +573,23 @@ export function guideTour(steps, active, total) {
   };
   if (active > 0 || current?.canBack) row.append(mk('← Back', 'back', true, 'Show the previous step again'));
   row.append(mk(active + 1 >= total ? 'Finish ✓' : 'Next →', 'done', false, 'I did this step — show the next one'));
+  row.append(opts.auto ? mk('⏸ Pause', 'pause', true, 'Stop playing automatically') : mk('▶ Auto', 'auto', true, 'Let the agent click through the steps with pauses'));
   row.append(mk('Skip', 'skipped', true), mk('Stop', 'stop', true, 'End the guide'));
-  bubble.append(head, body, row);
+  let autoLine = null;
+  if (opts.auto) {
+    const cd = document.createElement('div');
+    cd.className = 'step';
+    cd.style.marginTop = '6px';
+    let left = Math.round(opts.pauseMs / 1000);
+    cd.textContent = target ? `Auto-play: clicking in ${left} s` : `Auto-play: next step in ${left} s`;
+    const tick = setInterval(() => {
+      left -= 1;
+      if (left <= 0 || !host.isConnected) return clearInterval(tick);
+      cd.textContent = target ? `Auto-play: clicking in ${left} s` : `Auto-play: next step in ${left} s`;
+    }, 1000);
+    autoLine = cd;
+  }
+  bubble.append(head, body, row, ...(autoLine ? [autoLine] : []));
   if (target) root.append(ring, arrow);
   root.append(bubble);
   document.documentElement.append(host);
@@ -637,4 +652,170 @@ export function guideHide() {
   if (state?.guideListener) document.removeEventListener('click', state.guideListener, true);
   clearInterval(state?.guideTimer);
   if (state) state.guide = { status: 'cancelled' };
+}
+
+// Element picker for the panel (+ → Pick element / Select area). mode 'one':
+// hover outlines the element under the mouse, a click picks it. mode 'area':
+// drag a rectangle; every interactive or text element inside it is picked.
+// Esc cancels. Picked elements get refs (usable by the agent right away), a
+// unique CSS selector, their text and a short outerHTML.
+export function pickElements(mode) {
+  const state = (window.__tabhelm ||= { refs: new Map(), next: 1 });
+  document.getElementById('tabhelm-picker')?.remove();
+  const refOf = (el) => {
+    for (const [ref, node] of state.refs) if (node === el) return ref;
+    const ref = `e${state.next++}`;
+    state.refs.set(ref, el);
+    return ref;
+  };
+  const cssEscape = (s) => (window.CSS?.escape ? CSS.escape(s) : String(s).replace(/[^a-zA-Z0-9_-]/g, '\\$&'));
+  const selectorOf = (el) => {
+    if (el.id && document.querySelectorAll(`#${cssEscape(el.id)}`).length === 1) return `#${cssEscape(el.id)}`;
+    const parts = [];
+    let node = el;
+    while (node && node.nodeType === 1 && node !== document.documentElement) {
+      let part = node.tagName.toLowerCase();
+      if (node.id && document.querySelectorAll(`#${cssEscape(node.id)}`).length === 1) {
+        parts.unshift(`#${cssEscape(node.id)}`);
+        break;
+      }
+      const stable = [...node.classList].filter((c) => /^[a-zA-Z][\w-]{1,30}$/.test(c) && !/\d{3,}|^(is|has)-|active|hover|focus|selected/.test(c)).slice(0, 2);
+      if (stable.length) part += stable.map((c) => `.${cssEscape(c)}`).join('');
+      const parent = node.parentElement;
+      if (parent) {
+        const same = [...parent.children].filter((c) => c.tagName === node.tagName);
+        if (same.length > 1) part += `:nth-of-type(${same.indexOf(node) + 1})`;
+      }
+      parts.unshift(part);
+      const sel = parts.join(' > ');
+      if (document.querySelectorAll(sel).length === 1) return sel;
+      node = parent;
+    }
+    return parts.join(' > ');
+  };
+  const describe = (el) => {
+    const text = (el.getAttribute('aria-label') || el.innerText || el.value || el.getAttribute('alt') || el.getAttribute('placeholder') || '').replace(/\s+/g, ' ').trim();
+    const html = el.outerHTML.replace(/\s+/g, ' ');
+    return { ref: refOf(el), selector: selectorOf(el), tag: el.tagName.toLowerCase(), text: text.slice(0, 200), html: html.length > 400 ? `${html.slice(0, 400)}…` : html, href: el.href || null };
+  };
+
+  const host = document.createElement('div');
+  host.id = 'tabhelm-picker';
+  host.setAttribute('data-tabhelm-overlay', '');
+  const root = host.attachShadow({ mode: 'open' });
+  const sheet = new CSSStyleSheet();
+  sheet.replaceSync(`
+    .shield { position: fixed; inset: 0; z-index: 2147483646; cursor: crosshair; background: ${mode === 'area' ? 'rgba(42,157,118,.06)' : 'transparent'}; }
+    .box { position: fixed; border: 2px solid #2a9d76; background: rgba(42,157,118,.12); pointer-events: none; z-index: 2147483647; border-radius: 3px; }
+    .sel { position: fixed; border: 2px dashed #ff9f1c; background: rgba(255,159,28,.10); pointer-events: none; z-index: 2147483647; }
+    .tip { position: fixed; left: 50%; top: 12px; transform: translateX(-50%); background: #1c7d5c; color: #fff; font: 600 13px system-ui, sans-serif; padding: 6px 12px; border-radius: 8px; z-index: 2147483647; pointer-events: none; box-shadow: 0 4px 16px rgba(0,0,0,.25); }
+    .tag { position: fixed; background: #1c7d5c; color: #fff; font: 11px ui-monospace, monospace; padding: 1px 5px; border-radius: 3px; pointer-events: none; z-index: 2147483647; max-width: 60vw; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  `);
+  root.adoptedStyleSheets = [sheet];
+  const shield = Object.assign(document.createElement('div'), { className: 'shield' });
+  const tip = Object.assign(document.createElement('div'), { className: 'tip', textContent: mode === 'area' ? 'Drag to select an area · Esc to cancel' : 'Click an element to pick it · Esc to cancel' });
+  root.append(shield, tip);
+  document.documentElement.append(host);
+
+  // The element under a point, ignoring our own overlay.
+  const under = (x, y) => {
+    shield.style.pointerEvents = 'none';
+    host.style.display = 'none';
+    const el = document.elementFromPoint(x, y);
+    host.style.display = '';
+    shield.style.pointerEvents = '';
+    return el;
+  };
+  const marks = [];
+  const mark = (el, cls = 'box', label = '') => {
+    const r = el.getBoundingClientRect();
+    const b = Object.assign(document.createElement('div'), { className: cls });
+    Object.assign(b.style, { left: `${r.left}px`, top: `${r.top}px`, width: `${r.width}px`, height: `${r.height}px` });
+    root.append(b);
+    marks.push(b);
+    if (label) {
+      const t = Object.assign(document.createElement('div'), { className: 'tag', textContent: label });
+      Object.assign(t.style, { left: `${r.left}px`, top: `${Math.max(0, r.top - 18)}px` });
+      root.append(t);
+      marks.push(t);
+    }
+  };
+  const clearMarks = () => marks.splice(0).forEach((m) => m.remove());
+
+  return new Promise((resolve) => {
+    const done = (items) => {
+      removeEventListener('keydown', onKey, true);
+      host.remove();
+      resolve({ url: location.href, title: document.title, items });
+    };
+    const onKey = (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        done([]);
+      }
+    };
+    addEventListener('keydown', onKey, true);
+    setTimeout(() => done([]), 3 * 60_000);
+
+    if (mode !== 'area') {
+      shield.onmousemove = (e) => {
+        clearMarks();
+        const el = under(e.clientX, e.clientY);
+        if (el) mark(el, 'box', `${el.tagName.toLowerCase()}${el.id ? `#${el.id}` : ''}${el.classList[0] ? `.${el.classList[0]}` : ''}`);
+      };
+      shield.onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const el = under(e.clientX, e.clientY);
+        done(el ? [describe(el)] : []);
+      };
+      return;
+    }
+
+    let start = null;
+    const rectBox = Object.assign(document.createElement('div'), { className: 'sel' });
+    const INTERACTIVE = 'a[href],button,select,textarea,input:not([type=hidden]),[role=button],[role=link],[role=checkbox],[role=tab],[role=menuitem],[contenteditable=""],[contenteditable=true],img,video,h1,h2,h3,h4,h5,h6,li,td,th,label';
+    const pickIn = (r) => {
+      const inside = (el) => {
+        const b = el.getBoundingClientRect();
+        return b.width > 0 && b.height > 0 && b.left >= r.left - 2 && b.top >= r.top - 2 && b.right <= r.right + 2 && b.bottom <= r.bottom + 2;
+      };
+      const out = [];
+      for (const el of document.body.querySelectorAll('*')) {
+        if (out.length >= 60) break;
+        if (el.closest('[data-tabhelm-overlay]') || !inside(el)) continue;
+        const own = [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim());
+        if (!el.matches(INTERACTIVE) && !own) continue;
+        if (out.some((o) => o.contains(el))) continue; // keep the outer element once
+        for (let k = out.length - 1; k >= 0; k--) if (el.contains(out[k])) out.splice(k, 1);
+        out.push(el);
+      }
+      return out;
+    };
+    const norm = (a, b) => ({ left: Math.min(a.x, b.x), top: Math.min(a.y, b.y), right: Math.max(a.x, b.x), bottom: Math.max(a.y, b.y) });
+    shield.onmousedown = (e) => {
+      e.preventDefault();
+      start = { x: e.clientX, y: e.clientY };
+      root.append(rectBox);
+    };
+    shield.onmousemove = (e) => {
+      if (!start) return;
+      const r = norm(start, { x: e.clientX, y: e.clientY });
+      Object.assign(rectBox.style, { left: `${r.left}px`, top: `${r.top}px`, width: `${r.right - r.left}px`, height: `${r.bottom - r.top}px` });
+      clearMarks();
+      for (const el of pickIn(r)) mark(el);
+      tip.textContent = `${marks.length} element(s) · release to pick · Esc to cancel`;
+    };
+    shield.onmouseup = (e) => {
+      if (!start) return;
+      const r = norm(start, { x: e.clientX, y: e.clientY });
+      start = null;
+      if (r.right - r.left < 4 && r.bottom - r.top < 4) {
+        const el = under(e.clientX, e.clientY);
+        return done(el ? [describe(el)] : []);
+      }
+      done(pickIn(r).map(describe));
+    };
+  });
 }

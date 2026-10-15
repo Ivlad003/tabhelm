@@ -10,6 +10,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { pickElements } from '../../extension/page-scripts.js';
 
 const EXT = fileURLToPath(new URL('../../extension', import.meta.url));
 const CHROME = process.env.CHROME_PATH || '/usr/bin/google-chrome';
@@ -29,6 +30,7 @@ const MAIN = (port) => `<!doctype html><title>Tools fixture</title>
   iframe { width: 300px; height: 60px; border: 2px solid #333; padding: 3px; }
 </style>
 <h1>Fixture</h1>
+<section id=pickZone style="padding:8px"><button id=pickA onclick="results.pickA = (results.pickA || 0) + 1">Pick A</button> <button id=pickB onclick="results.pickB = (results.pickB || 0) + 1">Pick B</button></section>
 <section><button id=hoverTarget>Hover me</button><div id=menu><a href="#secret">Secret item</a></div></section>
 <section><span id=dbl tabindex=0>Double me</span> <span id=ctx tabindex=0>Context me</span></section>
 <section><span id=dragSrc draggable=true>Drag source</span> <span id=dropZone>Drop zone</span></section>
@@ -181,6 +183,59 @@ await sw.evaluate(() => chrome.storage.local.set({ highlightFinds: true }));
   check('skill_save stores the skill and enables Skill authoring', r.ok && st.authoredSkills?.[0]?.name === 'hover-menu-guide' && st.features?.skillAuthoring === true, `${r.text} ${JSON.stringify(st)}`);
 }
 
+// --- Auto-play guide: the agent clicks the steps itself after the pause
+{
+  await sw.evaluate(() => chrome.storage.local.set({ guidePause: 1 }));
+  snap = await tool('browser_snapshot');
+  const before = await results();
+  const t0 = Date.now();
+  const r = await tool('browser_guide', { auto: true, steps: [{ ref: refFor(snap.text, 'Pick A'), text: 'Press A' }, { ref: refFor(snap.text, 'Pick B'), text: 'Press B' }] });
+  const after = await results();
+  check('auto guide clicks every step after a pause', r.ok && /auto-clicked[\s\S]*auto-clicked/.test(r.text) && (after.pickA || 0) === (before.pickA || 0) + 1 && (after.pickB || 0) === (before.pickB || 0) + 1 && Date.now() - t0 >= 2000, `${r.text} ${JSON.stringify(after)} ${Date.now() - t0}ms`);
+}
+
+// --- Element picker: one element by click, several by dragging a rectangle
+{
+  await page.evaluate(() => document.getElementById('pickZone').scrollIntoView({ block: 'center' }));
+  const one = page.evaluate(pickElements, 'one');
+  await page.waitForFunction(() => document.getElementById('tabhelm-picker'), { timeout: 5000 });
+  const b = await (await page.$('#pickA')).boundingBox();
+  await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2);
+  await page.mouse.click(b.x + b.width / 2, b.y + b.height / 2);
+  const res1 = await one;
+  check('pick element returns ref, selector and text', res1.items.length === 1 && res1.items[0].selector === '#pickA' && res1.items[0].text === 'Pick A' && /^e\d+$/.test(res1.items[0].ref), JSON.stringify(res1.items));
+  check('picking does not click the page', !(await results()).pickA || (await results()).pickA === 1);
+  const area = page.evaluate(pickElements, 'area');
+  await page.waitForFunction(() => document.getElementById('tabhelm-picker'), { timeout: 5000 });
+  const z = await (await page.$('#pickZone')).boundingBox();
+  await page.mouse.move(z.x + 2, z.y + 2);
+  await page.mouse.down();
+  await page.mouse.move(z.x + z.width / 2, z.y + z.height / 2, { steps: 4 });
+  await page.mouse.move(z.x + z.width - 2, z.y + z.height - 2, { steps: 4 });
+  await page.mouse.up();
+  const res2 = await area;
+  check('select area picks every element inside the rectangle', res2.items.map((i) => i.selector).join(',') === '#pickA,#pickB', JSON.stringify(res2.items.map((i) => i.selector)));
+}
+
+// --- Page scripts & styles: browser_style, save / list / run a preset
+{
+  let r = await tool('browser_style', { css: '#pickA { color: rgb(255, 0, 0) !important; }', id: 't' });
+  check('page scripts tools need their flag', !r.ok && /Page scripts/.test(r.text), r.text);
+  await sw.evaluate(async () => { const { features = {} } = await chrome.storage.local.get('features'); await chrome.storage.local.set({ features: { ...features, pageScripts: true } }); });
+  r = await tool('browser_style', { css: '#pickA { color: rgb(255, 0, 0) !important; }', id: 't' });
+  const red = await page.$eval('#pickA', (e) => getComputedStyle(e).color);
+  await tool('browser_style', { id: 't', remove: true });
+  const back = await page.$eval('#pickA', (e) => getComputedStyle(e).color);
+  check('browser_style applies and removes CSS', r.ok && red === 'rgb(255, 0, 0)' && back !== red, `${red} → ${back}`);
+  r = await tool('browser_script_save', { name: 'count-buttons', description: 'Counts buttons', match: '127.0.0.1', js: 'return document.querySelectorAll("button").length', css: '#pickB { outline: 3px solid rgb(0, 128, 0); }' });
+  const list = await tool('browser_script_list');
+  const run = await tool('browser_script_run', { name: 'count-buttons' });
+  const outline = await page.$eval('#pickB', (e) => getComputedStyle(e).outlineColor);
+  const stored = await sw.evaluate(() => chrome.storage.local.get('pageScripts'));
+  check('script presets save, list, run JS + CSS', r.ok && /count-buttons.*matches this page/.test(list.text) && /Result: \d+/.test(run.text) && outline === 'rgb(0, 128, 0)' && stored.pageScripts[0].autoRun === false, `${list.text} | ${run.text} | ${outline}`);
+}
+// The snapshots above replaced the refs from the earlier find.
+found = await tool('browser_find', { text: 'Hover me' });
 // --- Mouse
 let r = await tool('browser_hover', { ref: refFor(found.text, 'Hover me') });
 found = await tool('browser_find', { text: 'Secret item' });

@@ -29,9 +29,12 @@ export async function initSettings(panelPort) {
   initRemote();
   const hl = $('highlight-finds');
   hl.onchange = () => chrome.storage.local.set({ highlightFinds: hl.checked });
-  const stored = await chrome.storage.local.get(['skills', 'highlightFinds']);
+  const gp = $('guide-pause');
+  gp.onchange = () => chrome.storage.local.set({ guidePause: Math.min(30, Math.max(1, Number(gp.value) || 3)) });
+  const stored = await chrome.storage.local.get(['skills', 'highlightFinds', 'guidePause']);
   skills = stored.skills || [];
   hl.checked = stored.highlightFinds !== false;
+  gp.value = stored.guidePause || 3;
   const examples = $('skill-examples');
   for (const ex of EXAMPLES) {
     const a = Object.assign(document.createElement('a'), { href: ex.url, textContent: ex.label });
