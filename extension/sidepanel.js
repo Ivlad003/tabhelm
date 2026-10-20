@@ -1596,7 +1596,7 @@ const rec = { active: false, recorder: null, canvas: null, ctx: null, img: null,
 
 function startRecording() {
   if (rec.active) return;
-  Object.assign(rec, { active: true, recorder: null, chunks: [], img: null });
+  Object.assign(rec, { active: true, recorder: null, chunks: [], img: null, requested: Date.now() });
   els.recIndicator.hidden = false;
   port.postMessage({ type: 'record_start' });
 }
@@ -1644,7 +1644,7 @@ function stopRecording(discard = false) {
   port.postMessage({ type: 'record_stop' });
   const recorder = rec.recorder;
   if (!recorder) {
-    if (!discard) notice('No video recorded: the tab did not render any frames.', true);
+    if (!discard) notice(Date.now() - (rec.requested || 0) < 1500 ? 'No video: the task finished before the first frame was captured.' : 'No video recorded: the tab did not render any frames (is the window minimized?).', !(Date.now() - (rec.requested || 0) < 1500));
     return;
   }
   const { chunks, mime, started } = rec;
@@ -1802,6 +1802,7 @@ initVoice(port, {
     record('voice', { source, chars: text.length });
   },
   error: (text) => notice(text, true),
+  info: (text) => notice(text),
 });
 // Changing the folder restarts the agent there; the conversation is handed over.
 initFolder(port, tabId, {

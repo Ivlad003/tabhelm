@@ -380,6 +380,15 @@ check('switch back to chat tab', r.ok, r.text);
 r = await tool('browser_tabs', { action: 'close', tabId });
 check('chat tab cannot be closed', !r.ok, r.text);
 
+// --- Recording keeps producing frames on a still page (screenshots fill the screencast's silences)
+{
+  await sw.evaluate((id) => { self.__frames = 0; return self.tabhelmDebug.startRecording(id, () => self.__frames++); }, tabId);
+  await new Promise((x) => setTimeout(x, 3200));
+  const frames = await sw.evaluate(() => self.__frames);
+  await sw.evaluate((id) => self.tabhelmDebug.stopRecording(id), tabId);
+  check('recording yields frames on a still page (about 2 per second)', frames >= 4, `${frames} frames in 3.2 s`);
+}
+
 // --- Recording follows the tab the agent acts on, also via tabId without switching
 {
   const other = await sw.evaluate(async (u, opener) => (await chrome.tabs.create({ url: `${u}page2`, active: false, openerTabId: opener })).id, url, tabId);

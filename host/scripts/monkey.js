@@ -311,7 +311,10 @@ async function monkeyBrowser() {
     const alive = await sw.evaluate((id) => chrome.tabs.get(id).then(() => true).catch(() => false), tabId);
     const chatTab = alive ? tabId : await sw.evaluate(async (u) => (await chrome.tabs.create({ url: u })).id, url);
     const panelUrl = `chrome-extension://${extId}/sidepanel.html?tabId=${chatTab}`;
-    await sw.evaluate((u) => chrome.windows.create({ url: u, type: 'popup', width: 420, height: 800 }), panelUrl);
+    // The panel as a tab in the same window, like the real side panel (a pop-up
+    // window would switch off tab groups in headless Chrome).
+    await browser.defaultBrowserContext().overridePermissions(`chrome-extension://${extId}`, ['microphone', 'clipboard-read', 'clipboard-write']);
+    await sw.evaluate((u) => chrome.tabs.create({ url: u, active: true }), panelUrl);
     const panel = await (await browser.waitForTarget((t) => t.url() === panelUrl)).page();
     const panelErrors = [];
     panel.on('pageerror', (e) => panelErrors.push(String(e)));

@@ -2,6 +2,14 @@
 
 All notable changes to TabHelm. The newest release is at the top; the panel's update banner links here.
 
+## [0.27.3] - 2026-10-20
+
+### Fixed
+- **Voice: the last words before Stop were lost.** The recorder's final chunk arrives after Stop, but the text was delivered before it was transcribed (and a late chunk could throw in the panel). The final chunk is now transcribed and included, exactly once.
+- **Microphone permission:** after you press *Allow microphone* on the one-time page, it closes, takes you back to your tab and the recording you asked for starts by itself — no second click.
+- **Video recording on still pages and hidden windows:** the screencast only sends frames when the page repaints, so a still page or an occluded window gave a choppy or empty video. Recording now brings the tab forward, captures the first frame right away and fills silences with screenshots (about 2 frames a second); a task that ends instantly gets a clear note instead of an error.
+- **Tab groups in pop-up / app windows:** a clear message (open the page in a regular window) instead of Chrome's "Grouping is not supported".
+
 ## [0.27.2] - 2026-10-20
 
 Fixes from a full smoke / end-to-end / monkey test pass (`npm run test:monkey` is new).

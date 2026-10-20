@@ -60,10 +60,18 @@ export function chatForGroupTab(tab) {
 export async function ensureGroup(chatTabId) {
   const c = chatState(chatTabId);
   const tab = await chrome.tabs.get(chatTabId);
+  // Pop-up and app (PWA) windows have no tab strip, so Chrome cannot group there.
+  const win = await chrome.windows.get(tab.windowId).catch(() => null);
+  if (win && win.type !== 'normal') throw new Error('Tab groups need a normal Chrome window — this page is in a pop-up or app window. Open it in a regular window (⋮ → Open in Chrome) to share tabs.');
   if (tab.groupId !== -1) {
     c.groupId = tab.groupId;
   } else {
-    c.groupId = await chrome.tabs.group({ tabIds: [chatTabId] });
+    try {
+      c.groupId = await chrome.tabs.group({ tabIds: [chatTabId] });
+    } catch (err) {
+      if (/not supported/i.test(err.message)) throw new Error('Chrome does not allow tab groups in this window right now (it happens next to pop-up windows). Use a regular window to share tabs.');
+      throw err;
+    }
     await chrome.tabGroups.update(c.groupId, { title: 'TabHelm', color: 'green' });
   }
   return groupInfo(chatTabId);
@@ -151,10 +159,40 @@ const recordings = new Map(); // chatTabId -> { tabId, onFrame }
 export async function startRecording(chatTabId, onFrame, tabId = chatState(chatTabId).current) {
   await stopRecording(chatTabId);
   await assertControllable(tabId);
+  // Chrome renders (and so screencasts) only visible tabs: bring this one forward.
+  const tab = await chrome.tabs.get(tabId).catch(() => null);
+  if (tab && !tab.active) await chrome.tabs.update(tabId, { active: true }).catch(() => {});
   await attach(tabId);
-  screencastListeners.set(tabId, onFrame);
+  const rec = { tabId, onFrame, lastFrame: 0, timer: null };
+  screencastListeners.set(tabId, (frame) => {
+    rec.lastFrame = Date.now();
+    onFrame(frame);
+  });
   await cdp(tabId, 'Page.startScreencast', { format: 'jpeg', quality: 75, maxWidth: 1600, maxHeight: 1000 });
-  recordings.set(chatTabId, { tabId, onFrame });
+  recordings.set(chatTabId, rec);
+  // The screencast only sends frames when the page repaints, and none at all for
+  // an occluded window. Fill silences with screenshots so a still page or a
+  // hidden window still yields a video (about 2 frames a second).
+  let busy = false;
+  const fill = async () => {
+    if (busy || Date.now() - rec.lastFrame < 700 || recordings.get(chatTabId) !== rec) return;
+    busy = true;
+    try {
+      const shot = await Promise.race([
+        cdp(tabId, 'Page.captureScreenshot', { format: 'jpeg', quality: 70, optimizeForSpeed: true }),
+        new Promise((r) => setTimeout(() => r(null), 1500)),
+      ]);
+      if (shot?.data && recordings.get(chatTabId) === rec) {
+        const m = await cdp(tabId, 'Page.getLayoutMetrics').catch(() => null);
+        const vp = m?.cssVisualViewport || m?.visualViewport;
+        rec.lastFrame = Date.now();
+        onFrame({ data: shot.data, width: Math.round(vp?.clientWidth || 1280), height: Math.round(vp?.clientHeight || 800) });
+      }
+    } catch {}
+    busy = false;
+  };
+  rec.timer = setInterval(fill, 500);
+  fill(); // the first frame right away, so even a quick task has a picture
 }
 
 // While recording, the tab the agent acts on (also via tabId, without switching)
@@ -174,6 +212,7 @@ export async function stopRecording(chatTabId) {
   const rec = recordings.get(chatTabId);
   if (!rec) return;
   recordings.delete(chatTabId);
+  clearInterval(rec.timer);
   screencastListeners.delete(rec.tabId);
   await cdp(rec.tabId, 'Page.stopScreencast').catch(() => {});
 }

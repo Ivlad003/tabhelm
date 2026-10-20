@@ -314,12 +314,16 @@ try {
   throw err;
 }
 const live = await panel.$eval('#voice-text', (e) => e.textContent);
+// Stop in the middle of the third chunk: what was said after the last full chunk must not be lost.
+await new Promise((r) => setTimeout(r, 1500));
+const errorsBeforeStop = panelErrors.length;
 await panel.click('#voice-stop');
 await panel.waitForFunction(() => /phrase 1/.test(document.querySelector('#input').value), { timeout: 20000 });
 const boxed = await panel.$eval('#input', (e) => e.value);
 console.log('voice live:', live, '| message box:', boxed);
 check('voice: live transcript while recording', /phrase 1 phrase 2/.test(live), live);
 check('voice: whole transcript becomes one message on Stop', /^phrase 1 phrase 2( phrase \d+)*$/.test(boxed.trim()), boxed);
+check('voice: the words spoken just before Stop are kept (last partial chunk)', /phrase 3/.test(boxed) && panelErrors.length === errorsBeforeStop, `${boxed} | errors after stop: ${panelErrors.slice(errorsBeforeStop).join(' | ')}`);
 await panel.$eval('#input', (e) => (e.value = ''));
 
 // 11. Action database: History search finds steps

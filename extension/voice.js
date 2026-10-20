@@ -13,10 +13,12 @@ let state = null; // { source, engine, stream, recognition, recorder, timer, fin
 let nextRequest = 1;
 const waits = new Map();
 
-export function initVoice(panelPort, { text, error }) {
+let onInfo = () => {};
+export function initVoice(panelPort, { text, error, info }) {
   port = panelPort;
   onText = text;
   onError = error;
+  onInfo = info || (() => {});
   for (const b of document.querySelectorAll('[data-voice]')) {
     b.onclick = () => {
       $('plus-menu').open = false;
@@ -27,6 +29,26 @@ export function initVoice(panelPort, { text, error }) {
     };
   }
   $('voice-stop').onclick = () => stop();
+  // The permission page reports back: start the recording the user asked for.
+  chrome.runtime.onMessage.addListener((m) => {
+    if (m?.type !== 'mic_granted' || !waitingForMic) return;
+    const source = waitingForMic;
+    waitingForMic = null;
+    onInfo('Microphone allowed — recording now.');
+    start(source).catch((err) => {
+      stop(true);
+      onError(err.message);
+    });
+  });
+}
+
+let waitingForMic = null; // the source to start once the microphone is allowed
+
+// Opens the one-time permission page next to the chat tab; recording resumes by itself.
+async function askForMic(source) {
+  waitingForMic = source;
+  const [current] = await chrome.tabs.query({ active: true, lastFocusedWindow: true }).catch(() => []);
+  chrome.tabs.create({ url: `${chrome.runtime.getURL('permissions.html')}${current ? `?back=${current.id}` : ''}`, index: current ? current.index + 1 : undefined });
 }
 
 export function handleVoiceMessage(msg) {
@@ -85,8 +107,8 @@ async function micStream() {
     return await navigator.mediaDevices.getUserMedia({ audio: true });
   } catch (err) {
     if (err.name === 'NotAllowedError') {
-      chrome.tabs.create({ url: chrome.runtime.getURL('permissions.html') });
-      throw new Error('Microphone not allowed yet: allow it on the page that just opened, then try again.');
+      askForMic(state?.source || 'mic');
+      throw new Error('Microphone access needed: press “Allow microphone” on the page that just opened — recording starts by itself afterwards.');
     }
     throw err;
   }
@@ -96,22 +118,23 @@ async function micStream() {
 function recordChunk() {
   if (!state?.stream) return;
   const mime = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus'].find((t) => MediaRecorder.isTypeSupported(t)) || '';
-  const recorder = new MediaRecorder(state.stream, mime ? { mimeType: mime } : {});
+  const me = state; // onstop runs after Stop has cleared `state`
+  const recorder = new MediaRecorder(me.stream, mime ? { mimeType: mime } : {});
   const parts = [];
   recorder.ondataavailable = (e) => e.data.size && parts.push(e.data);
   recorder.onstop = () => {
     const blob = new Blob(parts, { type: recorder.mimeType });
-    if (blob.size > 2000) sendChunk(blob);
-    if (state?.stream) recordChunk();
+    if (!me.discarded && blob.size > 2000) sendChunk(blob, me);
+    else if (me !== state) me.flushing?.(); // last chunk was silence: deliver what we have
+    if (me === state && state.stream) recordChunk();
   };
   recorder.start();
   state.recorder = recorder;
   state.timer = setTimeout(() => recorder.state === 'recording' && recorder.stop(), (state.settings.chunkSeconds || 8) * 1000);
 }
 
-async function sendChunk(blob) {
-  const seq = state.seq++;
-  const me = state;
+async function sendChunk(blob, me) {
+  const seq = me.seq++;
   me.pending++;
   render();
   const data = await new Promise((resolve, reject) => {
@@ -129,7 +152,7 @@ async function sendChunk(blob) {
   }
   if (reply.text) me.finals[seq] = reply.text;
   if (me === state) render();
-  else if (me.flushing) me.flushing(); // chunk arrived after Stop: deliver the final text now
+  else me.flushing?.(); // chunk arrived after Stop: deliver the final text now
 }
 
 function startBrowserRecognition(settings) {
@@ -151,8 +174,8 @@ function startBrowserRecognition(settings) {
   };
   rec.onerror = (e) => {
     if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
-      chrome.tabs.create({ url: chrome.runtime.getURL('permissions.html') });
-      onError('Microphone not allowed yet: allow it on the page that just opened, then try again.');
+      askForMic('mic');
+      onError('Microphone access needed: press “Allow microphone” on the page that just opened — recording starts by itself afterwards.');
       stop(true);
     } else if (e.error !== 'no-speech' && e.error !== 'aborted') onError(`Speech recognition: ${e.error}`);
   };
@@ -190,6 +213,9 @@ export function stop(discard = false) {
   if (!s) return;
   state = null;
   clearTimeout(s.timer);
+  // Checked before stopping: the recorder turns inactive at once, but its last chunk comes later.
+  const lastChunk = s.recorder?.state === 'recording';
+  if (discard) s.discarded = true;
   if (s.recognition) {
     s.recognition.onend = null;
     try {
@@ -202,10 +228,16 @@ export function stop(discard = false) {
   $('voice-live').hidden = true;
   $('voice-stop').hidden = true;
   if (discard) return;
-  const deliver = () => onText(s.finals.filter(Boolean).join(' ').trim(), s.source);
-  if (s.pending > 0 || (s.recorder && s.recorder.state === 'recording')) {
-    // Wait briefly for the last chunk(s), then deliver whatever we have.
+  let delivered = false;
+  const deliver = () => {
+    if (delivered) return;
+    delivered = true;
+    s.flushing = null;
+    onText(s.finals.filter(Boolean).join(' ').trim(), s.source);
+  };
+  if (s.pending > 0 || lastChunk) {
+    // Wait for the last chunk(s) to be transcribed (at most 15 s), then deliver once.
     s.flushing = () => s.pending === 0 && deliver();
-    setTimeout(() => s.flushing && (s.flushing = null, deliver()), 15_000);
+    setTimeout(deliver, 15_000);
   } else deliver();
 }
