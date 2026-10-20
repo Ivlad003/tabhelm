@@ -46,7 +46,7 @@ chrome.tabs.onCreated.addListener((tab) => {
 // For tests: what a chat can reach.
 export function chatDebugState(chatTabId) {
   const c = chats.get(chatTabId);
-  return c ? { current: c.current, owned: [...c.owned], groupId: c.groupId } : null;
+  return c ? { current: c.current, owned: [...c.owned], groupId: c.groupId, recording: recordings.get(chatTabId)?.tabId ?? null } : null;
 }
 
 // The chat whose group a tab belongs to (synchronous, for the action click).
@@ -123,7 +123,7 @@ async function targetTab(c, requested, ui) {
   const tab = await chrome.tabs.get(id).catch(() => null);
   if (!tab) throw new Error(`No tab ${requested}. Use browser_tabs list.`);
   if (!c.owned.has(id) && !(await inGroup(c, id))) {
-    const ok = await ui.confirm(c.chatTabId, 'Let the agent use another tab?', `${tab.title}\n${tab.url}`);
+    const ok = await ui.confirm(c.chatTabId, 'Let the agent use another tab?', `${tab.title}\n${tab.url}`, { routine: true });
     if (!ok) throw new Error('The user did not allow using that tab.');
     c.owned.add(id);
     await addToGroup(c, id);
@@ -148,14 +148,26 @@ chrome.tabs.onRemoved.addListener((tabId) => {
 
 const recordings = new Map(); // chatTabId -> { tabId, onFrame }
 
-export async function startRecording(chatTabId, onFrame) {
+export async function startRecording(chatTabId, onFrame, tabId = chatState(chatTabId).current) {
   await stopRecording(chatTabId);
-  const c = chatState(chatTabId);
-  await assertControllable(c.current);
-  await attach(c.current);
-  screencastListeners.set(c.current, onFrame);
-  await cdp(c.current, 'Page.startScreencast', { format: 'jpeg', quality: 75, maxWidth: 1600, maxHeight: 1000 });
-  recordings.set(chatTabId, { tabId: c.current, onFrame });
+  await assertControllable(tabId);
+  await attach(tabId);
+  screencastListeners.set(tabId, onFrame);
+  await cdp(tabId, 'Page.startScreencast', { format: 'jpeg', quality: 75, maxWidth: 1600, maxHeight: 1000 });
+  recordings.set(chatTabId, { tabId, onFrame });
+}
+
+// While recording, the tab the agent acts on (also via tabId, without switching)
+// is brought to the front — Chrome renders frames only for visible tabs — and
+// the recording moves there.
+async function recordTab(chatTabId, tabId) {
+  const rec = recordings.get(chatTabId);
+  if (!rec || rec.tabId === tabId) return;
+  const tab = await chrome.tabs.get(tabId).catch(() => null);
+  if (!tab) return;
+  if (!tab.active) await chrome.tabs.update(tabId, { active: true }).catch(() => {});
+  if (tab.windowId != null) await chrome.windows.update(tab.windowId, { focused: true }).catch(() => {});
+  await startRecording(chatTabId, rec.onFrame, tabId).catch(() => {});
 }
 
 export async function stopRecording(chatTabId) {
@@ -168,14 +180,14 @@ export async function stopRecording(chatTabId) {
 
 // Keep recording the tab the agent works on when it switches tabs.
 async function followTarget(c) {
-  const rec = recordings.get(c.chatTabId);
-  if (!rec || rec.tabId === c.current) return;
-  await startRecording(c.chatTabId, rec.onFrame).catch(() => {});
+  await recordTab(c.chatTabId, c.current);
 }
 
 // ---------- helpers ----------
 
 const text = (t) => [{ type: 'text', text: t }];
+// Tools that only read: they do not pull a background tab to the front for the recording.
+const READ_ONLY_TOOLS = new Set(['browser_snapshot', 'browser_find', 'browser_get_text', 'browser_console', 'browser_network', 'browser_network_body', 'browser_script_list', 'browser_script_save']);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function parseRef(ref) {
@@ -469,7 +481,7 @@ async function tabsTool(c, args, ui) {
       const tab = await chrome.tabs.get(id).catch(() => null);
       if (!tab) throw new Error(`No tab ${args.tabId}.`);
       if (!c.owned.has(id) && !(await inGroup(c, id))) {
-        const ok = await ui.confirm(c.chatTabId, 'Let the agent control another tab?', `${tab.title}\n${tab.url}`);
+        const ok = await ui.confirm(c.chatTabId, 'Let the agent control another tab?', `${tab.title}\n${tab.url}`, { routine: true });
         if (!ok) throw new Error('The user did not allow controlling that tab.');
         c.owned.add(id);
         await addToGroup(c, id);
@@ -523,6 +535,7 @@ export async function runTool(chatTabId, tool, args, ui) {
   else {
     const tabId = await targetTab(c, args.tabId, ui);
     const tab = await assertControllable(tabId);
+    if (!READ_ONLY_TOOLS.has(tool)) await recordTab(chatTabId, tabId);
     await attach(tabId);
     c.actingUntil = Infinity;
     try {
@@ -571,7 +584,7 @@ async function guideTour(chatTabId, defaultTab, args, ui) {
   const pauseMs = Math.max(1, Number(args.pause || guidePause) || 3) * 1000;
   let auto = false;
   if (args.auto) {
-    auto = await ui.confirm(chatTabId, `Play this guide automatically (${steps.length} step${steps.length > 1 ? 's' : ''})?`, `The agent will click each highlighted element itself, pausing ${pauseMs / 1000} s before every click. Press ⏸ Pause on the page or in the panel to take over.`);
+    auto = await ui.confirm(chatTabId, `Play this guide automatically (${steps.length} step${steps.length > 1 ? 's' : ''})?`, `The agent will click each highlighted element itself, pausing ${pauseMs / 1000} s before every click. Press ⏸ Pause on the page or in the panel to take over.`, { routine: true });
   }
 
   while (i < steps.length && Date.now() - started < 30 * 60_000) {
@@ -992,7 +1005,7 @@ async function runPageTool(tabId, tab, tool, args, ui, chatTabId) {
     case 'browser_storage': {
       await requireFlag('devTools', 'Developer tools');
       if (args.action !== 'get') {
-        const ok = await ui.confirm(chatTabId, `${args.action === 'set' ? 'Change' : 'Delete'} ${args.kind} on ${new URL(tab.url).host}?`, `${args.key || ''}${args.value ? ` = ${args.value.slice(0, 80)}` : ''}`);
+        const ok = await ui.confirm(chatTabId, `${args.action === 'set' ? 'Change' : 'Delete'} ${args.kind} on ${new URL(tab.url).host}?`, `${args.key || ''}${args.value ? ` = ${args.value.slice(0, 80)}` : ''}`, { routine: true });
         if (!ok) throw new Error('The user declined changing storage.');
       }
       if (args.kind === 'cookies') {
@@ -1085,7 +1098,7 @@ async function runPageTool(tabId, tab, tool, args, ui, chatTabId) {
       const preset = (await listScripts()).find((p) => p.name === args.name);
       if (!preset) throw new Error(`No page script named "${args.name}". See browser_script_list.`);
       if (preset.js) {
-        const ok = await ui.confirm(chatTabId, `Run saved script “${preset.name}” on ${new URL(tab.url).host}?`, preset.js.slice(0, 2000));
+        const ok = await ui.confirm(chatTabId, `Run saved script “${preset.name}” on ${new URL(tab.url).host}?`, preset.js.slice(0, 2000), { routine: true });
         if (!ok) throw new Error('The user declined running this script.');
       }
       const out = await runScript(tabId, preset);
@@ -1144,7 +1157,7 @@ async function runPageTool(tabId, tab, tool, args, ui, chatTabId) {
 
     case 'browser_evaluate': {
       const host = new URL(tab.url).host;
-      const ok = await ui.confirm(chatTabId, `Run JavaScript on ${host}?`, args.expression);
+      const ok = await ui.confirm(chatTabId, `Run JavaScript on ${host}?`, args.expression, { routine: true });
       if (!ok) throw new Error('The user declined running this script.');
       const res = await cdp(tabId, 'Runtime.evaluate', { expression: args.expression, awaitPromise: true, returnByValue: true, userGesture: true });
       if (res.exceptionDetails) throw new Error(res.exceptionDetails.exception?.description || res.exceptionDetails.text);

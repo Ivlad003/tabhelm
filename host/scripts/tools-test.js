@@ -380,6 +380,25 @@ check('switch back to chat tab', r.ok, r.text);
 r = await tool('browser_tabs', { action: 'close', tabId });
 check('chat tab cannot be closed', !r.ok, r.text);
 
+// --- Recording follows the tab the agent acts on, also via tabId without switching
+{
+  const other = await sw.evaluate(async (u, opener) => (await chrome.tabs.create({ url: `${u}page2`, active: false, openerTabId: opener })).id, url, tabId);
+  await new Promise((x) => setTimeout(x, 800));
+  await sw.evaluate((id, o) => self.tabhelmDebug.chatDebugState(id) && self.tabhelmDebug.chatDebugState(id).owned.push(o), tabId, other);
+  await sw.evaluate((id) => self.tabhelmDebug.startRecording(id, () => {}), tabId);
+  await tool('browser_tabs', { action: 'switch', tabId: other });
+  await tool('browser_tabs', { action: 'switch', tabId });
+  const s1 = await sw.evaluate((id) => self.tabhelmDebug.chatDebugState(id).recording, tabId);
+  const r = await tool('browser_scroll', { tabId: other, direction: 'down' });
+  const s2 = await sw.evaluate((id) => self.tabhelmDebug.chatDebugState(id).recording, tabId);
+  const active = await sw.evaluate(async (o) => (await chrome.tabs.get(o)).active, other);
+  check('recording moves to the tab the agent acts on (tabId) and brings it forward', s1 === tabId && s2 === other && active, `${r.text} rec ${s1}→${s2} active=${active}`);
+  await sw.evaluate((id) => self.tabhelmDebug.stopRecording(id), tabId);
+  await sw.evaluate((o) => chrome.tabs.remove(o), other);
+  await page.bringToFront();
+  await tool('browser_tabs', { action: 'switch', tabId });
+}
+
 // --- Several tabs: a shared tab group, tabId on any tool, search across tabs
 // Tabs opened within ~3 s of an agent action count as its popups; these are the user's.
 await new Promise((x) => setTimeout(x, 3500));

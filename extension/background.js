@@ -17,7 +17,9 @@ let nextCriticId = 1;
 let nativePort = null;
 
 // Dev hook for scripts/tools-test.js: lets the test call tools directly from the service worker.
-self.tabhelmDebug = { runTool, ensureGroup, chatDebugState, runSchedule: (id) => runScheduled(id, scheduleDeps), sendPageContext, backupState, restoreState };
+self.tabhelmDebug = { runTool, ensureGroup, chatDebugState, runSchedule: (id) => runScheduled(id, scheduleDeps), sendPageContext, backupState, restoreState, startRecording, stopRecording, ui: () => ui };
+
+const autoApproveTabs = new Set(); // chats with Auto-approve on (panel checkbox)
 
 // ---------- Page context: selection / image → chat ----------
 const pendingPageContext = new Map(); // tabId -> [payload]
@@ -98,8 +100,15 @@ function deliver(chatTabId, message) {
 
 // UI hooks the browser tools use to ask the user or report the active tab.
 const ui = {
-  confirm(chatTabId, title, detail) {
+  // Routine confirmations (JS on the page, other tabs, storage, saved scripts) are
+  // answered by Auto-approve; uploads from disk and the opt-in safety gates
+  // (sensitive actions, site rules, critic) always ask.
+  confirm(chatTabId, title, detail, { routine = false } = {}) {
     if (!panels.has(chatTabId)) return Promise.resolve(false); // scheduled runs never confirm
+    if (routine && autoApproveTabs.has(chatTabId)) {
+      deliver(chatTabId, { type: 'confirm_auto', title, detail });
+      return Promise.resolve(true);
+    }
     const id = nextConfirmId++;
     deliver(chatTabId, { type: 'confirm', id, title, detail });
     notify(chatTabId, 'needs', title);
@@ -433,7 +442,13 @@ export async function fromPanel(tabId, msg, port) {
     }
     return;
   }
+  if (msg.type === 'set_auto_approve') {
+    if (msg.value) autoApproveTabs.add(tabId);
+    else autoApproveTabs.delete(tabId);
+  }
   if (msg.type === 'start') {
+    if (msg.autoApprove) autoApproveTabs.add(tabId);
+    else autoApproveTabs.delete(tabId);
     const tab = await chrome.tabs.get(tabId).catch(() => null);
     const payload = await hostFeaturePayload();
     msg = { ...msg, pageUrl: tab?.url || null, features: payload.features, featureSettings: { critic: payload.critic, passwordManager: payload.passwordManager } };

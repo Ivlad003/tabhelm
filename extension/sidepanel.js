@@ -162,6 +162,12 @@ function onMessage(msg) {
     case 'guide_done':
       finishGuideCard(msg);
       break;
+    case 'confirm_auto':
+      // Auto-approve answered an extension confirmation: log it as a step.
+      agentBubble = null;
+      addToActivity(actionRow(`✓ Auto-approved: ${msg.title.replace(/\?$/, '')}`, true));
+      record('confirm', { title: msg.title, detail: msg.detail, answer: 'Auto-approved' });
+      break;
     case 'page_script_result':
       if (msg.ok) notice(`Ran “${msg.name}”${msg.result ? `: ${String(msg.result).slice(0, 300)}` : '.'}`);
       else notice(`Script “${msg.name || ''}” failed: ${msg.error}`, true);

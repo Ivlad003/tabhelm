@@ -328,6 +328,23 @@ await panel.click('#history-open');
 await panel.type('#history-search', 'highlight');
 await panel.waitForFunction(() => [...document.querySelectorAll('.history-item')].some((i) => /step\(s\) match/.test(i.innerText)), { timeout: 10000 }).catch(() => {});
 const hist = await panel.$$eval('.history-item', (i) => i.map((x) => x.innerText.replace(/\s+/g, ' ')));
+// Auto-approve also answers TabHelm's routine confirmations (here: JavaScript on the page).
+{
+  if (!(await panel.$eval('#auto', (e) => e.checked))) await panel.click('#auto');
+  await new Promise((r) => setTimeout(r, 300));
+  const r = await sw.evaluate(async (id) => {
+    try {
+      const res = await self.tabhelmDebug.runTool(id, 'browser_evaluate', { expression: '6 * 7' }, self.tabhelmDebug.ui());
+      return res.content[0].text;
+    } catch (err) {
+      return `ERR ${err.message}`;
+    }
+  }, tabId);
+  await panel.waitForFunction(() => /Auto-approved: Run JavaScript/.test(document.body.textContent), { timeout: 5000 }).catch(() => {});
+  const logged = await panel.evaluate(() => /Auto-approved: Run JavaScript/.test(document.body.textContent));
+  check('auto-approve answers the JavaScript confirmation and logs it', r === '42' && logged, `${r} logged=${logged}`);
+  await panel.click('#auto');
+}
 check('History search matches steps (action database)', hist.some((h) => /step\(s\) match/.test(h)), `${hist.join(' | ')} / panel errors: ${panelErrors.join(' | ')}`);
 
 // ---- state backup: chat history survives a reinstall ----------------------

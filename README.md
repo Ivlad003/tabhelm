@@ -65,7 +65,7 @@ To update, run the install command again (it stops a running host first), then p
 | Chips | Shown only when needed: 🗂 the tab the agent is on when it is not this one / how many tabs are shared; 📁 the working folder. |
 | Chat | Agent replies, collapsible *Thinking*, plans, and the agent's steps (`↳ Click "Save"`, tool search, …) grouped into one scrollable **Steps** block per run. |
 | **＋ menu** | Everything optional in one place: attach files (or drop / paste them), add the page selection, voice message and tab audio (Voice feature), record video, share tabs (tab group), choose / change / remove the working folder. |
-| **Auto-approve** | Lets the agent use tools without asking. Uploads, JavaScript, other tabs and the experimental gates still ask. |
+| **Auto-approve** | Lets the agent work without asking: its own tool permissions and TabHelm's routine confirmations (JavaScript on the page, other tabs, cookies/storage, saved scripts). Uploading files from disk and the opt-in safety gates still ask. |
 | **Send / Stop** | Sends a message (and starts the agent if needed); while the agent works, the button cancels the turn. |
 | **History** | Saved chats — open one to continue it (its page opens too), export it (⬇ Markdown, `{ }` JSON) or delete it (🗑, **Clear all**). |
 | **Settings** | Skills (links and, with the flag, skills written here), model options, page options (highlight finds), experimental features, version and updates. |
@@ -78,7 +78,7 @@ To update, run the install command again (it stops a running host first), then p
 There are two layers of confirmation:
 
 1. **Agent permissions** — the agent asks before using a tool (ACP `session/request_permission`). You answer with its own buttons (*Allow once*, *Always allow*, *Reject*). **Auto-approve** answers these for you.
-2. **TabHelm confirmations** — always shown, even with auto-approve: uploading local files, running JavaScript in the page (`browser_evaluate`), and controlling a tab the agent did not open.
+2. **TabHelm confirmations** — running JavaScript in the page (`browser_evaluate`, saved scripts), changing cookies/storage, controlling a tab the agent did not open, guide auto-play. **Auto-approve** answers these too and logs *✓ Auto-approved: …* in the steps. **Uploading local files** always asks (files leave your computer), and so do the opt-in gates below.
 
 ### Switching agents and continuing after a failure
 
@@ -106,7 +106,7 @@ In **History**, ⬇ downloads a chat as Markdown: your messages, each agent's an
 
 ### Recording videos
 
-Turn on **Record video** and every message you send is recorded until the agent finishes: the tab's frames (CDP screencast) are encoded in the panel with MediaRecorder (MP4/H.264, WebM fallback). An *agent cursor* with a click ripple is drawn on the page so the video shows where the agent pointed and clicked. Each video appears in the chat with a player, **Download** and **Delete** (click twice; removes it from the chat and from disk) and is saved automatically to `~/Videos/TabHelm/` (or `~/.tabhelm/recordings/` if there is no `~/Videos`). Only the visible tab renders frames, so tabs the agent opens in the background are not captured.
+Turn on **Record video** and every message you send is recorded until the agent finishes: the tab's frames (CDP screencast) are encoded in the panel with MediaRecorder (MP4/H.264, WebM fallback). An *agent cursor* with a click ripple is drawn on the page so the video shows where the agent pointed and clicked. Each video appears in the chat with a player, **Download** and **Delete** (click twice; removes it from the chat and from disk) and is saved automatically to `~/Videos/TabHelm/` (or `~/.tabhelm/recordings/` if there is no `~/Videos`). Only the visible tab renders frames, so while recording, the tab the agent acts on — after a switch, a new tab, or a `tabId` call to another tab — is brought to the front and the recording follows it.
 
 ### History
 

@@ -1,0 +1,1239 @@
+{
+  "format": 1,
+  "view": "calls:extension/news.js#showNews",
+  "elements": [
+    {
+      "id": "lane:extension",
+      "type": "rectangle",
+      "x": 0,
+      "y": 0,
+      "width": 775,
+      "height": 400,
+      "angle": 0,
+      "strokeColor": "#bdbdbd",
+      "backgroundColor": "#fafafa",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "frameId": null,
+      "roundness": null,
+      "seed": 1385332056,
+      "version": 2,
+      "versionNonce": 1602307828,
+      "isDeleted": false,
+      "boundElements": [],
+      "updated": 1792236891535,
+      "link": null,
+      "locked": false,
+      "customData": {
+        "archdiff": "lane"
+      },
+      "index": "a0"
+    },
+    {
+      "id": "lane:extension:text",
+      "type": "text",
+      "x": 8,
+      "y": 4,
+      "width": 120,
+      "height": 20,
+      "angle": 0,
+      "strokeColor": "#1e1e1e",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "frameId": null,
+      "roundness": null,
+      "seed": 1583016149,
+      "version": 2,
+      "versionNonce": 1230099020,
+      "isDeleted": false,
+      "boundElements": [],
+      "updated": 1792236891535,
+      "link": null,
+      "locked": false,
+      "text": "extension",
+      "originalText": "extension",
+      "fontSize": 14,
+      "fontFamily": 1,
+      "textAlign": "left",
+      "verticalAlign": "top",
+      "containerId": null,
+      "lineHeight": 1.25,
+      "autoResize": true,
+      "customData": {
+        "archdiff": "label"
+      },
+      "index": "a1"
+    },
+    {
+      "id": "extension/news.js#showNews",
+      "type": "rectangle",
+      "x": 65,
+      "y": 37,
+      "width": 170,
+      "height": 56,
+      "angle": 0,
+      "strokeColor": "#1565c0",
+      "backgroundColor": "#e3f2fd",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "frameId": null,
+      "roundness": {
+        "type": 3
+      },
+      "seed": 1794179652,
+      "version": 2,
+      "versionNonce": 186927220,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "extension/news.js#showNews:text",
+          "type": "text"
+        }
+      ],
+      "updated": 1792236891535,
+      "link": null,
+      "locked": false,
+      "customData": {
+        "archdiff": "node",
+        "kind": "fn",
+        "file": "extension/news.js",
+        "line": 60,
+        "view": "archdiff://view/calls%3Aextension%2Fnews.js%23showNews"
+      },
+      "index": "a2"
+    },
+    {
+      "id": "extension/news.js#showNews:text",
+      "type": "text",
+      "x": 71,
+      "y": 57.5,
+      "width": 158,
+      "height": 15,
+      "angle": 0,
+      "strokeColor": "#1e1e1e",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "frameId": null,
+      "roundness": null,
+      "seed": 2056059985,
+      "version": 2,
+      "versionNonce": 1585031372,
+      "isDeleted": false,
+      "boundElements": [],
+      "updated": 1792236891535,
+      "link": null,
+      "locked": false,
+      "text": "showNews",
+      "originalText": "showNews",
+      "fontSize": 12,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "containerId": "extension/news.js#showNews",
+      "lineHeight": 1.25,
+      "autoResize": true,
+      "customData": {
+        "archdiff": "label"
+      },
+      "index": "a3"
+    },
+    {
+      "id": "extension/news.js#loadFeed",
+      "type": "rectangle",
+      "x": 325,
+      "y": 37,
+      "width": 170,
+      "height": 56,
+      "angle": 0,
+      "strokeColor": "#1565c0",
+      "backgroundColor": "#e3f2fd",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "frameId": null,
+      "roundness": {
+        "type": 3
+      },
+      "seed": 277589035,
+      "version": 2,
+      "versionNonce": 501946868,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "extension/news.js#loadFeed:text",
+          "type": "text"
+        }
+      ],
+      "updated": 1792236891535,
+      "link": null,
+      "locked": false,
+      "customData": {
+        "archdiff": "node",
+        "kind": "fn",
+        "file": "extension/news.js",
+        "line": 44,
+        "view": "archdiff://view/calls%3Aextension%2Fnews.js%23loadFeed"
+      },
+      "index": "a4"
+    },
+    {
+      "id": "extension/news.js#loadFeed:text",
+      "type": "text",
+      "x": 331,
+      "y": 57.5,
+      "width": 158,
+      "height": 15,
+      "angle": 0,
+      "strokeColor": "#1e1e1e",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "frameId": null,
+      "roundness": null,
+      "seed": 1989477128,
+      "version": 2,
+      "versionNonce": 1566748492,
+      "isDeleted": false,
+      "boundElements": [],
+      "updated": 1792236891535,
+      "link": null,
+      "locked": false,
+      "text": "loadFeed",
+      "originalText": "loadFeed",
+      "fontSize": 12,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "containerId": "extension/news.js#loadFeed",
+      "lineHeight": 1.25,
+      "autoResize": true,
+      "customData": {
+        "archdiff": "label"
+      },
+      "index": "a5"
+    },
+    {
+      "id": "extension/news.js#newerThan",
+      "type": "rectangle",
+      "x": 325,
+      "y": 127,
+      "width": 170,
+      "height": 56,
+      "angle": 0,
+      "strokeColor": "#1565c0",
+      "backgroundColor": "#e3f2fd",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "frameId": null,
+      "roundness": {
+        "type": 3
+      },
+      "seed": 995463669,
+      "version": 2,
+      "versionNonce": 584825716,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "extension/news.js#newerThan:text",
+          "type": "text"
+        }
+      ],
+      "updated": 1792236891535,
+      "link": null,
+      "locked": false,
+      "customData": {
+        "archdiff": "node",
+        "kind": "fn",
+        "file": "extension/news.js",
+        "line": 34,
+        "view": "archdiff://view/calls%3Aextension%2Fnews.js%23newerThan"
+      },
+      "index": "a6"
+    },
+    {
+      "id": "extension/news.js#newerThan:text",
+      "type": "text",
+      "x": 331,
+      "y": 147.5,
+      "width": 158,
+      "height": 15,
+      "angle": 0,
+      "strokeColor": "#1e1e1e",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "frameId": null,
+      "roundness": null,
+      "seed": 1226346401,
+      "version": 2,
+      "versionNonce": 1449584076,
+      "isDeleted": false,
+      "boundElements": [],
+      "updated": 1792236891535,
+      "link": null,
+      "locked": false,
+      "text": "newerThan",
+      "originalText": "newerThan",
+      "fontSize": 12,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "containerId": "extension/news.js#newerThan",
+      "lineHeight": 1.25,
+      "autoResize": true,
+      "customData": {
+        "archdiff": "label"
+      },
+      "index": "a7"
+    },
+    {
+      "id": "extension/news.js#renderUpdate",
+      "type": "rectangle",
+      "x": 325,
+      "y": 217,
+      "width": 170,
+      "height": 56,
+      "angle": 0,
+      "strokeColor": "#1565c0",
+      "backgroundColor": "#e3f2fd",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "frameId": null,
+      "roundness": {
+        "type": 3
+      },
+      "seed": 2013017704,
+      "version": 2,
+      "versionNonce": 1413229812,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "extension/news.js#renderUpdate:text",
+          "type": "text"
+        }
+      ],
+      "updated": 1792236891535,
+      "link": null,
+      "locked": false,
+      "customData": {
+        "archdiff": "node",
+        "kind": "fn",
+        "file": "extension/news.js",
+        "line": 114,
+        "view": "archdiff://view/calls%3Aextension%2Fnews.js%23renderUpdate"
+      },
+      "index": "a8"
+    },
+    {
+      "id": "extension/news.js#renderUpdate:text",
+      "type": "text",
+      "x": 331,
+      "y": 237.5,
+      "width": 158,
+      "height": 15,
+      "angle": 0,
+      "strokeColor": "#1e1e1e",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "frameId": null,
+      "roundness": null,
+      "seed": 802581024,
+      "version": 2,
+      "versionNonce": 1050692684,
+      "isDeleted": false,
+      "boundElements": [],
+      "updated": 1792236891535,
+      "link": null,
+      "locked": false,
+      "text": "renderUpdate",
+      "originalText": "renderUpdate",
+      "fontSize": 12,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "containerId": "extension/news.js#renderUpdate",
+      "lineHeight": 1.25,
+      "autoResize": true,
+      "customData": {
+        "archdiff": "label"
+      },
+      "index": "a9"
+    },
+    {
+      "id": "extension/news.js#renderItem",
+      "type": "rectangle",
+      "x": 325,
+      "y": 307,
+      "width": 170,
+      "height": 56,
+      "angle": 0,
+      "strokeColor": "#1565c0",
+      "backgroundColor": "#e3f2fd",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "frameId": null,
+      "roundness": {
+        "type": 3
+      },
+      "seed": 355534750,
+      "version": 2,
+      "versionNonce": 865234548,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "extension/news.js#renderItem:text",
+          "type": "text"
+        }
+      ],
+      "updated": 1792236891535,
+      "link": null,
+      "locked": false,
+      "customData": {
+        "archdiff": "node",
+        "kind": "fn",
+        "file": "extension/news.js",
+        "line": 144,
+        "view": "archdiff://view/calls%3Aextension%2Fnews.js%23renderItem"
+      },
+      "index": "aA"
+    },
+    {
+      "id": "extension/news.js#renderItem:text",
+      "type": "text",
+      "x": 331,
+      "y": 327.5,
+      "width": 158,
+      "height": 15,
+      "angle": 0,
+      "strokeColor": "#1e1e1e",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "frameId": null,
+      "roundness": null,
+      "seed": 1381989215,
+      "version": 2,
+      "versionNonce": 1474880204,
+      "isDeleted": false,
+      "boundElements": [],
+      "updated": 1792236891535,
+      "link": null,
+      "locked": false,
+      "text": "renderItem",
+      "originalText": "renderItem",
+      "fontSize": 12,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "containerId": "extension/news.js#renderItem",
+      "lineHeight": 1.25,
+      "autoResize": true,
+      "customData": {
+        "archdiff": "label"
+      },
+      "index": "aB"
+    },
+    {
+      "id": "extension/news.js#banner",
+      "type": "rectangle",
+      "x": 585,
+      "y": 37,
+      "width": 170,
+      "height": 56,
+      "angle": 0,
+      "strokeColor": "#1565c0",
+      "backgroundColor": "#e3f2fd",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "frameId": null,
+      "roundness": {
+        "type": 3
+      },
+      "seed": 775418032,
+      "version": 2,
+      "versionNonce": 564428788,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "extension/news.js#banner:text",
+          "type": "text"
+        }
+      ],
+      "updated": 1792236891535,
+      "link": null,
+      "locked": false,
+      "customData": {
+        "archdiff": "node",
+        "kind": "fn",
+        "file": "extension/news.js",
+        "line": 87,
+        "view": "archdiff://view/calls%3Aextension%2Fnews.js%23banner"
+      },
+      "index": "aC"
+    },
+    {
+      "id": "extension/news.js#banner:text",
+      "type": "text",
+      "x": 591,
+      "y": 57.5,
+      "width": 158,
+      "height": 15,
+      "angle": 0,
+      "strokeColor": "#1e1e1e",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "frameId": null,
+      "roundness": null,
+      "seed": 844944669,
+      "version": 2,
+      "versionNonce": 416983372,
+      "isDeleted": false,
+      "boundElements": [],
+      "updated": 1792236891535,
+      "link": null,
+      "locked": false,
+      "text": "banner",
+      "originalText": "banner",
+      "fontSize": 12,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "containerId": "extension/news.js#banner",
+      "lineHeight": 1.25,
+      "autoResize": true,
+      "customData": {
+        "archdiff": "label"
+      },
+      "index": "aD"
+    },
+    {
+      "id": "extension/news.js#link",
+      "type": "rectangle",
+      "x": 585,
+      "y": 127,
+      "width": 170,
+      "height": 56,
+      "angle": 0,
+      "strokeColor": "#1565c0",
+      "backgroundColor": "#e3f2fd",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "frameId": null,
+      "roundness": {
+        "type": 3
+      },
+      "seed": 1416173539,
+      "version": 2,
+      "versionNonce": 1987600756,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "extension/news.js#link:text",
+          "type": "text"
+        }
+      ],
+      "updated": 1792236891535,
+      "link": null,
+      "locked": false,
+      "customData": {
+        "archdiff": "node",
+        "kind": "fn",
+        "file": "extension/news.js",
+        "line": 105,
+        "view": "archdiff://view/calls%3Aextension%2Fnews.js%23link"
+      },
+      "index": "aE"
+    },
+    {
+      "id": "extension/news.js#link:text",
+      "type": "text",
+      "x": 591,
+      "y": 147.5,
+      "width": 158,
+      "height": 15,
+      "angle": 0,
+      "strokeColor": "#1e1e1e",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "frameId": null,
+      "roundness": null,
+      "seed": 149596111,
+      "version": 2,
+      "versionNonce": 349151180,
+      "isDeleted": false,
+      "boundElements": [],
+      "updated": 1792236891535,
+      "link": null,
+      "locked": false,
+      "text": "link",
+      "originalText": "link",
+      "fontSize": 12,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "containerId": "extension/news.js#link",
+      "lineHeight": 1.25,
+      "autoResize": true,
+      "customData": {
+        "archdiff": "label"
+      },
+      "index": "aF"
+    },
+    {
+      "id": "extension/news.js#tr",
+      "type": "rectangle",
+      "x": 585,
+      "y": 217,
+      "width": 170,
+      "height": 56,
+      "angle": 0,
+      "strokeColor": "#1565c0",
+      "backgroundColor": "#e3f2fd",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "frameId": null,
+      "roundness": {
+        "type": 3
+      },
+      "seed": 356871640,
+      "version": 2,
+      "versionNonce": 424940276,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "extension/news.js#tr:text",
+          "type": "text"
+        }
+      ],
+      "updated": 1792236891535,
+      "link": null,
+      "locked": false,
+      "customData": {
+        "archdiff": "node",
+        "kind": "fn",
+        "file": "extension/news.js",
+        "line": 10,
+        "view": "archdiff://view/calls%3Aextension%2Fnews.js%23tr"
+      },
+      "index": "aG"
+    },
+    {
+      "id": "extension/news.js#tr:text",
+      "type": "text",
+      "x": 591,
+      "y": 237.5,
+      "width": 158,
+      "height": 15,
+      "angle": 0,
+      "strokeColor": "#1e1e1e",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "frameId": null,
+      "roundness": null,
+      "seed": 819698261,
+      "version": 2,
+      "versionNonce": 1675740748,
+      "isDeleted": false,
+      "boundElements": [],
+      "updated": 1792236891535,
+      "link": null,
+      "locked": false,
+      "text": "tr",
+      "originalText": "tr",
+      "fontSize": 12,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "containerId": "extension/news.js#tr",
+      "lineHeight": 1.25,
+      "autoResize": true,
+      "customData": {
+        "archdiff": "label"
+      },
+      "index": "aH"
+    },
+    {
+      "id": "edge:extension/news.js#showNews->extension/news.js#loadFeed",
+      "type": "arrow",
+      "x": 235,
+      "y": 45.4,
+      "width": 90,
+      "height": 19.6,
+      "angle": 0,
+      "strokeColor": "#1565c0",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "frameId": null,
+      "roundness": null,
+      "seed": 1411432019,
+      "version": 2,
+      "versionNonce": 415077492,
+      "isDeleted": false,
+      "boundElements": [],
+      "updated": 1792236891535,
+      "link": null,
+      "locked": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          18,
+          0
+        ],
+        [
+          18,
+          19.6
+        ],
+        [
+          90,
+          19.6
+        ]
+      ],
+      "startBinding": null,
+      "endBinding": null,
+      "startArrowhead": null,
+      "endArrowhead": "arrow",
+      "elbowed": false,
+      "customData": {
+        "archdiff": "edge",
+        "kind": "call"
+      },
+      "index": "aI",
+      "lastCommittedPoint": null
+    },
+    {
+      "id": "edge:extension/news.js#showNews->extension/news.js#newerThan",
+      "type": "arrow",
+      "x": 235,
+      "y": 58.46666666666666,
+      "width": 90,
+      "height": 96.53333333333333,
+      "angle": 0,
+      "strokeColor": "#1565c0",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "frameId": null,
+      "roundness": null,
+      "seed": 1538345152,
+      "version": 2,
+      "versionNonce": 183180492,
+      "isDeleted": false,
+      "boundElements": [],
+      "updated": 1792236891535,
+      "link": null,
+      "locked": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          36,
+          0
+        ],
+        [
+          36,
+          96.53333333333333
+        ],
+        [
+          90,
+          96.53333333333333
+        ]
+      ],
+      "startBinding": null,
+      "endBinding": null,
+      "startArrowhead": null,
+      "endArrowhead": "arrow",
+      "elbowed": false,
+      "customData": {
+        "archdiff": "edge",
+        "kind": "call"
+      },
+      "index": "aJ",
+      "lastCommittedPoint": null
+    },
+    {
+      "id": "edge:extension/news.js#showNews->extension/news.js#renderUpdate",
+      "type": "arrow",
+      "x": 235,
+      "y": 71.53333333333333,
+      "width": 90,
+      "height": 173.46666666666667,
+      "angle": 0,
+      "strokeColor": "#1565c0",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "frameId": null,
+      "roundness": null,
+      "seed": 4909251,
+      "version": 2,
+      "versionNonce": 1115350516,
+      "isDeleted": false,
+      "boundElements": [],
+      "updated": 1792236891535,
+      "link": null,
+      "locked": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          54,
+          0
+        ],
+        [
+          54,
+          173.46666666666667
+        ],
+        [
+          90,
+          173.46666666666667
+        ]
+      ],
+      "startBinding": null,
+      "endBinding": null,
+      "startArrowhead": null,
+      "endArrowhead": "arrow",
+      "elbowed": false,
+      "customData": {
+        "archdiff": "edge",
+        "kind": "call"
+      },
+      "index": "aK",
+      "lastCommittedPoint": null
+    },
+    {
+      "id": "edge:extension/news.js#showNews->extension/news.js#renderItem",
+      "type": "arrow",
+      "x": 235,
+      "y": 84.6,
+      "width": 90,
+      "height": 250.4,
+      "angle": 0,
+      "strokeColor": "#1565c0",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "frameId": null,
+      "roundness": null,
+      "seed": 315786053,
+      "version": 2,
+      "versionNonce": 1669702476,
+      "isDeleted": false,
+      "boundElements": [],
+      "updated": 1792236891535,
+      "link": null,
+      "locked": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          72,
+          0
+        ],
+        [
+          72,
+          250.4
+        ],
+        [
+          90,
+          250.4
+        ]
+      ],
+      "startBinding": null,
+      "endBinding": null,
+      "startArrowhead": null,
+      "endArrowhead": "arrow",
+      "elbowed": false,
+      "customData": {
+        "archdiff": "edge",
+        "kind": "call"
+      },
+      "index": "aL",
+      "lastCommittedPoint": null
+    },
+    {
+      "id": "edge:extension/news.js#renderUpdate->extension/news.js#banner",
+      "type": "arrow",
+      "x": 495,
+      "y": 225.4,
+      "width": 90,
+      "height": 180,
+      "angle": 0,
+      "strokeColor": "#1565c0",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "frameId": null,
+      "roundness": null,
+      "seed": 664946939,
+      "version": 2,
+      "versionNonce": 999425908,
+      "isDeleted": false,
+      "boundElements": [],
+      "updated": 1792236891535,
+      "link": null,
+      "locked": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          18,
+          0
+        ],
+        [
+          18,
+          -180
+        ],
+        [
+          90,
+          -180
+        ]
+      ],
+      "startBinding": null,
+      "endBinding": null,
+      "startArrowhead": null,
+      "endArrowhead": "arrow",
+      "elbowed": false,
+      "customData": {
+        "archdiff": "edge",
+        "kind": "call"
+      },
+      "index": "aM",
+      "lastCommittedPoint": null
+    },
+    {
+      "id": "edge:extension/news.js#renderUpdate->extension/news.js#link",
+      "type": "arrow",
+      "x": 495,
+      "y": 264.6,
+      "width": 90,
+      "height": 129.20000000000002,
+      "angle": 0,
+      "strokeColor": "#1565c0",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "frameId": null,
+      "roundness": null,
+      "seed": 2121991205,
+      "version": 2,
+      "versionNonce": 67852748,
+      "isDeleted": false,
+      "boundElements": [],
+      "updated": 1792236891535,
+      "link": null,
+      "locked": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          31.5,
+          0
+        ],
+        [
+          31.5,
+          -129.20000000000002
+        ],
+        [
+          90,
+          -129.20000000000002
+        ]
+      ],
+      "startBinding": null,
+      "endBinding": null,
+      "startArrowhead": null,
+      "endArrowhead": "arrow",
+      "elbowed": false,
+      "customData": {
+        "archdiff": "edge",
+        "kind": "call"
+      },
+      "index": "aN",
+      "lastCommittedPoint": null
+    },
+    {
+      "id": "edge:extension/news.js#renderItem->extension/news.js#banner",
+      "type": "arrow",
+      "x": 495,
+      "y": 315.4,
+      "width": 90,
+      "height": 230.79999999999998,
+      "angle": 0,
+      "strokeColor": "#1565c0",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "frameId": null,
+      "roundness": null,
+      "seed": 239672281,
+      "version": 2,
+      "versionNonce": 407435508,
+      "isDeleted": false,
+      "boundElements": [],
+      "updated": 1792236891535,
+      "link": null,
+      "locked": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          45,
+          0
+        ],
+        [
+          45,
+          -230.79999999999998
+        ],
+        [
+          90,
+          -230.79999999999998
+        ]
+      ],
+      "startBinding": null,
+      "endBinding": null,
+      "startArrowhead": null,
+      "endArrowhead": "arrow",
+      "elbowed": false,
+      "customData": {
+        "archdiff": "edge",
+        "kind": "call"
+      },
+      "index": "aO",
+      "lastCommittedPoint": null
+    },
+    {
+      "id": "edge:extension/news.js#renderItem->extension/news.js#tr",
+      "type": "arrow",
+      "x": 495,
+      "y": 354.59999999999997,
+      "width": 90,
+      "height": 109.59999999999997,
+      "angle": 0,
+      "strokeColor": "#1565c0",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "frameId": null,
+      "roundness": null,
+      "seed": 956318081,
+      "version": 2,
+      "versionNonce": 664158284,
+      "isDeleted": false,
+      "boundElements": [],
+      "updated": 1792236891535,
+      "link": null,
+      "locked": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          72,
+          0
+        ],
+        [
+          72,
+          -109.59999999999997
+        ],
+        [
+          90,
+          -109.59999999999997
+        ]
+      ],
+      "startBinding": null,
+      "endBinding": null,
+      "startArrowhead": null,
+      "endArrowhead": "arrow",
+      "elbowed": false,
+      "customData": {
+        "archdiff": "edge",
+        "kind": "call"
+      },
+      "index": "aP",
+      "lastCommittedPoint": null
+    },
+    {
+      "id": "edge:extension/news.js#renderItem->extension/news.js#link",
+      "type": "arrow",
+      "x": 495,
+      "y": 335,
+      "width": 90,
+      "height": 160.4,
+      "angle": 0,
+      "strokeColor": "#1565c0",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "frameId": null,
+      "roundness": null,
+      "seed": 201676011,
+      "version": 2,
+      "versionNonce": 1948629620,
+      "isDeleted": false,
+      "boundElements": [],
+      "updated": 1792236891535,
+      "link": null,
+      "locked": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          58.5,
+          0
+        ],
+        [
+          58.5,
+          -160.4
+        ],
+        [
+          90,
+          -160.4
+        ]
+      ],
+      "startBinding": null,
+      "endBinding": null,
+      "startArrowhead": null,
+      "endArrowhead": "arrow",
+      "elbowed": false,
+      "customData": {
+        "archdiff": "edge",
+        "kind": "call"
+      },
+      "index": "aQ",
+      "lastCommittedPoint": null
+    }
+  ],
+  "mocks": [],
+  "saved": "2026-10-17T11:35:08.910Z"
+}

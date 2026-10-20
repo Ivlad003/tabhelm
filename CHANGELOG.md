@@ -2,6 +2,12 @@
 
 All notable changes to TabHelm. The newest release is at the top; the panel's update banner links here.
 
+## [0.27.1] - 2026-10-20
+
+### Fixed
+- **Auto-approve now covers TabHelm's own routine confirmations** — JavaScript on the page, using another tab, cookies/storage changes, saved scripts, guide auto-play — and logs them as *✓ Auto-approved* steps. Uploading files from disk and the opt-in safety gates (sensitive actions, site rules, critic) still ask.
+- **Recording follows the agent across tabs:** when the agent acts on another tab (also via `tabId` without switching), that tab comes to the front and the video continues there; before, background tabs were not captured.
+
 ## [0.27.0] - 2026-10-15
 
 ### Added
