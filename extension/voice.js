@@ -64,7 +64,11 @@ async function start(source) {
   let stream;
   if (source === 'tab') {
     const reply = await request({ type: 'tab_capture_id' });
-    if (reply.error) throw new Error(`Cannot capture the tab's audio: ${reply.error}`);
+    if (reply.error) {
+      // Chrome lets an extension capture a tab only after you clicked its icon on that tab.
+      const hint = /activeTab|not been invoked/i.test(reply.error) ? 'click the TabHelm icon on that tab once (Chrome needs it before an extension may capture a tab), then try again.' : reply.error;
+      throw new Error(`Cannot capture the tab's audio: ${hint}`);
+    }
     stream = await navigator.mediaDevices.getUserMedia({ audio: { mandatory: { chromeMediaSource: 'tab', chromeMediaSourceId: reply.streamId } }, video: false });
     // Capturing mutes the tab for the user; play the audio back.
     state.ctx = new AudioContext();

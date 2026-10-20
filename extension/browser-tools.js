@@ -526,6 +526,17 @@ export async function previewTarget(chatTabId, tool, args) {
 // ---------- dispatcher ----------
 
 export async function runTool(chatTabId, tool, args, ui) {
+  if (!args || typeof args !== 'object' || Array.isArray(args)) args = {};
+  try {
+    return await runToolInner(chatTabId, tool, args, ui);
+  } catch (err) {
+    // Wrong argument types surface as a clear message for the agent, not as internals.
+    if (err instanceof TypeError) throw new Error(`Invalid arguments for ${tool} (${err.message}). Check the tool's parameters and try again.`);
+    throw err;
+  }
+}
+
+async function runToolInner(chatTabId, tool, args, ui) {
   const c = chatState(chatTabId);
   let result;
   if (tool === 'browser_tabs') result = await tabsTool(c, args, ui);
@@ -959,6 +970,7 @@ async function runPageTool(tabId, tab, tool, args, ui, chatTabId) {
     // ---- Developer tools flag ----
     case 'browser_fill_form': {
       await requireFlag('devTools', 'Developer tools');
+      if (!Array.isArray(args.fields) || !args.fields.length || args.fields.some((f) => !f || typeof f !== 'object')) throw new Error('browser_fill_form needs fields: [{ ref, value }, …].');
       const done = [];
       for (const [i, f] of args.fields.entries()) {
         const loc = await locate(tabId, f.ref);
@@ -1063,6 +1075,7 @@ async function runPageTool(tabId, tab, tool, args, ui, chatTabId) {
 
     case 'browser_highlight': {
       await requireFlag('devTools', 'Developer tools');
+      if (!Array.isArray(args.refs) || !args.refs.length) throw new Error('browser_highlight needs refs: ["e12", …].');
       const byFrame = new Map();
       for (const r of args.refs) {
         const { frameId, ref } = parseRef(r);

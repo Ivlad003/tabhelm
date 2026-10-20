@@ -487,7 +487,7 @@ Load `extension/` unpacked in Chrome. After editing extension files press ↻ on
 | Command (in `host/`) | What it checks |
 |---|---|
 | `npm run smoke -- claude` | host + agent without Chrome (fake page); any agent id |
-| `npm run test:tools` | every browser tool against a fixture page in headless Chrome (46 checks) |
+| `npm run test:tools` | every browser tool against a fixture page in headless Chrome (70+ checks) |
 | `npm run e2e -- claude` | panel → agent → fills a real form in headless Chrome |
 | `E2E_MODEL=haiku npm run e2e -- claude` | same, plus model switching and restore |
 | `E2E_RECORD=1 E2E_SWITCH=opencode npm run e2e -- claude` | same, plus video recording, agent hand-over and New chat |
@@ -497,6 +497,8 @@ Load `extension/` unpacked in Chrome. After editing extension files press ↻ on
 | `E2E_HISTORY=1 npm run e2e -- claude` | steps block, saved history, reopening a chat (tab goes back to its page), continuing it, restore after reopening the panel |
 | `E2E_INTERJECT=1 npm run e2e -- claude` | a message typed during the task reaches the agent with its next tool result |
 | `E2E_RELAY=1 npm run e2e -- claude` | starts a relay and a second host in relay mode, pairs the panel with the printed code and runs the task through it |
+| `TABHELM_RELEASE=../dist/tabhelm-x.y.z npm run e2e -- claude` | the same task against a built release (no test hooks: connects by sending, like a user) |
+| `npm run test:monkey -- [seed] [steps]` | monkey test: garbage native-messaging frames and every host message type, relay floods and oversized frames, every browser tool with random arguments, random clicks/typing/keys in the panel talking to a mock agent. Runs with a temporary HOME and no DISPLAY; reports crashes, hangs and uncaught errors; replay a run with its seed |
 | `E2E_FOLDER=1 npm run e2e -- claude` | binds a project folder (AGENTS.md + skill) and checks the agent follows it and creates a file there |
 | `E2E_ATTACH=1 npm run e2e -- claude` | attaches an image and a CSV and checks the agent reads both |
 | `E2E_SKILLS=1 npm run e2e -- claude` | adds a skill in Settings and checks the agent reads and follows it |

@@ -2,6 +2,21 @@
 
 All notable changes to TabHelm. The newest release is at the top; the panel's update banner links here.
 
+## [0.27.2] - 2026-10-20
+
+Fixes from a full smoke / end-to-end / monkey test pass (`npm run test:monkey` is new).
+
+### Fixed
+- **Relay crash:** one oversized or malformed WebSocket frame from any client — even without the key — took the whole relay down. Socket errors now close only that socket.
+- **Relay rate limit** used the first `X-Forwarded-For` entry, which a client can forge; it now uses the address the proxy appends.
+- **Path traversal in recordings:** the recording id was used in a file name unchecked; ids are now validated so nothing can be written outside the recordings folder.
+- **Lost messages after New chat / switching agents:** a message sent while the new agent was still starting could overtake the start and fail with "No agent is connected" or "Invalid params". Messages now wait for the start (and for sign-in) to finish.
+- Stopping, New chat or switching agents during a reply no longer shows a red "ACP connection closed" error.
+- Changing the model while the agent is starting no longer fails with "No agent session"; the choice is applied once the session is ready.
+- Browser tools return clear "Invalid arguments" errors instead of internal TypeErrors (`browser_fill_form`, `browser_highlight` and any tool given wrong argument types); the host ignores non-object messages and validates `critic` / `save_recording` input.
+- Clearer texts: no more "press Connect" (there is no Connect button), and tab-audio capture explains that the TabHelm icon must be clicked on that tab first.
+- The end-to-end test runs against built releases (it no longer needs the stripped test hook).
+
 ## [0.27.1] - 2026-10-20
 
 ### Fixed

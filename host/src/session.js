@@ -45,6 +45,8 @@ export class AgentSession {
     Object.assign(this, { tabId, agent, toolServer, workspace, send, log });
     this.autoApprove = false;
     this.pendingPermissions = new Map();
+    // Resolves once the ACP session exists (after start, or after signing in).
+    this.ready = new Promise((resolve) => (this.markReady = resolve));
     this.nextPermissionId = 1;
     this.firstPrompt = true;
     this.busy = false;
@@ -89,7 +91,7 @@ export class AgentSession {
       this.connection.initialize({
         protocolVersion: acp.PROTOCOL_VERSION,
         clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false },
-        clientInfo: { name: 'tabhelm', version: '0.27.1' },
+        clientInfo: { name: 'tabhelm', version: '0.27.2' },
       }),
       this.exited.then(() => {
         throw new Error(`${agent.name} exited during startup. Check that it is installed and logged in.`);
@@ -122,8 +124,11 @@ export class AgentSession {
     try {
       const session = await this.connection.newSession({ cwd: this.folder || this.workspace, mcpServers: this.mcpServers });
       this.sessionId = session.sessionId;
+      this.markReady();
       this.configOptions = session.configOptions || [];
       await this.applyDefaultModel();
+      for (const [id, value] of Object.entries(this.pendingConfig || {})) await this.setConfigOption(id, value).catch((err) => this.log(`config ${id} after start: ${err.message}`));
+      this.pendingConfig = null;
     } catch (err) {
       if (err?.code === -32000 && this.authMethods.length) {
         this.emit({
@@ -178,7 +183,11 @@ export class AgentSession {
   }
 
   async setConfigOption(configId, value) {
-    if (!this.sessionId) throw new Error('No agent session');
+    // Picked while the agent is still starting: applied as soon as the session exists.
+    if (!this.sessionId) {
+      this.pendingConfig = { ...(this.pendingConfig || {}), [configId]: value };
+      return;
+    }
     try {
       const res = await this.connection.setSessionConfigOption({ sessionId: this.sessionId, configId, value });
       this.configOptions = res.configOptions || this.configOptions;
@@ -242,6 +251,12 @@ export class AgentSession {
 
   async prompt(text, context, attachments = []) {
     if (this.busy) throw new Error('Agent is still working on the previous message');
+    // Sent while the agent is still starting or waiting for a sign-in: wait for it.
+    if (!this.sessionId) {
+      const timeout = new Promise((resolve) => setTimeout(resolve, 120_000));
+      await Promise.race([this.ready, timeout]);
+      if (!this.sessionId) throw new Error('The agent is not ready yet — finish signing in (or wait for it to start), then send the message again.');
+    }
     this.busy = true;
     const history = context ? `Earlier in this chat (with another agent), for context:\n${context}\n\n` : '';
     let skills = '';

@@ -1854,7 +1854,7 @@ async function openSavedChat(id, { navigate = false } = {}) {
     notice(`Continuing with ${connectedAgent?.name}; it gets this conversation as context.`);
     startAgent(els.agent.value);
   } else {
-    notice('Chat restored. Pick an agent and press Connect to continue — it gets this conversation as context.');
+    notice('Chat restored. Send a message to continue — the selected agent gets this conversation as context.');
   }
 }
 

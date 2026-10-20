@@ -360,8 +360,11 @@ if (process.env.E2E_MODEL_PLACEHOLDER) {
   const inSettings = await panel.$$eval('#config-extra select.model', (s) => s.length);
   console.log('model select after click:', await panel.$eval('#config select.model', (e) => e.selectedOptions[0].text), '| also in Settings:', inSettings === 1);
 }
-// E2E_LAZY=1: no explicit connect — the first Send starts the agent.
-if (process.env.E2E_LAZY) {
+// E2E_LAZY=1: no explicit connect — the first Send starts the agent. A built
+// release has no test hook (window.tabhelmTest is stripped), so it always goes
+// this way, like a real user.
+const hasHook = await panel.evaluate(() => Boolean(window.tabhelmTest));
+if (process.env.E2E_LAZY || !hasHook) {
   await panel.type('#input', 'Fill this form: name "Ada Lovelace", color Blue, tick the agreement checkbox, then click Save and tell me the exact confirmation text shown.');
   await panel.click('#send');
 } else await panel.evaluate(() => window.tabhelmTest.connect());
@@ -407,7 +410,7 @@ if (process.env.E2E_RECORD) {
   await panel.click('#record');
   await panel.click('#plus-menu summary');
 }
-if (!process.env.E2E_LAZY) {
+if (!process.env.E2E_LAZY && hasHook) {
   await panel.type('#input', 'Fill this form: name "Ada Lovelace", color Blue, tick the agreement checkbox, then click Save and tell me the exact confirmation text shown.');
   await panel.click('#send');
 }

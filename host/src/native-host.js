@@ -128,7 +128,25 @@ log(`host started, tool server ${toolServer.url}`);
 const hostVersion = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
 send({ type: 'agents', agents: listAgents(), hostVersion, remote: relayMode ? { name: argValue('--name') || process.env.TABHELM_RELAY_NAME || hostname() } : null });
 
+// Messages are handled concurrently, so a prompt sent right after `start` (New
+// chat, switching agents, the first message) could overtake the start and find
+// no session. Messages for a tab wait for its start to finish; stop and cancel do not.
+const starting = new Map(); // tabId -> promise of the running start
+
 async function handleMessage(msg) {
+  if (!msg || typeof msg !== 'object' || Array.isArray(msg)) return; // not a message
+  const { tabId } = msg;
+  if (msg.type === 'start') {
+    const run = handleMessageNow(msg);
+    starting.set(tabId, run);
+    run.finally(() => starting.get(tabId) === run && starting.delete(tabId));
+    return run;
+  }
+  if (starting.has(tabId) && !['stop', 'cancel', 'ping', 'list_agents', 'tool_result'].includes(msg.type)) await starting.get(tabId).catch(() => {});
+  return handleMessageNow(msg);
+}
+
+async function handleMessageNow(msg) {
   const { tabId } = msg;
   try {
     switch (msg.type) {
@@ -157,6 +175,12 @@ async function handleMessage(msg) {
         try {
           await session.start();
         } catch (err) {
+          // Replaced or stopped while starting (New chat, another agent, panel
+          // closed): the user asked for that, so the broken start is not an error.
+          if (sessions.get(tabId) !== session) {
+            await session.dispose();
+            break;
+          }
           sessions.delete(tabId);
           await session.dispose();
           throw err;
@@ -166,7 +190,12 @@ async function handleMessage(msg) {
 
       case 'prompt': {
         const session = requireSession(tabId);
-        session.prompt(msg.text, msg.context, msg.attachments).catch((err) => send({ type: 'error', tabId, message: err.message || String(err) }));
+        session.prompt(msg.text, msg.context, msg.attachments).catch((err) => {
+          // A prompt cut off because the user stopped or replaced the agent is not an error.
+          if (session.disposed || sessions.get(tabId) !== session) return;
+          log(`prompt failed for tab ${tabId}: ${err.message || err}${err.data ? ` ${JSON.stringify(err.data).slice(0, 1500)}` : ''}`);
+          send({ type: 'error', tabId, message: err.message || String(err) });
+        });
         break;
       }
 
@@ -206,6 +235,7 @@ async function handleMessage(msg) {
 
       // Action critic (extension asks before running a page-changing tool).
       case 'critic': {
+        if (!msg.action || typeof msg.action !== 'object') throw new Error('critic needs an action');
         const s = msg.settings || {};
         const verdict = await reviewAction({ provider: s.provider || 'openrouter', model: s.model, ...msg.action });
         send({ type: 'critic_result', tabId, requestId: msg.requestId, ...verdict });
@@ -372,6 +402,9 @@ async function handleMessage(msg) {
 // Recordings arrive in chunks: Chrome -> host messages may be large, but a
 // long video can still exceed the 64 MB per-message limit.
 function saveRecordingChunk({ tabId, id, filename, seq, last, data }) {
+  // The id becomes part of a file name: only plain ids, so nothing is written outside the folder.
+  if (!/^[\w-]{1,80}$/.test(String(id ?? ''))) throw new Error('Bad recording id');
+  if (typeof data !== 'string') throw new Error('Recording chunk must be base64 text');
   const safeName = /^[\w.-]{1,100}\.(webm|mp4)$/.test(filename || '') ? filename : `tabhelm-${Date.now()}.webm`;
   mkdirSync(recordingsDir, { recursive: true });
   const partial = join(recordingsDir, `.${id}.part`);
@@ -406,7 +439,7 @@ async function loadSkills(tabId, urls = [], folder = null, inline = []) {
 
 function requireSession(tabId) {
   const session = sessions.get(tabId);
-  if (!session) throw new Error('No agent is connected for this tab. Pick an agent and press Connect.');
+  if (!session) throw new Error('No agent is connected for this tab yet. Send a message to start the selected agent.');
   return session;
 }
 

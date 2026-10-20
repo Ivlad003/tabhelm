@@ -49,9 +49,17 @@ const server = http.createServer((req, res) => {
 });
 const wss = new WebSocketServer({ server, maxPayload: MAX_PAYLOAD });
 
+// A bad frame (too large, invalid UTF-8, protocol error) from any client must
+// only close that socket, never crash the relay for everyone.
+wss.on('error', (err) => console.error(`relay server error: ${err.message}`));
+server.on('clientError', (err, socket) => socket.destroy());
+
 wss.on('connection', (ws, req) => {
+  ws.on('error', () => ws.terminate());
   const url = new URL(req.url, 'http://x');
-  const ip = req.headers['x-forwarded-for']?.split(',')[0].trim() || req.socket.remoteAddress;
+  // Behind Traefik/Dokploy the proxy appends the real client address as the LAST
+  // X-Forwarded-For entry; earlier entries come from the client and can be forged.
+  const ip = req.headers['x-forwarded-for']?.split(',').pop().trim() || req.socket.remoteAddress;
   ws.isAlive = true;
   ws.on('pong', () => (ws.isAlive = true));
 
