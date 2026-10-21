@@ -209,13 +209,24 @@ await sw.evaluate(() => chrome.storage.local.set({ highlightFinds: true }));
 
 // --- Auto-play guide: the agent clicks the steps itself after the pause
 {
-  await sw.evaluate(() => chrome.storage.local.set({ guidePause: 1 }));
+  // Auto-play is a setting: off → auto:true runs manually and nothing pops up.
+  await sw.evaluate(() => chrome.storage.local.set({ guidePause: 1, guideAutoPlay: false }));
+  snap = await tool('browser_snapshot');
+  const manual = tool('browser_guide', { auto: true, steps: [{ ref: refFor(snap.text, 'Pick A'), text: 'Press A' }] });
+  await page.waitForFunction(() => document.getElementById('tabhelm-guide'), { timeout: 5000 });
+  await new Promise((x) => setTimeout(x, 1800));
+  const bubbleText = await page.evaluate(() => document.getElementById('tabhelm-guide').shadowRoot.querySelector('.bubble').textContent);
+  await page.evaluate(() => [...document.getElementById('tabhelm-guide').shadowRoot.querySelectorAll('button')].find((b) => /Finish/.test(b.textContent)).click());
+  const mr = await manual;
+  check('auto-play off: auto:true waits for the user, no prompt, agent told why', /▶ Auto/.test(bubbleText) && /done/.test(mr.text) && /Auto-play is off/.test(mr.text), `${bubbleText} | ${mr.text}`);
+  await sw.evaluate(() => chrome.storage.local.set({ guideAutoPlay: true }));
   snap = await tool('browser_snapshot');
   const before = await results();
   const t0 = Date.now();
-  const r = await tool('browser_guide', { auto: true, steps: [{ ref: refFor(snap.text, 'Pick A'), text: 'Press A' }, { ref: refFor(snap.text, 'Pick B'), text: 'Press B' }] });
+  const r = await tool('browser_guide', { steps: [{ ref: refFor(snap.text, 'Pick A'), text: 'Press A' }, { ref: refFor(snap.text, 'Pick B'), text: 'Press B' }] }, { allow: false });
   const after = await results();
-  check('auto guide clicks every step after a pause', r.ok && /auto-clicked[\s\S]*auto-clicked/.test(r.text) && (after.pickA || 0) === (before.pickA || 0) + 1 && (after.pickB || 0) === (before.pickB || 0) + 1 && Date.now() - t0 >= 2000, `${r.text} ${JSON.stringify(after)} ${Date.now() - t0}ms`);
+  await sw.evaluate(() => chrome.storage.local.set({ guideAutoPlay: false }));
+  check('auto-play setting on: the guide plays by itself without any prompt', r.ok && /auto-clicked[\s\S]*auto-clicked/.test(r.text) && (after.pickA || 0) === (before.pickA || 0) + 1 && (after.pickB || 0) === (before.pickB || 0) + 1 && Date.now() - t0 >= 2000, `${r.text} ${JSON.stringify(after)} ${Date.now() - t0}ms`);
 }
 
 // --- Element picker: one element by click, several by dragging a rectangle

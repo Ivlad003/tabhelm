@@ -502,6 +502,15 @@ export function webStorage(kind, action, key, value) {
 // active element land in window.__tabhelm.guide, which guideStatus() reports.
 // The overlay is in the page, so recordings show it too.
 export function guideTour(steps, active, total, opts = {}) {
+  // A field's <label> text without the field's own content (a <select> inside its
+  // label would otherwise add all its options).
+  const labelText = (el) => {
+    const l = el.labels?.[0];
+    if (!l) return '';
+    const copy = l.cloneNode(true);
+    copy.querySelectorAll('select, input, textarea, option').forEach((n) => n.remove());
+    return copy.textContent.trim();
+  };
   const ID = 'tabhelm-guide';
   const state = (window.__tabhelm ||= { refs: new Map(), next: 1 });
   document.getElementById(ID)?.remove();
@@ -649,7 +658,7 @@ export function guideTour(steps, active, total, opts = {}) {
     }
   }
   place();
-  return { ok: true, found: Boolean(target), label: target ? (target.getAttribute('aria-label') || target.labels?.[0]?.innerText || (['INPUT', 'SELECT', 'TEXTAREA'].includes(target.tagName) ? target.placeholder || target.name : target.innerText) || target.value || '').replace(/\s+/g, ' ').trim().slice(0, 80) : '' };
+  return { ok: true, found: Boolean(target), label: target ? (target.getAttribute('aria-label') || labelText(target) || (['INPUT', 'SELECT', 'TEXTAREA'].includes(target.tagName) ? target.placeholder || target.name : target.innerText) || target.value || '').replace(/\s+/g, ' ').trim().slice(0, 80) : '' };
 }
 
 export function guideStatus() {

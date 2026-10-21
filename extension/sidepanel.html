@@ -81,7 +81,8 @@
       <h3>Page</h3>
       <label class="check"><input id="highlight-finds" type="checkbox" checked /> Highlight what the agent finds on the page (browser_find) for a few seconds</label>
       <label class="check"><input id="single-tab" type="checkbox" /> Work in one tab: the agent stays in the chat's tab — no new tabs or switching; links and pop-ups open in this tab</label>
-      <label class="check">Guide auto-play: pause <input id="guide-pause" type="number" min="1" max="30" step="0.5" value="3" style="width: 4.5em" /> s before each click (▶ Auto in a guide)</label>
+      <label class="check"><input id="guide-autoplay" type="checkbox" /> Auto-play guides: the agent does each step itself, no prompts (off: guides wait for you; ▶ Auto plays one)</label>
+      <label class="check">Pause before each automatic step <input id="guide-pause" type="number" min="1" max="30" step="0.5" value="3" style="width: 4.5em" /> s</label>
 
       <h3>Experimental</h3>
       <p class="hint">New features, all off by default. Turn one on to see its settings.</p>

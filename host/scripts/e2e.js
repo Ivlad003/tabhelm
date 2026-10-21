@@ -336,9 +336,13 @@ if (process.env.E2E_RECORD_TABS) {
 
 // E2E_GUIDE=1: the agent guides through the form and plays it automatically.
 if (process.env.E2E_GUIDE) {
+  // Auto-play is switched on in Settings → Page, like a user would.
+  await panel.click('#settings-open');
+  await panel.click('#guide-autoplay');
+  await panel.click('#settings-close');
   await panel.select('#agent', agent);
-  await panel.click('#auto');
-  await panel.type('#input', 'Guide me through filling this form as a guide tour (browser_guide) with the name "Ada Lovelace", color Blue, the agreement ticked and Save — and play it automatically (auto) so I can watch. Do not fill it yourself with other tools.');
+  await panel.click('#auto'); // the agent's own tool permissions, not the guide
+  await panel.type('#input', 'Guide me through filling this form as a guide tour (browser_guide) with the name "Ada Lovelace", color Blue, the agreement ticked and Save, so I can watch. Do not fill it yourself with other tools.');
   await panel.click('#send');
   const t0 = Date.now();
   let lastCard = '';

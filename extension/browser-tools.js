@@ -687,14 +687,13 @@ async function guideTour(chatTabId, defaultTab, args, ui) {
   let shownFrame = 0;
   const started = Date.now();
   const hide = () => (shownTab != null ? inject(shownTab, P.guideHide, [], shownFrame).catch(() => {}) : null);
-  // Auto-play: the agent clicks each step itself after a pause the user can read.
-  // Started by the ▶ Auto button, or by the agent's auto:true after the user agrees.
-  const { guidePause = 3 } = await chrome.storage.local.get('guidePause');
+  // Auto-play: the agent does each step itself after a pause the user can read.
+  // It is a setting (Settings → Page → Auto-play guides), never a per-guide prompt;
+  // with it off, the ▶ Auto button still plays a single guide.
+  const { guidePause = 3, guideAutoPlay = false } = await chrome.storage.local.get(['guidePause', 'guideAutoPlay']);
   const pauseMs = Math.max(1, Number(args.pause || guidePause) || 3) * 1000;
-  let auto = false;
-  if (args.auto) {
-    auto = await ui.confirm(chatTabId, `Play this guide automatically (${steps.length} step${steps.length > 1 ? 's' : ''})?`, `The agent will click each highlighted element itself, pausing ${pauseMs / 1000} s before every click. Press ⏸ Pause on the page or in the panel to take over.`, { routine: true });
-  }
+  let auto = Boolean(guideAutoPlay);
+  const autoNote = args.auto && !auto ? ' Auto-play is off in the user\'s settings (Settings → Page → Auto-play guides), so the guide ran manually; the user can press ▶ Auto in a guide to play it.' : '';
 
   while (i < steps.length && Date.now() - started < 30 * 60_000) {
     const step = steps[i];
@@ -787,7 +786,7 @@ async function guideTour(chatTabId, defaultTab, args, ui) {
   const summary = steps.map((st, k) => `${single ? startNumber : k + 1}. ${st.text} → ${results[k]}`).join('\n');
   const skipped = results.filter((r) => r === 'skipped').length;
   const labelText = single ? `step ${startNumber} → ${results[0]}` : `${steps.length} steps, ${skipped} skipped`;
-  return { content: text(`${single ? 'The user finished the step' : 'The user finished the guide'}:\n${summary}\n${skipped ? 'Ask whether the skipped steps need help. ' : ''}Take a new browser_snapshot before continuing.`), label: labelText };
+  return { content: text(`${single ? 'The user finished the step' : 'The user finished the guide'}:\n${summary}\n${skipped ? 'Ask whether the skipped steps need help. ' : ''}Take a new browser_snapshot before continuing.${autoNote}`), label: labelText };
 }
 
 // CSS goes in as a removable <style>; JS runs in the page's own context through

@@ -10,7 +10,7 @@ import { z } from 'zod';
 const { TABHELM_URL, TABHELM_TOKEN, TABHELM_TAB } = process.env;
 const tabId = Number(TABHELM_TAB);
 
-const server = new McpServer({ name: 'tabhelm-browser', version: '0.29.0' });
+const server = new McpServer({ name: 'tabhelm-browser', version: '0.29.1' });
 
 async function call(tool, args = {}) {
   try {
@@ -174,7 +174,7 @@ const tools = {
           }),
         )
         .optional(),
-      auto: z.boolean().optional().describe('Play the guide automatically: you perform each step after a pause the user can watch (asks the user first unless auto-approve is on)'),
+      auto: z.boolean().optional().describe('Ask for automatic play. Whether guides play automatically is the user\'s setting (Settings → Page → Auto-play guides); if it is off the guide runs manually and the result says so'),
       pause: z.number().optional().describe('Seconds to pause before each automatic step (default from the user settings)'),
       ref: z.string().optional().describe('Single-step form: element ref'),
       text: z.string().optional().describe('Single-step form: instruction'),

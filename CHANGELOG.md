@@ -2,6 +2,14 @@
 
 All notable changes to TabHelm. The newest release is at the top; the panel's update banner links here.
 
+## [0.29.1] - 2026-10-21
+
+### Changed
+- **Guide auto-play is a setting:** Settings → Page → *Auto-play guides*. On: every guide plays by itself with no prompt. Off: guides wait for you (the agent is told why if it asked for auto-play) and ▶ Auto plays a single guide. The per-guide "Play this guide automatically?" prompt is gone.
+
+### Fixed
+- Guide steps for fields inside a `<label>` show the label text ("Color"), not the field's options.
+
 ## [0.29.0] - 2026-10-21
 
 ### Added

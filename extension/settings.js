@@ -40,7 +40,13 @@ export async function initSettings(panelPort) {
   chrome.storage.local.get('singleTab').then((s) => singles.forEach((b) => (b.checked = Boolean(s.singleTab))));
   const gp = $('guide-pause');
   gp.onchange = () => chrome.storage.local.set({ guidePause: Math.min(30, Math.max(1, Number(gp.value) || 3)) });
-  const stored = await chrome.storage.local.get(['skills', 'highlightFinds', 'guidePause']);
+  const ga = $('guide-autoplay');
+  ga.onchange = async () => {
+    await chrome.storage.local.set({ guideAutoPlay: ga.checked });
+    port.postMessage({ type: 'set_features' }); // tells the running agent
+  };
+  const stored = await chrome.storage.local.get(['skills', 'highlightFinds', 'guidePause', 'guideAutoPlay']);
+  ga.checked = Boolean(stored.guideAutoPlay);
   skills = stored.skills || [];
   hl.checked = stored.highlightFinds !== false;
   gp.value = stored.guidePause || 3;
