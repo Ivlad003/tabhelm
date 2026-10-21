@@ -1,6 +1,76 @@
 {
   "news": [
     {
+      "id": "2026-10-pick-scripts",
+      "date": "2026-10-21",
+      "minVersion": "0.27.0",
+      "title": {
+        "en": "Pick elements, keep page scripts",
+        "uk": "Вибір елементів і скрипти сторінок"
+      },
+      "text": {
+        "en": "＋ → Pick element or Select area hands exact elements to the agent. Turn on Page scripts & styles to keep CSS/JS presets and run them on any site.",
+        "uk": "＋ → Pick element або Select area передає агенту саме ці елементи. Увімкніть Page scripts & styles, щоб зберігати CSS/JS-пресети й запускати їх на будь-якому сайті."
+      },
+      "url": "https://github.com/Ivlad003/tabhelm#picking-elements"
+    },
+    {
+      "id": "2026-10-guide-tour",
+      "date": "2026-10-21",
+      "minVersion": "0.26.0",
+      "title": {
+        "en": "Guide mode: a tour you can play",
+        "uk": "Режим гіда: тур, який можна програти"
+      },
+      "text": {
+        "en": "Ask “guide me through…”: every step is marked on the page, Next/Back move between them, ▶ Auto lets the agent click through with pauses.",
+        "uk": "Попросіть «проведи мене через…»: усі кроки позначені на сторінці, Next/Back перемикають їх, ▶ Auto — агент сам проходить їх із паузами."
+      },
+      "url": "https://github.com/Ivlad003/tabhelm#guide-mode"
+    },
+    {
+      "id": "2026-10-remote-host",
+      "date": "2026-10-21",
+      "minVersion": "0.25.0",
+      "title": {
+        "en": "Agents on another machine",
+        "uk": "Агенти на іншій машині"
+      },
+      "text": {
+        "en": "Run the host on a VPS or another PC and pair it through your own relay (Dokploy-ready): Settings → Remote host.",
+        "uk": "Запустіть хост на VPS чи іншому ПК і спаруйте через власний relay (готовий для Dokploy): Settings → Remote host."
+      },
+      "url": "https://github.com/Ivlad003/tabhelm#remote-host-relay"
+    },
+    {
+      "id": "2026-10-context-interject",
+      "date": "2026-10-21",
+      "minVersion": "0.24.0",
+      "title": {
+        "en": "Context meter and messages mid-task",
+        "uk": "Індикатор контексту й повідомлення під час роботи"
+      },
+      "text": {
+        "en": "The % button shows how full the context window is. Keep typing while the agent works — it picks your note up with its next step.",
+        "uk": "Кнопка з % показує заповнення контекстного вікна. Пишіть, поки агент працює — він підхопить ваше повідомлення з наступним кроком."
+      },
+      "url": "https://github.com/Ivlad003/tabhelm#messages-while-the-agent-works"
+    },
+    {
+      "id": "2026-10-history-copy",
+      "date": "2026-10-21",
+      "minVersion": "0.26.1",
+      "title": {
+        "en": "Copy replies, keep your history",
+        "uk": "Копіювання відповідей і збережена історія"
+      },
+      "text": {
+        "en": "Copy / Text under every reply (links included). History survives reinstalling the extension, and chats can be deleted one by one or all at once.",
+        "uk": "Copy / Text під кожною відповіддю (з посиланнями). Історія переживає перевстановлення розширення, чати можна видаляти по одному чи всі."
+      },
+      "url": "https://github.com/Ivlad003/tabhelm#history"
+    },
+    {
       "id": "2026-10-page-selection",
       "date": "2026-10-13",
       "minVersion": "0.19.0",

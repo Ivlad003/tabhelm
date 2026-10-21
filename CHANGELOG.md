@@ -2,6 +2,19 @@
 
 All notable changes to TabHelm. The newest release is at the top; the panel's update banner links here.
 
+## [0.28.0] - 2026-10-21
+
+A feature release that rounds up everything since 0.19. No code changes since 0.27.3 beyond the panel's news: the update banner and five news items now announce these features in the panel and on the website.
+
+### Highlights since 0.19
+- **Remote host through your own relay** (0.25) — agents on a VPS or another PC, paired with a code; relay ready for Dokploy.
+- **Guide mode** (0.21–0.27) — the agent marks every step on the page; Next / Back across steps and tabs; ▶ Auto plays it with pauses; Detailed guide flag.
+- **Pick element / Select area** and **Page scripts & styles** (0.27) — hand exact elements to the agent; a library of CSS/JS presets run from ＋ or automatically.
+- **Context meter**, **messages while the agent works**, **Copy / Text** under replies (0.24–0.26).
+- **Skills** from whole repositories, skills made from a chat (0.21–0.23).
+- **History** survives reinstalling the extension; delete one chat or all (0.19).
+- **Reliability**: Auto-approve covers routine confirmations, recording follows the agent across tabs and never comes out empty, voice keeps the last words, no lost messages after New chat; a monkey test (`npm run test:monkey`) and a full smoke / e2e pass (0.27.1–0.27.3).
+
 ## [0.27.3] - 2026-10-20
 
 ### Fixed
