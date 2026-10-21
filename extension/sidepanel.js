@@ -1,7 +1,8 @@
 import { showNews } from './news.js';
 import { renderMarkdown } from './markdown.js';
+import { Recorder, webCodecsAvailable } from './recorder.js';
 import { initSettings, handleSettingsMessage, hostVersionMismatch, skillPayload, slashSkills, onFeaturesChanged, setAgents, skillsChanged } from './settings.js';
-import { getFeatures } from './features.js';
+import { getFeatures, getSetting } from './features.js';
 import { initVoice, handleVoiceMessage, stop as stopVoice } from './voice.js';
 import { initAttachments, takeAttachments, hasAttachments, chip, addQuote, addImageUrl, addElements } from './attachments.js';
 import { pickElements } from './page-scripts.js';
@@ -1585,21 +1586,33 @@ function exportMarkdown(tab, entries = journal) {
 }
 
 // ---------- Video recording ----------
-// The extension streams JPEG frames of the tab (CDP screencast); they are
-// painted on a canvas and encoded with MediaRecorder. Each finished video is
-// shown in the chat and saved by the host to ~/Videos/TabHelm.
+// The extension streams JPEG frames of the tab (CDP screencast, plus screenshots
+// while the page is still). recorder.js encodes them with WebCodecs into a
+// seekable MP4; Chrome without WebCodecs falls back to MediaRecorder. Each
+// finished video is shown in the chat and saved by the host to ~/Videos/TabHelm.
 
-const rec = { active: false, recorder: null, canvas: null, ctx: null, img: null, chunks: [], mime: '', started: 0, heartbeat: null };
+const rec = { active: false, encoder: null, recorder: null, canvas: null, ctx: null, img: null, chunks: [], mime: '', started: 0, heartbeat: null, frames: 0 };
 
-function startRecording() {
+async function startRecording() {
   if (rec.active) return;
-  Object.assign(rec, { active: true, recorder: null, chunks: [], img: null, requested: Date.now() });
+  Object.assign(rec, { active: true, encoder: null, recorder: null, chunks: [], img: null, requested: Date.now(), frames: 0, startedAt: new Date().toISOString() });
   els.recIndicator.hidden = false;
+  if (webCodecsAvailable()) {
+    const features = await getFeatures();
+    const trim = features.trimWaits ? await getSetting('trimWaits') : null;
+    rec.encoder = new Recorder({ trimWaits: Boolean(trim), maxPauseMs: (trim?.maxPause ?? 1.5) * 1000 });
+  }
   port.postMessage({ type: 'record_start' });
 }
 
-async function onFrame({ data }) {
+async function onFrame({ data, fill }) {
   if (!rec.active) return;
+  rec.frames++;
+  if (rec.encoder) {
+    rec.encoder.add({ data, fill, at: Date.now() });
+    return;
+  }
+  // Fallback: canvas + MediaRecorder (streaming output; players may not seek it).
   const img = new Image();
   img.src = `data:image/jpeg;base64,${data}`;
   try {
@@ -1611,7 +1624,6 @@ async function onFrame({ data }) {
   rec.img = img;
   if (!rec.recorder) {
     rec.canvas = document.createElement('canvas');
-    // Even dimensions keep H.264 encoders happy.
     rec.canvas.width = img.naturalWidth & ~1;
     rec.canvas.height = img.naturalHeight & ~1;
     rec.ctx = rec.canvas.getContext('2d');
@@ -1621,8 +1633,6 @@ async function onFrame({ data }) {
     rec.recorder.ondataavailable = (e) => e.data.size && rec.chunks.push(e.data);
     rec.recorder.start(1000);
     rec.started = Date.now();
-    rec.startedAt = new Date().toISOString();
-    // Screencast only sends frames on change; repaint so the timeline stays continuous.
     rec.heartbeat = setInterval(paintFrame, 500);
   } else {
     paintFrame();
@@ -1633,17 +1643,32 @@ function paintFrame() {
   if (rec.img) rec.ctx.drawImage(rec.img, 0, 0, rec.canvas.width, rec.canvas.height);
 }
 
-function stopRecording(discard = false) {
+async function stopRecording(discard = false) {
   if (!rec.active) return;
   rec.active = false;
   els.recIndicator.hidden = true;
   clearInterval(rec.heartbeat);
   port.postMessage({ type: 'record_stop' });
-  const recorder = rec.recorder;
-  if (!recorder) {
-    if (!discard) notice(Date.now() - (rec.requested || 0) < 1500 ? 'No video: the task finished before the first frame was captured.' : 'No video recorded: the tab did not render any frames (is the window minimized?).', !(Date.now() - (rec.requested || 0) < 1500));
+  const quick = Date.now() - (rec.requested || 0) < 1500;
+  const noFrames = () => {
+    if (!discard) notice(quick ? 'No video: the task finished before the first frame was captured.' : 'No video recorded: the tab did not render any frames (is the window minimized?).', !quick);
+  };
+  if (rec.encoder) {
+    const encoder = rec.encoder;
+    rec.encoder = null;
+    if (discard) return encoder.discard();
+    await new Promise((r) => setTimeout(r, 150)); // frames still on their way
+    try {
+      const out = await encoder.finish();
+      if (!out) return noFrames();
+      addVideo(out.blob, out.durationMs, out.timeAt, out.skippedMs);
+    } catch (err) {
+      notice(`Could not encode the video: ${err.message}`, true);
+    }
     return;
   }
+  const recorder = rec.recorder;
+  if (!recorder) return noFrames();
   const { chunks, mime, started } = rec;
   recorder.onstop = () => {
     if (discard) return;
@@ -1655,7 +1680,7 @@ function stopRecording(discard = false) {
 
 const videoCards = new Map(); // recording id -> { saved, card, url, path }
 
-async function addVideo(blob, durationMs) {
+async function addVideo(blob, durationMs, timeAt = (ms) => ms - Date.parse(rec.startedAt), skippedMs = 0) {
   if (!blob.size) return;
   const url = URL.createObjectURL(blob);
   const ext = blob.type.includes('mp4') ? 'mp4' : 'webm';
@@ -1669,7 +1694,7 @@ async function addVideo(blob, durationMs) {
   row.className = 'row';
   const info = document.createElement('span');
   const secs = Math.round(durationMs / 1000);
-  info.textContent = `Recording · ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')} · ${(blob.size / 1048576).toFixed(1)} MB`;
+  info.textContent = `Recording · ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')} · ${(blob.size / 1048576).toFixed(1)} MB${skippedMs >= 1000 ? ` · ${Math.round(skippedMs / 1000)} s of waiting skipped` : ''}`;
   const download = Object.assign(document.createElement('a'), { className: 'btn small', href: url, download: filename, textContent: 'Download' });
   const remove = Object.assign(document.createElement('button'), { className: 'btn small', type: 'button', textContent: 'Delete', title: 'Delete this recording from the chat and from disk' });
   const buttons = document.createElement('span');
@@ -1688,7 +1713,7 @@ async function addVideo(blob, durationMs) {
       const list = document.createElement('ol');
       list.className = 'video-steps';
       for (const e of steps) {
-        const offset = Math.max(0, (Date.parse(e.ts) - start) / 1000);
+        const offset = Math.max(0, timeAt(Date.parse(e.ts)) / 1000);
         const b = Object.assign(document.createElement('button'), { type: 'button' });
         b.append(Object.assign(document.createElement('time'), { textContent: `${Math.floor(offset / 60)}:${String(Math.floor(offset % 60)).padStart(2, '0')}` }), document.createTextNode(`${e.ok ? '' : '✗ '}${e.desc}`));
         b.onclick = () => {

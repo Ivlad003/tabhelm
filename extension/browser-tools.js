@@ -219,7 +219,7 @@ export async function startRecording(chatTabId, onFrame, tabId = null) {
         const m = await cdp(tabId, 'Page.getLayoutMetrics').catch(() => null);
         const vp = m?.cssVisualViewport || m?.visualViewport;
         rec.lastFrame = Date.now();
-        onFrame({ data: shot.data, width: Math.round(vp?.clientWidth || 1280), height: Math.round(vp?.clientHeight || 800) });
+        onFrame({ data: shot.data, width: Math.round(vp?.clientWidth || 1280), height: Math.round(vp?.clientHeight || 800), fill: true });
       }
     } catch {}
     busy = false;
@@ -642,22 +642,31 @@ export async function runTool(chatTabId, tool, args, ui) {
 async function runToolInner(chatTabId, tool, args, ui) {
   const c = chatState(chatTabId);
   let result;
-  if (tool === 'browser_tabs') result = await tabsTool(c, args, ui);
-  else if (tool === 'skill_save') result = await saveSkill(args, ui);
+  if (tool === 'browser_tabs') {
+    result = await tabsTool(c, args, ui);
+    await rememberVisit(c, c.current);
+  } else if (tool === 'skill_save') result = await saveSkill(args, ui);
   else if (tool === 'browser_search_tabs') result = await searchTabs(c, args);
   else if (tool === 'browser_handle_dialog') result = await handleDialog(await targetTab(c, args.tabId, ui), args);
   else {
     const tabId = await targetTab(c, args.tabId, ui);
-    const tab = await assertControllable(tabId);
-    await recordTab(chatTabId, tabId); // while recording, the video shows wherever the agent works or looks
-    await attach(tabId);
-    c.actingUntil = Infinity;
-    try {
-      result = await runPageTool(tabId, tab, tool, args, ui, chatTabId);
-    } finally {
-      // Popups may open a moment after the action finished.
-      c.actingUntil = Date.now() + 3000;
+    if (NAV_TOOLS.has(tool)) {
+      // Navigation needs no access to the page, so it also works from about:blank,
+      // the new-tab page or chrome:// pages — the way out of them.
+      result = await navigate(c, tabId, tool, args);
+    } else {
+      const tab = await assertControllable(tabId);
+      await recordTab(chatTabId, tabId); // while recording, the video shows wherever the agent works or looks
+      await attach(tabId);
+      c.actingUntil = Infinity;
+      try {
+        result = await runPageTool(tabId, tab, tool, args, ui, chatTabId);
+      } finally {
+        // Popups may open a moment after the action finished.
+        c.actingUntil = Date.now() + 3000;
+      }
     }
+    await rememberVisit(c, tabId);
   }
   if (c.notes.length) {
     result.content = [...result.content, { type: 'text', text: `\n${c.notes.splice(0).join('\n')}` }];
@@ -815,6 +824,72 @@ export async function runScript(tabId, preset) {
   if (v.type === 'undefined') return '';
   const out = 'value' in v ? JSON.stringify(v.value) : v.description || v.type;
   return out.length > 5000 ? `${out.slice(0, 5000)}…` : out;
+}
+
+// ---------- navigation ----------
+// Chrome skips history entries of pages left without a user click (its
+// "history intervention"), so Back after the agent opened another page can jump
+// past the page it came from — even to about:blank. The chat remembers the pages
+// the agent saw in each tab and Back returns to the previous one of those.
+const NAV_TOOLS = new Set(['browser_navigate', 'browser_go_back', 'browser_go_forward', 'browser_reload']);
+
+async function rememberVisit(c, tabId) {
+  const tab = await chrome.tabs.get(tabId).catch(() => null);
+  const url = tab?.url;
+  if (!url || !/^https?:|^file:/.test(url)) return;
+  c.visits ||= new Map();
+  const list = c.visits.get(tabId) || [];
+  if (list.at(-1) !== url) list.push(url);
+  c.visits.set(tabId, list.slice(-50));
+}
+
+async function navigate(c, tabId, tool, args) {
+  const tab = await chrome.tabs.get(tabId).catch(() => null);
+  if (!tab) throw new Error('The tab was closed.');
+  const dialog = dialogs.get(tabId);
+  if (dialog) throw new Error(`A JavaScript ${dialog.type} dialog is blocking the page: "${dialog.message}". Use browser_handle_dialog first.`);
+  await recordTab(c.chatTabId, tabId);
+  if (tool === 'browser_navigate') {
+    const url = normalizeUrl(args.url);
+    await chrome.tabs.update(tabId, { url });
+    await sleep(300);
+    const loaded = await waitForLoad(tabId);
+    return { content: text(`Opened ${loaded.url} — "${loaded.title}". Take a snapshot to see it.`) };
+  }
+  if (tool === 'browser_reload') {
+    await chrome.tabs.reload(tabId, { bypassCache: Boolean(args.bypassCache) });
+    await sleep(300);
+    const loaded = await waitForLoad(tabId);
+    return { content: text(`Reloaded ${loaded.url}.`) };
+  }
+  if (tool === 'browser_go_forward') {
+    await chrome.tabs.goForward(tabId).catch(() => {
+      throw new Error('There is no next page in this tab.');
+    });
+    await sleep(300);
+    const loaded = await waitForLoad(tabId);
+    return { content: text(`Now at ${loaded.url}.`) };
+  }
+  // Back: where the agent was before this page, according to the chat.
+  const list = c.visits?.get(tabId) || [];
+  const here = tab.url;
+  const i = list.lastIndexOf(here);
+  const expected = i > 0 ? list[i - 1] : null;
+  let moved = true;
+  await chrome.tabs.goBack(tabId).catch(() => (moved = false));
+  await sleep(300);
+  let loaded = moved ? await waitForLoad(tabId) : tab;
+  if (expected && loaded.url !== expected) {
+    // Chrome skipped it (or there was no history): open it directly.
+    await chrome.tabs.update(tabId, { url: expected });
+    await sleep(300);
+    loaded = await waitForLoad(tabId);
+    list.splice(i);
+    return { content: text(`Back at ${loaded.url} (opened directly — Chrome skipped that page in the tab's history).`) };
+  }
+  if (!moved) throw new Error('There is no previous page in this tab. Use browser_navigate with the address instead.');
+  if (i > 0) list.splice(i);
+  return { content: text(`Now at ${loaded.url}.`) };
 }
 
 export function singleTabMode() {
@@ -1003,29 +1078,6 @@ async function runPageTool(tabId, tab, tool, args, ui, chatTabId) {
         throw new Error('Pass the ref of a file input (hidden ones are listed at the end of the snapshot), or click the upload button first so a file chooser opens.');
       }
       return { content: text(`Attached ${files.length} file(s).`), label: files.map((f) => f.split('/').pop()).join(', ') };
-    }
-
-    case 'browser_navigate': {
-      const url = normalizeUrl(args.url);
-      await chrome.tabs.update(tabId, { url });
-      await sleep(300);
-      const loaded = await waitForLoad(tabId);
-      return { content: text(`Opened ${loaded.url} — "${loaded.title}". Take a snapshot to see it.`) };
-    }
-
-    case 'browser_go_back':
-    case 'browser_go_forward': {
-      await (tool === 'browser_go_back' ? chrome.tabs.goBack(tabId) : chrome.tabs.goForward(tabId));
-      await sleep(300);
-      const loaded = await waitForLoad(tabId);
-      return { content: text(`Now at ${loaded.url}.`) };
-    }
-
-    case 'browser_reload': {
-      await chrome.tabs.reload(tabId, { bypassCache: Boolean(args.bypassCache) });
-      await sleep(300);
-      const loaded = await waitForLoad(tabId);
-      return { content: text(`Reloaded ${loaded.url}.`) };
     }
 
     case 'browser_wait': {

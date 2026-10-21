@@ -6,7 +6,8 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from '
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 
-const FILE = join(homedir(), '.tabhelm', 'state.json');
+// TABHELM_STATE_FILE moves it (tests use a temporary one, never the user's).
+const FILE = process.env.TABHELM_STATE_FILE || join(homedir(), '.tabhelm', 'state.json');
 
 export function saveState(data) {
   mkdirSync(dirname(FILE), { recursive: true });

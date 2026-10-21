@@ -32,6 +32,26 @@ const CHROME = process.env.CHROME_PATH || '/usr/bin/google-chrome';
 const profile = mkdtempSync(join(tmpdir(), 'tabhelm-e2e-'));
 execFileSync(process.execPath, [INSTALL, '--user-data-dir', profile], { stdio: 'inherit' });
 
+// A recording must be a regular, seekable MP4: index (moov) before the media
+// data (fast start, so Slack & co. can preview it), a duration, keyframes
+// throughout, and a frame decodable from the middle.
+function checkVideo(path) {
+  const buf = readFileSync(path);
+  const moov = buf.indexOf('moov');
+  const mdat = buf.indexOf('mdat');
+  const probe = JSON.parse(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format=format_name,duration:stream=codec_name', '-of', 'json', path]).toString());
+  const duration = Number(probe.format?.duration) || 0;
+  const keys = execFileSync('ffprobe', ['-v', 'error', '-select_streams', 'v', '-skip_frame', 'nokey', '-show_entries', 'frame=pts_time', '-of', 'csv=p=0', path]).toString().trim().split('\n').filter(Boolean).length;
+  let seek = false;
+  try {
+    execFileSync('ffmpeg', ['-v', 'error', '-ss', String(duration / 2), '-i', path, '-frames:v', '1', '-f', 'null', '-']);
+    seek = true;
+  } catch {}
+  const info = { container: probe.format?.format_name, codec: probe.streams?.[0]?.codec_name, duration: Number(duration.toFixed(1)), keyframes: keys, fastStart: moov >= 0 && moov < mdat, seek };
+  info.ok = /mp4/.test(info.container || '') && info.fastStart && duration > 1 && keys >= Math.max(2, Math.floor(duration / 4)) && seek;
+  return info;
+}
+
 const PAGE = `<!doctype html><title>Signup test</title>
 <h1>Newsletter signup</h1>
 <label>Name <input id=name placeholder="Your name"></label>
@@ -75,7 +95,9 @@ const browser = await puppeteer.launch({
   // turns it off by default), so hidden side-panel behaviour matches real Chrome.
   ...(process.env.E2E_REAL_THROTTLING ? { ignoreDefaultArgs: ['--disable-renderer-backgrounding', '--disable-background-timer-throttling', '--disable-backgrounding-occluded-windows'] } : {}),
   // Inherited by the native host: keep test videos out of ~/Videos.
-  env: { ...process.env, TABHELM_RECORDINGS_DIR: join(profile, 'videos') },
+  // The host keeps its backup of the panel's storage in the test profile: tests
+  // must never read or overwrite the user's ~/.tabhelm/state.json.
+  env: { ...process.env, TABHELM_RECORDINGS_DIR: join(profile, 'videos'), TABHELM_STATE_FILE: join(profile, 'state.json') },
   protocolTimeout: 300_000,
 });
 const page = (await browser.pages())[0] || (await browser.newPage());
@@ -88,6 +110,9 @@ const tabId = await sw.evaluate(async (u) => (await chrome.tabs.query({ url: u +
 console.log('ext', extId, 'tab', tabId);
 
 if (process.env.E2E_NEWS) await sw.evaluate((u) => chrome.storage.local.set({ newsUrl: `${u}news.json` }), url);
+// Other runs do not fetch the real site's news: a banner appearing mid-test shifts
+// the layout under a click, and tests should not depend on the network.
+else await sw.evaluate((u) => chrome.storage.local.set({ newsUrl: `${u}no-news.json` }), url);
 
 // Open the panel in its own window so the test page stays the visible tab in
 // its window (like the real side panel); background tabs render no frames.
@@ -109,7 +134,7 @@ if (process.env.E2E_RELAY) {
   const relayPort = 18000 + Math.floor(Math.random() * 1000);
   const relay = spawn(process.execPath, [fileURLToPath(new URL('../../relay/server.js', import.meta.url))], { env: { ...process.env, PORT: String(relayPort), RELAY_KEY: 'test-relay-key-12345' }, stdio: ['ignore', 'pipe', 'inherit'] });
   await new Promise((r) => relay.stdout.on('data', (d) => /listening/.test(String(d)) && r()));
-  const hostProc = spawn(process.execPath, [fileURLToPath(new URL('../src/native-host.js', import.meta.url)), '--relay', `ws://127.0.0.1:${relayPort}`, '--key', 'test-relay-key-12345', '--name', 'testbox'], { env: { ...process.env, TABHELM_RECORDINGS_DIR: join(profile, 'videos') }, stdio: ['ignore', 'ignore', 'pipe'] });
+  const hostProc = spawn(process.execPath, [fileURLToPath(new URL('../src/native-host.js', import.meta.url)), '--relay', `ws://127.0.0.1:${relayPort}`, '--key', 'test-relay-key-12345', '--name', 'testbox'], { env: { ...process.env, TABHELM_RECORDINGS_DIR: join(profile, 'videos'), TABHELM_STATE_FILE: join(profile, 'relay-state.json') }, stdio: ['ignore', 'ignore', 'pipe'] });
   relayProcs = [relay, hostProc];
   const code = await new Promise((r) => hostProc.stderr.on('data', (d) => { const m = /pairing code:\s+([A-Z0-9]{4}-[A-Z0-9]{4})/.exec(String(d)); if (m) r(m[1]); }));
   console.log('relay pairing code:', code);
@@ -286,6 +311,7 @@ if (process.env.E2E_CONTEXT) {
 // hidden whenever the agent's tab is in front.
 if (process.env.E2E_RECORD_TABS) {
   if (process.env.E2E_SINGLE_TAB) await sw.evaluate(() => chrome.storage.local.set({ singleTab: true }));
+  if (process.env.E2E_TRIM) await sw.evaluate(async () => { const { features = {} } = await chrome.storage.local.get('features'); await chrome.storage.local.set({ features: { ...features, trimWaits: true }, featureSettings: { trimWaits: { maxPause: 1 } } }); });
   await panel.bringToFront();
   await panel.select('#agent', agent);
   await panel.click('#auto');
@@ -308,7 +334,8 @@ if (process.env.E2E_RECORD_TABS) {
   await panel.waitForFunction(() => /Saved to /.test(document.querySelector('.video')?.innerText || '') || /No video/.test(document.body.innerText), { timeout: 60000 }).catch(() => {});
   const info = await panel.$eval('.video', (e) => e.innerText.replace(/\s+/g, ' ')).catch(() => 'no video card');
   const path = /Saved to (\S+)/.exec(info)?.[1];
-  const out = await page.$eval('#out', (e) => e.textContent);
+  const out = await page.$eval('#out', (e) => e.textContent).catch(() => `(not on the signup page: ${page.url()})`);
+  console.log('answer:', (await panel.$$eval('.msg.agent', (m) => m.map((x) => x.innerText).join(' '))).replace(/\s+/g, ' ').slice(0, 300));
   let duration = 0;
   let freezes = [];
   if (path && existsSync(path)) {
@@ -327,7 +354,11 @@ if (process.env.E2E_RECORD_TABS) {
   }
   const tabCount = await sw.evaluate(async () => (await chrome.tabs.query({})).length);
   if (process.env.E2E_SINGLE_TAB) console.log('tabs open at the end:', tabCount, '(single-tab mode: page + panel = 2)');
-  const ok = Boolean(path) && duration >= took * 0.6 && freezes.length === 0 && /grace@navy\.example/.test(out) && (!process.env.E2E_SINGLE_TAB || tabCount === 2);
+  const v = path ? checkVideo(path) : { ok: false };
+  console.log('video file:', JSON.stringify(v));
+  // With "Skip waiting in recordings" the video is shorter than the task; otherwise about as long.
+  const lengthOk = process.env.E2E_TRIM ? duration < took * 0.7 : duration >= took * 0.6;
+  const ok = Boolean(path) && v.ok && lengthOk && (process.env.E2E_TRIM || freezes.length === 0) && /grace@navy\.example/.test(out) && (!process.env.E2E_SINGLE_TAB || tabCount === 2);
   console.log(ok ? 'E2E PASS' : 'E2E FAIL');
   await browser.close();
   server.close();
@@ -376,7 +407,10 @@ if (process.env.E2E_SKILLS) {
   // A repository full of skills offers a picker (real GitHub; needs network).
   await panel.type('#skill-url', 'https://github.com/mattpocock/skills/tree/main/skills/productivity');
   await panel.click('#skill-form button');
-  await panel.waitForFunction(() => !document.getElementById('skill-picker').hidden || !document.getElementById('skill-error').hidden, { timeout: 60000 });
+  await panel.waitForFunction(() => !document.getElementById('skill-picker').hidden || !document.getElementById('skill-error').hidden, { timeout: 60000 }).catch(async (e) => {
+    console.log('DIAG', JSON.stringify(await panel.evaluate(() => ({ button: document.querySelector('#skill-form button').textContent, url: document.getElementById('skill-url').value, error: document.getElementById('skill-error').textContent, pickerHidden: document.getElementById('skill-picker').hidden, notices: [...document.querySelectorAll('#log .notice')].map((n) => n.textContent).slice(-4) }))));
+    throw e;
+  });
   const pickerRows = await panel.$$eval('#skill-picker .skill', (l) => l.map((x) => x.querySelector('b').textContent));
   await panel.type('#skill-picker input[type=search]', 'grill');
   await panel.evaluate(() => [...document.querySelectorAll('#skill-picker button')].find((b) => b.textContent === 'Select all').click());
@@ -611,7 +645,9 @@ if (process.env.E2E_RECORD) {
   const path = /Saved to (\S+)/.exec(info)[1];
   const size = existsSync(path) ? statSync(path).size : 0;
   console.log('video:', info, '| file bytes:', size);
-  extraOk &&= size > 10_000;
+  const v = size ? checkVideo(path) : { ok: false };
+  console.log('video file:', JSON.stringify(v));
+  extraOk &&= size > 10_000 && v.ok;
   // Delete needs two clicks; the card and the file must both go.
   await panel.$$eval('.video .video-buttons button', (b) => b[0].click());
   await panel.$$eval('.video .video-buttons button', (b) => b[0].click());

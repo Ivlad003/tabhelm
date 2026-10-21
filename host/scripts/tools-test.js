@@ -438,6 +438,24 @@ check('chat tab cannot be closed', !r.ok, r.text);
   await page.bringToFront();
 }
 
+// --- Navigation: works from about:blank; Back returns to the agent's previous
+// page even when Chrome skips it (pages left without a click are skipped)
+{
+  await tool('browser_navigate', { url: `${url}page2` });
+  await tool('browser_snapshot');
+  let r = await tool('browser_navigate', { url: `${url}contacts` });
+  r = await tool('browser_go_back');
+  const at = await sw.evaluate(async (id) => (await chrome.tabs.get(id)).url, tabId);
+  check('Back returns to the page the agent came from', r.ok && at.endsWith('/page2'), `${r.text} | ${at}`);
+  await sw.evaluate((id) => chrome.tabs.update(id, { url: 'about:blank' }), tabId);
+  await new Promise((x) => setTimeout(x, 800));
+  r = await tool('browser_navigate', { url });
+  const back = await sw.evaluate(async (id) => (await chrome.tabs.get(id)).url, tabId);
+  check('navigation works from about:blank (no "cannot control" dead end)', r.ok && back === url, `${r.text} | ${back}`);
+  snap = await tool('browser_snapshot');
+  found = await tool('browser_find', { text: 'Hover me' });
+}
+
 // --- Single-tab mode: no new tabs, no switching; pop-ups load in the chat tab
 {
   await sw.evaluate(() => chrome.storage.local.set({ singleTab: true }));

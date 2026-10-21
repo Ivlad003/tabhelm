@@ -2,6 +2,17 @@
 
 All notable changes to TabHelm. The newest release is at the top; the panel's update banner links here.
 
+## [0.30.0] - 2026-10-21
+
+### Added
+- **Skip waiting in recordings** (Experimental flag, with how much of each wait to keep): still stretches — loading, the agent thinking — are cut from the video and marked "⏩ N s of waiting skipped". A 45 s task typically becomes a ~10 s video; step lists still seek to the right moment.
+
+### Fixed
+- **Recordings could not be seeked and did not preview in Slack.** MediaRecorder writes a streaming (fragmented) file with a keyframe only every ~20 s. Videos are now encoded with WebCodecs into a regular H.264 MP4 with its index at the start (fast start) and a keyframe every 2 s; the encoder also keeps working while the side panel is hidden. (Vendored `mp4-muxer`, MIT.)
+- **Back after the agent opened another page could land on about:blank** — Chrome skips pages left without a click — **and the agent was then stuck** ("Chrome does not allow extensions to control about:blank"). Navigation now works from any page, and Back returns to the page the agent came from.
+- Tests no longer read or overwrite the user's `~/.tabhelm/state.json` (the e2e test keeps the host's backup in its own profile).
+- End-to-end tests no longer fetch the live news feed (a banner appearing mid-test shifted the Settings layout under a click).
+
 ## [0.29.1] - 2026-10-21
 
 ### Changed

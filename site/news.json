@@ -1,6 +1,20 @@
 {
   "news": [
     {
+      "id": "2026-10-video-mp4",
+      "date": "2026-10-21",
+      "minVersion": "0.30.0",
+      "title": {
+        "en": "Recordings you can seek and share",
+        "uk": "Відео, яке можна перемотувати й ділитися"
+      },
+      "text": {
+        "en": "Videos are now regular MP4 files: seek anywhere, preview in Slack. Turn on “Skip waiting in recordings” to cut the waits out.",
+        "uk": "Відео тепер звичайні MP4: перемотуються, показують прев'ю в Slack. Увімкніть «Skip waiting in recordings», щоб вирізати очікування."
+      },
+      "url": "https://github.com/Ivlad003/tabhelm#recording-videos"
+    },
+    {
       "id": "2026-10-one-tab",
       "date": "2026-10-21",
       "minVersion": "0.29.0",

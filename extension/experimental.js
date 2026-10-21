@@ -259,6 +259,13 @@ const PANELS = {
     renderMemoryList();
   },
 
+  async trimWaits(panel) {
+    const s = await getSetting('trimWaits');
+    const max = el('input', { type: 'number', min: '0.5', max: '10', step: '0.5', value: String(s.maxPause ?? 1.5), style: 'width: 5em' });
+    max.onchange = () => setSetting('trimWaits', { maxPause: Math.min(10, Math.max(0.5, Number(max.value) || 1.5)) });
+    panel.append(hint('While the page stays still (loading, the agent thinking), the video keeps only this much of the wait; the rest is cut and marked in the video. Steps in the recording still jump to the right moment.'), field('Keep of each wait (s)', max));
+  },
+
   // Page scripts & styles: the presets library (run, auto-run on matching sites, edit).
   async pageScripts(panel) {
     let items = await listScripts();
