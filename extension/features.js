@@ -54,6 +54,6 @@ export async function setSetting(id, value) {
 
 // Everything the host needs to know (flags + the settings it acts on).
 export async function hostFeaturePayload() {
-  const features = await getFeatures();
+  const features = { ...(await getFeatures()), singleTab: Boolean((await chrome.storage.local.get('singleTab')).singleTab) };
   return { features, critic: await getSetting('critic'), passwordManager: await getSetting('passwordManager') };
 }

@@ -123,7 +123,7 @@ Chrome wipes an extension's storage when the extension is removed, so the host k
 
 Ask to be shown instead of served — *"guide me through enabling two-factor auth here"*, *"show me how to create a project"* — and the agent stops clicking for you. It calls `browser_guide` with **all the steps it can already point at**: every step gets a numbered badge on the page at once, the active one a pulsing outline, an arrow and the instruction; the panel shows the same step. **Next →** / **← Back** move through the steps — the page scrolls to the element and, for a step on another tab, that tab comes to the front — and a click on the active element counts as done. When a step opens a new page, the agent snapshots it and continues the guide from there. **Next →** (I did this step) / **Skip** on the page or in the panel move on without clicking, **← Back** shows the previous step again; **Stop guide** ends the task. The overlay scrolls with the page. With the **Detailed guide** flag (Settings → Experimental) every step comes with a fuller explanation: what the element is, why, what happens after the click and what to check. If your click navigates, the step counts as done. The arrows are part of the page, so a recording of a guided session shows them. Works in iframes.
 
-**Auto-play.** **▶ Auto** (on the page or in the panel) lets the agent click through the steps itself: each step is shown with a countdown, then clicked after a pause (Settings → Page → *Guide auto-play pause*, 3 s by default); **⏸ Pause** hands control back. The agent can offer auto-play itself (`auto: true`) — the panel asks you first. Recorded, this makes a narrated demo video.
+Each step carries its action — click, **type** a value, **select** an option, tick a box — so in manual mode a typing step completes when the value changes, not on the first click into the field. **Auto-play.** **▶ Auto** (on the page or in the panel) lets the agent do the steps itself (clicking, typing, choosing): each step is shown with a countdown, then clicked after a pause (Settings → Page → *Guide auto-play pause*, 3 s by default); **⏸ Pause** hands control back. The agent can offer auto-play itself (`auto: true`) — the panel asks you first. Recorded, this makes a narrated demo video.
 
 ### Picking elements
 
@@ -165,7 +165,7 @@ The header shows a **context meter** (a small bar with the percentage of the con
 
 ### Messages while the agent works
 
-You can keep typing while a task runs: **Enter** queues the message (shown dashed). Text-only messages are handed to the agent together with the result of its **next browser step**, so it adjusts without stopping — the bubble then says *picked up by the agent*. Messages with attachments, or anything the agent did not get to before finishing, are sent as the next message automatically. **Stop** still cancels the task.
+You can keep typing while a task runs: **Enter** interrupts the agent's current step and hands your message over as a normal message from you, asking it to continue the task with it in mind (the bubble then says *handed over*). It is deliberately not slipped into a tool result: agents rightly treat text there as untrusted page content. **Stop** cancels the task without sending anything.
 
 ### Attachments
 
@@ -226,6 +226,10 @@ The agents do not have to run on the computer where Chrome is. Deploy the tiny *
 2. In the panel: **Settings → Remote host** → relay URL + the code → **Connect**. The remote host's agents appear in the list; everything — tool calls on your tab, screenshots, approvals — flows panel ⇄ relay ⇄ host over outbound WebSockets, so neither machine needs an open port or SSH.
 
 **Use local host** switches back (the pairing is kept and **Connect** resumes it without a code); **Forget pairing** drops it. The working folder, skills on disk, memory and recordings are then on the remote machine (recordings can still be downloaded from the chat). Only a host that knows `RELAY_KEY` can register, codes are rate-limited, and the relay stores nothing — but it does see the traffic in clear text inside TLS, so keep it your own.
+
+### Work in one tab
+
+**Settings → Page → Work in one tab** (or **＋ → Stay in this tab**) keeps the agent in the chat's tab: it cannot open or switch tabs, *open in a new tab* loads the address here, and pop-ups opened by its clicks load here too. The agent is told when the mode changes. Handy for recordings and when many tabs get confusing.
 
 ### Several tabs
 

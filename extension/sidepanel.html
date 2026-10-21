@@ -80,6 +80,7 @@
 
       <h3>Page</h3>
       <label class="check"><input id="highlight-finds" type="checkbox" checked /> Highlight what the agent finds on the page (browser_find) for a few seconds</label>
+      <label class="check"><input id="single-tab" type="checkbox" /> Work in one tab: the agent stays in the chat's tab — no new tabs or switching; links and pop-ups open in this tab</label>
       <label class="check">Guide auto-play: pause <input id="guide-pause" type="number" min="1" max="30" step="0.5" value="3" style="width: 4.5em" /> s before each click (▶ Auto in a guide)</label>
 
       <h3>Experimental</h3>
@@ -131,6 +132,7 @@
             <button type="button" data-voice="mic" hidden>Voice message</button>
             <button type="button" data-voice="tab" hidden>Transcribe tab audio</button>
             <label class="menu-check" title="Record a video of the tab while the agent works on each message"><input type="checkbox" id="record" /> Record video</label>
+            <label class="menu-check" title="The agent stays in this tab: no new tabs or switching (also in Settings → Page)"><input type="checkbox" id="single-tab-menu" /> Stay in this tab</label>
             <div id="scripts-menu" hidden></div>
             <div class="menu-sep"></div>
             <button type="button" id="group-tabs">Share tabs (tab group)</button>

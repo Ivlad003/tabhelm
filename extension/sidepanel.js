@@ -153,9 +153,6 @@ function onMessage(msg) {
     case 'ask':
       addAsk(msg);
       break;
-    case 'interjected':
-      markInterjected(msg.texts || []);
-      break;
     case 'guide_progress':
       showGuideStep(msg);
       break;
@@ -225,7 +222,7 @@ function onMessage(msg) {
       break;
     case 'done':
       usage.lastTurn = msg.usage || null;
-      if (msg.stopReason === 'cancelled') endTurn('Stopped');
+      if (msg.stopReason === 'cancelled') endTurn(interrupting ? null : 'Stopped');
       else if (msg.stopReason && msg.stopReason !== 'end_turn') endTurn(null, `stopped early (${msg.stopReason})`);
       else endTurn();
       break;
@@ -921,9 +918,12 @@ function composeMessage() {
   return { text, attachments };
 }
 
-// Messages typed while the agent works: shown at once, handed to the agent with
-// its next browser step (text only), or sent as the next message when the task ends.
+// Messages typed while the agent works: the agent's current step is interrupted
+// and the message goes to it as a normal user message ("continue with this in
+// mind"). It is never slipped into a tool result — agents rightly treat text
+// there as untrusted page content, not as the user.
 const queued = []; // { text, attachments, el }
+let interrupting = false;
 function queueMessage() {
   const m = composeMessage();
   if (!m) return;
@@ -936,24 +936,16 @@ function queueMessage() {
     list.append(...m.attachments.map((a) => chip(a)));
     el.append(list);
   }
-  const tag = Object.assign(document.createElement('div'), { className: 'queued-tag', textContent: m.attachments.length ? '⏳ sent when the current task ends' : '⏳ the agent gets this with its next step' });
+  const tag = Object.assign(document.createElement('div'), { className: 'queued-tag', textContent: '⏳ interrupting the agent to hand this over…' });
   el.append(tag);
   agentBubble = null;
   queued.push({ ...m, el, tag });
   record('user', { text: m.text, attachments: m.attachments.map((a) => ({ name: a.name, kind: a.kind, size: a.size })), queued: true });
-  if (!m.attachments.length) port.postMessage({ type: 'interject', text: m.text });
-  scrollDown();
-}
-
-// The agent read queued messages inside a tool result.
-function markInterjected(texts) {
-  for (const t of texts) {
-    const i = queued.findIndex((q) => q.text === t);
-    if (i < 0) continue;
-    queued[i].tag.textContent = '✓ picked up by the agent';
-    queued[i].el.classList.remove('queued');
-    queued.splice(i, 1);
+  if (!interrupting) {
+    interrupting = true;
+    port.postMessage({ type: 'cancel' }); // the turn ends as "cancelled"; flushQueued() sends the message
   }
+  scrollDown();
 }
 
 // Whatever the agent did not pick up becomes the next message.
@@ -961,15 +953,18 @@ function flushQueued() {
   if (!queued.length || busy || !connected) return;
   const items = queued.splice(0);
   for (const q of items) {
-    q.tag.textContent = '→ sent';
+    q.tag.textContent = interrupting ? '→ handed over (the agent was interrupted)' : '→ sent';
     q.el.classList.remove('queued');
   }
-  const text = items.map((q) => q.text).join('\n\n');
+  const body = items.map((q) => q.text).join('\n\n');
+  const text = interrupting ? `[I interrupted you while you were working to add this. Take it into account and continue the task from where you stopped.]\n\n${body}` : body;
+  interrupting = false;
   sendNow(text, items.flatMap((q) => q.attachments), { silent: true });
 }
 
 function clearQueued() {
   queued.splice(0);
+  interrupting = false;
 }
 
 async function send() {
@@ -1052,8 +1047,8 @@ function endTurn(note, failure = null) {
   if (failure && wasBusy) offerContinue(failure);
   else if (awaitingPlan && wasBusy && !failure && lastTurnHadNoActions) offerPlanStart();
   awaitingPlan = false;
-  // Messages typed during the task that the agent did not pick up go next.
-  if (wasBusy && !failure) setTimeout(flushQueued, 50);
+  // Messages typed during the task go next (after the interrupt, or when it ended by itself).
+  if (wasBusy && (!failure || interrupting)) setTimeout(flushQueued, 50);
 }
 
 // ---------- Plan preview (flag) ----------
@@ -1127,7 +1122,9 @@ function showGuideStep(msg) {
   }
   const g = guideCard;
   g.title.textContent = `${msg.total > 1 ? `Step ${msg.index + 1} of ${msg.total}` : `Step ${msg.number || 1}`}: ${msg.text}`;
-  g.hint.textContent = msg.auto ? `Auto-play: the agent clicks “${msg.target || 'the step'}” after a pause…` : msg.found ? `Waiting for you to click “${msg.target || 'the highlighted element'}”${msg.tabTitle ? ` on “${msg.tabTitle}”` : ''}…` : 'The element is not on this page any more — follow the instruction, then press Next.';
+  const what = msg.target || 'the highlighted element';
+  const verb = { type: `types “${msg.value ?? ''}” into “${what}”`, select: `chooses “${msg.value ?? ''}” in “${what}”`, check: `ticks “${what}”`, none: 'moves on' }[msg.action] || `clicks “${what}”`;
+  g.hint.textContent = msg.auto ? `Auto-play: the agent ${verb} after a pause…` : msg.found ? `Waiting for you to click “${msg.target || 'the highlighted element'}”${msg.tabTitle ? ` on “${msg.tabTitle}”` : ''}…` : 'The element is not on this page any more — follow the instruction, then press Next.';
   const act = (action) => port.postMessage({ type: 'guide_action', action });
   const btn = (label, action, cls = 'btn') => Object.assign(document.createElement('button'), { className: cls, textContent: label, onclick: () => act(action) });
   g.options.replaceChildren(

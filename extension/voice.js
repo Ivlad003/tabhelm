@@ -159,6 +159,7 @@ function startBrowserRecognition(settings) {
   const Rec = globalThis.SpeechRecognition || globalThis.webkitSpeechRecognition;
   if (!Rec) throw new Error('Speech recognition is not available in this Chrome; switch the engine to the host in Settings → Voice.');
   const rec = new Rec();
+  const me = state; // results can still arrive after Stop has cleared `state`
   rec.continuous = true;
   rec.interimResults = true;
   rec.lang = settings.language === 'auto' ? navigator.language : settings.language;
@@ -166,11 +167,11 @@ function startBrowserRecognition(settings) {
     let interim = '';
     for (let i = e.resultIndex; i < e.results.length; i++) {
       const r = e.results[i];
-      if (r.isFinal) state.finals.push(r[0].transcript.trim());
+      if (r.isFinal) me.finals.push(r[0].transcript.trim());
       else interim += r[0].transcript;
     }
-    state.interim = interim;
-    render();
+    me.interim = interim;
+    if (me === state) render();
   };
   rec.onerror = (e) => {
     if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {

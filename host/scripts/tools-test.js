@@ -30,6 +30,7 @@ const MAIN = (port) => `<!doctype html><title>Tools fixture</title>
   iframe { width: 300px; height: 60px; border: 2px solid #333; padding: 3px; }
 </style>
 <h1>Fixture</h1>
+<a id=blankLink href="/page2" target="_blank">open in new tab</a>
 <section id=pickZone style="padding:8px"><button id=pickA onclick="results.pickA = (results.pickA || 0) + 1">Pick A</button> <button id=pickB onclick="results.pickB = (results.pickB || 0) + 1">Pick B</button></section>
 <section><button id=hoverTarget>Hover me</button><div id=menu><a href="#secret">Secret item</a></div></section>
 <section><span id=dbl tabindex=0>Double me</span> <span id=ctx tabindex=0>Context me</span></section>
@@ -169,6 +170,7 @@ await sw.evaluate(() => chrome.storage.local.set({ highlightFinds: true }));
   await page.evaluate(() => [...document.getElementById('tabhelm-guide').shadowRoot.querySelectorAll('button')].find((b) => /Back/.test(b.textContent)).click());
   await page.waitForFunction(() => /Step 1 of 2/.test(document.getElementById('tabhelm-guide')?.shadowRoot?.querySelector('.step')?.textContent || ''), { timeout: 5000 });
   check('Back returns to the first step', /Step 1 of 2/.test((await readTour()).head));
+  // (the tour continues below; a separate tour checks scrolling to a far element)
   await page.evaluate(() => [...document.getElementById('tabhelm-guide').shadowRoot.querySelectorAll('button')].find((b) => /Next/.test(b.textContent)).click());
   await page.waitForFunction(() => /Step 2 of 2/.test(document.getElementById('tabhelm-guide')?.shadowRoot?.querySelector('.step')?.textContent || ''), { timeout: 5000 });
   await page.evaluate(() => [...document.getElementById('tabhelm-guide').shadowRoot.querySelectorAll('button')].find((b) => /Finish/.test(b.textContent)).click());
@@ -181,6 +183,28 @@ await sw.evaluate(() => chrome.storage.local.set({ highlightFinds: true }));
   const r = await tool('skill_save', { name: 'Hover Menu Guide', description: 'How to open the hover menu', body: '# Steps\n1. Hover "Hover me".\n2. Click "Secret item".' });
   const st = await sw.evaluate(() => chrome.storage.local.get(['authoredSkills', 'features']));
   check('skill_save stores the skill and enables Skill authoring', r.ok && st.authoredSkills?.[0]?.name === 'hover-menu-guide' && st.features?.skillAuthoring === true, `${r.text} ${JSON.stringify(st)}`);
+}
+
+// --- Guide scrolls to a step's element that is off screen, leaving room for the bubble
+{
+  await page.evaluate(() => {
+    const far = Object.assign(document.createElement('div'), { id: 'farZone', innerHTML: '<button id=farBtn>Far button</button>' });
+    far.style.margin = '3000px 0 2000px';
+    document.body.append(far);
+    scrollTo(0, 0);
+  });
+  snap = await tool('browser_snapshot');
+  const tour = tool('browser_guide', { steps: [{ ref: refFor(snap.text, 'Pick A'), text: 'Near step' }, { ref: refFor(snap.text, 'Far button'), text: 'Far step' }] });
+  await page.waitForFunction(() => document.getElementById('tabhelm-guide'), { timeout: 5000 });
+  await page.evaluate(() => [...document.getElementById('tabhelm-guide').shadowRoot.querySelectorAll('button')].find((b) => /Next/.test(b.textContent)).click());
+  await page.waitForFunction(() => /Step 2 of 2/.test(document.getElementById('tabhelm-guide')?.shadowRoot?.querySelector('.step')?.textContent || ''), { timeout: 5000 });
+  await new Promise((x) => setTimeout(x, 1200)); // smooth scroll
+  const pos = await page.evaluate(() => { const r = document.getElementById('farBtn').getBoundingClientRect(); return { top: r.top, bottom: r.bottom, h: innerHeight }; });
+  check('guide scrolls the next step into view with room for the bubble', pos.top >= 60 && pos.bottom <= pos.h - 150, JSON.stringify(pos));
+  await page.evaluate(() => [...document.getElementById('tabhelm-guide').shadowRoot.querySelectorAll('button')].find((b) => /Stop/.test(b.textContent)).click());
+  await tour;
+  await page.evaluate(() => { document.getElementById('farZone').remove(); scrollTo(0, 0); });
+  snap = await tool('browser_snapshot');
 }
 
 // --- Auto-play guide: the agent clicks the steps itself after the pause
@@ -379,6 +403,53 @@ r = await tool('browser_tabs', { action: 'switch', tabId });
 check('switch back to chat tab', r.ok, r.text);
 r = await tool('browser_tabs', { action: 'close', tabId });
 check('chat tab cannot be closed', !r.ok, r.text);
+
+// --- A new message in a chat with several tabs: no jump to the agent's last tab
+{
+  const extra = [];
+  for (const p of ['page2', 'contacts']) {
+    const r = await tool('browser_tabs', { action: 'new', url: `${url}${p}` });
+    extra.push(Number(/tab (\d+)/.exec(r.text)?.[1]));
+  }
+  await sw.evaluate((id) => chrome.tabs.update(id, { active: true }), tabId);
+  await page.bringToFront();
+  const before = await sw.evaluate((id) => self.tabhelmDebug.chatDebugState(id).current, tabId);
+  await sw.evaluate((id) => self.tabhelmDebug.startRecording(id, () => {}), tabId);
+  await new Promise((x) => setTimeout(x, 400));
+  const activeUrl = await sw.evaluate(async (id) => (await chrome.tabs.get(id)).active, tabId);
+  const recTab = await sw.evaluate((id) => self.tabhelmDebug.chatDebugState(id).recording, tabId);
+  await sw.evaluate((id) => self.tabhelmDebug.stopRecording(id), tabId);
+  check('Record video on Send does not jump to the agent\'s last tab', before !== tabId && activeUrl && recTab === tabId, `agent tab ${before}, chat ${tabId}, chat active=${activeUrl}, recording ${recTab}`);
+  await sw.evaluate((id) => self.tabhelmDebug.focusVisibleTab(id, null), tabId);
+  const after = await sw.evaluate((id) => self.tabhelmDebug.chatDebugState(id).current, tabId);
+  check('a new message makes the tab the user is looking at the agent\'s default', after === tabId, `current ${after}`);
+  for (const t of extra) if (t) await sw.evaluate((x) => chrome.tabs.remove(x).catch(() => {}), t);
+  await page.bringToFront();
+}
+
+// --- Single-tab mode: no new tabs, no switching; pop-ups load in the chat tab
+{
+  await sw.evaluate(() => chrome.storage.local.set({ singleTab: true }));
+  await new Promise((x) => setTimeout(x, 200));
+  const tabsBefore = await sw.evaluate(async () => (await chrome.tabs.query({})).length);
+  let r = await tool('browser_tabs', { action: 'new', url: `${url}page2` });
+  const here = await sw.evaluate(async (id) => (await chrome.tabs.get(id)).url, tabId);
+  const tabsAfter = await sw.evaluate(async () => (await chrome.tabs.query({})).length);
+  check('single-tab: "new tab" opens the address in this tab', r.ok && /in this tab/.test(r.text) && here.endsWith('/page2') && tabsAfter === tabsBefore, `${r.text} | ${here} | tabs ${tabsBefore}→${tabsAfter}`);
+  r = await tool('browser_get_text', { tabId: 999999 });
+  check('single-tab: other tabs are refused', !r.ok && /Single-tab mode/.test(r.text), r.text);
+  await tool('browser_navigate', { url });
+  snap = await tool('browser_snapshot');
+  r = await tool('browser_click', { ref: refFor(snap.text, 'open in new tab') });
+  await new Promise((x) => setTimeout(x, 2500));
+  const after = await sw.evaluate(async (id) => ({ url: (await chrome.tabs.get(id)).url, tabs: (await chrome.tabs.query({})).length }), tabId);
+  check('single-tab: a link that opens a new tab loads in this tab instead', after.url.endsWith('/page2') && after.tabs === tabsBefore, JSON.stringify(after));
+  await sw.evaluate(() => chrome.storage.local.set({ singleTab: false }));
+  await tool('browser_navigate', { url });
+  await new Promise((x) => setTimeout(x, 300));
+  snap = await tool('browser_snapshot');
+  found = await tool('browser_find', { text: 'Hover me' });
+}
 
 // --- Recording keeps producing frames on a still page (screenshots fill the screencast's silences)
 {

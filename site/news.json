@@ -1,6 +1,20 @@
 {
   "news": [
     {
+      "id": "2026-10-one-tab",
+      "date": "2026-10-21",
+      "minVersion": "0.29.0",
+      "title": {
+        "en": "Keep the agent in one tab",
+        "uk": "Агент в одній вкладці"
+      },
+      "text": {
+        "en": "＋ → Stay in this tab: no new tabs or switching — links and pop-ups open right here. Guides now type and choose values too, and auto-play does the whole form.",
+        "uk": "＋ → Stay in this tab: без нових вкладок і перемикань — посилання й pop-up-и відкриваються тут. Гід тепер уміє вводити й вибирати значення, а авто-програвання проходить усю форму."
+      },
+      "url": "https://github.com/Ivlad003/tabhelm#work-in-one-tab"
+    },
+    {
       "id": "2026-10-pick-scripts",
       "date": "2026-10-21",
       "minVersion": "0.27.0",

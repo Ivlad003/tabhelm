@@ -13,7 +13,7 @@ const chats = new Map(); // chatTabId -> { chatTabId, current, owned: Set, notes
 function chatState(chatTabId) {
   let c = chats.get(chatTabId);
   if (!c) {
-    c = { chatTabId, current: chatTabId, owned: new Set([chatTabId]), notes: [], interjections: [], groupId: null };
+    c = { chatTabId, current: chatTabId, owned: new Set([chatTabId]), notes: [], groupId: null };
     chats.set(chatTabId, c);
   }
   return c;
@@ -29,9 +29,37 @@ export function releaseChat(chatTabId) {
 
 // Only tabs opened while the agent is acting (a popup after its click) are
 // handed to it; tabs the user opens from the same page are not.
+// Single-tab mode (Settings → Page / ＋ → Stay in this tab): the agent works only
+// in the chat's tab — no new tabs, no switching; links and pop-ups open there.
+let singleTab = false;
+chrome.storage.local.get('singleTab').then((s) => (singleTab = Boolean(s.singleTab)));
+chrome.storage.onChanged.addListener((ch, area) => area === 'local' && ch.singleTab && (singleTab = Boolean(ch.singleTab.newValue)));
+const SINGLE_TAB_ERROR = 'Single-tab mode is on: work only in this tab — navigate it (browser_navigate) instead of opening or switching tabs.';
+
+// A pop-up opened by the agent's click in single-tab mode: load its address in
+// the chat tab and close it.
+async function foldPopupIntoChatTab(c, tab) {
+  let url = tab.pendingUrl || tab.url;
+  for (let i = 0; i < 20 && (!url || url === 'about:blank'); i++) {
+    await sleep(150);
+    const t = await chrome.tabs.get(tab.id).catch(() => null);
+    if (!t) return;
+    url = t.pendingUrl || t.url;
+  }
+  await chrome.tabs.remove(tab.id).catch(() => {});
+  if (url && url !== 'about:blank') {
+    await chrome.tabs.update(c.chatTabId, { url }).catch(() => {});
+    c.notes.push(`The page tried to open a new tab (${url}); single-tab mode opened it in this tab instead. Take a new snapshot.`);
+  }
+}
+
 chrome.tabs.onCreated.addListener((tab) => {
   for (const c of chats.values()) {
     if (tab.openerTabId != null && c.owned.has(tab.openerTabId) && Date.now() < (c.actingUntil || 0)) {
+      if (singleTab) {
+        foldPopupIntoChatTab(c, tab);
+        continue;
+      }
       c.owned.add(tab.id);
       addToGroup(c, tab.id);
       c.notes.push(`The page opened a new tab ${tab.id} (${tab.pendingUrl || tab.url || 'loading'}). Use it with tabId ${tab.id} or browser_tabs.`);
@@ -126,6 +154,10 @@ async function chatTabs(c) {
 
 // Resolves the tab a page tool acts on: tabId from the call, else the current tab.
 async function targetTab(c, requested, ui) {
+  if (singleTab) {
+    if (requested != null && Number(requested) !== c.chatTabId) throw new Error(SINGLE_TAB_ERROR);
+    return c.chatTabId;
+  }
   if (requested == null) return c.current;
   const id = Number(requested);
   const tab = await chrome.tabs.get(id).catch(() => null);
@@ -156,12 +188,13 @@ chrome.tabs.onRemoved.addListener((tabId) => {
 
 const recordings = new Map(); // chatTabId -> { tabId, onFrame }
 
-export async function startRecording(chatTabId, onFrame, tabId = chatState(chatTabId).current) {
+export async function startRecording(chatTabId, onFrame, tabId = null) {
   await stopRecording(chatTabId);
+  // A new message starts recording what the user is looking at — the chat's tab
+  // that is active in its window — and never switches tabs. When the agent then
+  // acts on another tab, recordTab() follows it.
+  if (tabId == null) tabId = await visibleChatTab(chatTabId);
   await assertControllable(tabId);
-  // Chrome renders (and so screencasts) only visible tabs: bring this one forward.
-  const tab = await chrome.tabs.get(tabId).catch(() => null);
-  if (tab && !tab.active) await chrome.tabs.update(tabId, { active: true }).catch(() => {});
   await attach(tabId);
   const rec = { tabId, onFrame, lastFrame: 0, timer: null };
   screencastListeners.set(tabId, (frame) => {
@@ -195,6 +228,31 @@ export async function startRecording(chatTabId, onFrame, tabId = chatState(chatT
   fill(); // the first frame right away, so even a quick task has a picture
 }
 
+// A new message from the user: the tab they are looking at (the chat tab, or a
+// tab of this chat in front) becomes the one tools act on by default.
+export async function focusVisibleTab(chatTabId, ui) {
+  const c = chats.get(chatTabId);
+  if (!c) return;
+  const tabId = await visibleChatTab(chatTabId);
+  if (tabId === c.current) return;
+  c.current = tabId;
+  const tab = await chrome.tabs.get(tabId).catch(() => null);
+  if (tab) {
+    c.notes.push(`The user is looking at tab ${tabId} (${tab.title || tab.url}) and sent this message from there; tools act on it by default. Other tabs of this chat: browser_tabs list, or pass tabId.`);
+    ui?.onTarget?.(chatTabId, tab);
+  }
+}
+
+// The chat tab, or the tab of this chat that is in front in the chat tab's window.
+async function visibleChatTab(chatTabId) {
+  const c = chatState(chatTabId);
+  const chatTab = await chrome.tabs.get(chatTabId).catch(() => null);
+  if (!chatTab || chatTab.active) return chatTabId;
+  const [front] = await chrome.tabs.query({ active: true, windowId: chatTab.windowId }).catch(() => []);
+  if (front && (c.owned.has(front.id) || (c.groupId != null && front.groupId === c.groupId))) return front.id;
+  return chatTabId;
+}
+
 // While recording, the tab the agent acts on (also via tabId, without switching)
 // is brought to the front — Chrome renders frames only for visible tabs — and
 // the recording moves there.
@@ -225,8 +283,6 @@ async function followTarget(c) {
 // ---------- helpers ----------
 
 const text = (t) => [{ type: 'text', text: t }];
-// Tools that only read: they do not pull a background tab to the front for the recording.
-const READ_ONLY_TOOLS = new Set(['browser_snapshot', 'browser_find', 'browser_get_text', 'browser_console', 'browser_network', 'browser_network_body', 'browser_script_list', 'browser_script_save']);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function parseRef(ref) {
@@ -505,6 +561,13 @@ async function tabsTool(c, args, ui) {
       return { content: text((tabs.map(describe).join('\n') || 'No tabs.') + note) };
     }
     case 'new': {
+      if (singleTab) {
+        // Same address, this tab.
+        if (!args.url) throw new Error(SINGLE_TAB_ERROR);
+        await chrome.tabs.update(c.chatTabId, { url: normalizeUrl(args.url) });
+        const loaded = await waitForLoad(c.chatTabId);
+        return { content: text(`Single-tab mode: opened ${loaded.url} in this tab instead of a new one. Take a new snapshot.`) };
+      }
       // Opened in the background so the user keeps seeing the chat tab and panel.
       const tab = await chrome.tabs.create({ url: normalizeUrl(args.url || 'about:blank'), active: false, openerTabId: c.chatTabId });
       c.owned.add(tab.id);
@@ -516,6 +579,7 @@ async function tabsTool(c, args, ui) {
       return { content: text(`Opened tab ${tab.id} in the background: ${loaded.url}. Tools now act on it. Note: background tabs may not render screenshots.`) };
     }
     case 'switch': {
+      if (singleTab && Number(args.tabId) !== c.chatTabId) throw new Error(SINGLE_TAB_ERROR);
       const id = Number(args.tabId);
       const tab = await chrome.tabs.get(id).catch(() => null);
       if (!tab) throw new Error(`No tab ${args.tabId}.`);
@@ -585,7 +649,7 @@ async function runToolInner(chatTabId, tool, args, ui) {
   else {
     const tabId = await targetTab(c, args.tabId, ui);
     const tab = await assertControllable(tabId);
-    if (!READ_ONLY_TOOLS.has(tool)) await recordTab(chatTabId, tabId);
+    await recordTab(chatTabId, tabId); // while recording, the video shows wherever the agent works or looks
     await attach(tabId);
     c.actingUntil = Infinity;
     try {
@@ -597,13 +661,6 @@ async function runToolInner(chatTabId, tool, args, ui) {
   }
   if (c.notes.length) {
     result.content = [...result.content, { type: 'text', text: `\n${c.notes.splice(0).join('\n')}` }];
-  }
-  // Messages the user typed while the agent was working ride along with the
-  // next tool result, so the agent picks them up without waiting for the turn to end.
-  if (c.interjections.length) {
-    const texts = c.interjections.splice(0);
-    result.content = [...result.content, { type: 'text', text: `\n[Message from the user while you were working — take it into account now]\n${texts.join('\n\n')}` }];
-    ui.onInterjected?.(chatTabId, texts);
   }
   return result;
 }
@@ -619,6 +676,8 @@ async function guideTour(chatTabId, defaultTab, args, ui) {
     ref: st.ref || null,
     text: String(st.text || ''),
     tabId: st.tabId != null ? Number(st.tabId) : defaultTab,
+    action: ['click', 'type', 'select', 'check', 'none'].includes(st.action) ? st.action : st.value != null ? 'type' : 'click',
+    value: st.value != null ? String(st.value) : null,
   }));
   const single = !args.steps?.length;
   const startNumber = args.step || 1;
@@ -654,13 +713,13 @@ async function guideTour(chatTabId, defaultTab, args, ui) {
       frameId = parsed.frameId;
       ref = parsed.ref;
     }
-    const sameFrame = steps.filter((st) => st.tabId === tabId && (st.ref ? parseRef(st.ref).frameId === frameId : true)).map((st) => ({ index: st.index, ref: st.ref ? parseRef(st.ref).ref : null, text: st.text, canBack: single && startNumber > 1 }));
+    const sameFrame = steps.filter((st) => st.tabId === tabId && (st.ref ? parseRef(st.ref).frameId === frameId : true)).map((st) => ({ index: st.index, ref: st.ref ? parseRef(st.ref).ref : null, text: st.text, action: st.action, canBack: single && startNumber > 1 }));
     const shown = await inject(tabId, P.guideTour, [sameFrame, i, steps.length, { auto, pauseMs }], frameId).catch(() => null);
     label = shown?.label || '';
     shownTab = tabId;
     shownFrame = frameId;
     c.guideAction = null;
-    ui.guideProgress?.(chatTabId, { index: i, total: steps.length, text: step.text, target: label, found: Boolean(shown?.found), tabId, tabTitle: tab.title, number: single ? startNumber : i + 1, auto });
+    ui.guideProgress?.(chatTabId, { index: i, total: steps.length, text: step.text, target: label, found: Boolean(shown?.found), tabId, tabTitle: tab.title, number: single ? startNumber : i + 1, auto, action: step.action, value: step.value });
 
     let status = 'waiting';
     const shownAt = Date.now();
@@ -684,15 +743,19 @@ async function guideTour(chatTabId, defaultTab, args, ui) {
       continue; // show the same step again in the new mode
     }
     if (status === 'autoplay') {
-      // The agent clicks the highlighted element itself, like the user would.
-      if (ref) {
+      // The agent does the step itself, like the user would: click, type or choose.
+      if (ref && step.action !== 'none') {
         try {
-          const loc = await locate(tabId, step.ref);
-          const urlBefore = (await chrome.tabs.get(tabId)).url;
-          await pointer(tabId, loc.x, loc.y, 'click');
-          await mouseClick(tabId, loc.x, loc.y);
-          await settle(tabId, urlBefore);
-          results[i] = 'auto-clicked';
+          const t = await chrome.tabs.get(tabId);
+          if (step.action === 'type') await runPageTool(tabId, t, 'browser_type', { ref: step.ref, text: step.value ?? '' }, ui, chatTabId);
+          else if (step.action === 'select') await runPageTool(tabId, t, 'browser_select_option', { ref: step.ref, value: step.value ?? '' }, ui, chatTabId);
+          else {
+            const loc = await locate(tabId, step.ref);
+            await pointer(tabId, loc.x, loc.y, 'click');
+            await mouseClick(tabId, loc.x, loc.y);
+            await settle(tabId, t.url);
+          }
+          results[i] = step.action === 'type' ? `auto-typed "${step.value}"` : step.action === 'select' ? `auto-selected "${step.value}"` : 'auto-clicked';
         } catch (err) {
           results[i] = `auto-click failed: ${err.message}`;
           auto = false; // let the user take over this step
@@ -755,18 +818,13 @@ export async function runScript(tabId, preset) {
   return out.length > 5000 ? `${out.slice(0, 5000)}…` : out;
 }
 
+export function singleTabMode() {
+  return singleTab;
+}
+
 export function setGuideAction(chatTabId, action) {
   const c = chats.get(chatTabId);
   if (c) c.guideAction = action;
-}
-
-export function interject(chatTabId, text) {
-  chatState(chatTabId).interjections.push(text);
-}
-
-export function dropInterjections(chatTabId) {
-  const c = chats.get(chatTabId);
-  if (c) c.interjections = [];
 }
 
 // skill_save: a skill written by the agent (e.g. from this chat) goes into the

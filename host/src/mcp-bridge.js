@@ -10,7 +10,7 @@ import { z } from 'zod';
 const { TABHELM_URL, TABHELM_TOKEN, TABHELM_TAB } = process.env;
 const tabId = Number(TABHELM_TAB);
 
-const server = new McpServer({ name: 'tabhelm-browser', version: '0.28.0' });
+const server = new McpServer({ name: 'tabhelm-browser', version: '0.29.0' });
 
 async function call(tool, args = {}) {
   try {
@@ -161,9 +161,21 @@ const tools = {
   },
   browser_guide: {
     description:
-      'Guide mode: show the user what to do instead of doing it. Pass ALL steps you can see at once (steps[]): every step gets a numbered badge on the page, the active one an arrow and your instruction; Next/Back move between steps (scrolling to them, switching tabs for steps on other tabs) and a click on the element counts as done. The call returns when the user finishes, with what they did or skipped. Steps on pages that only appear after a click cannot have refs yet: give them text only, or start a new browser_guide after a snapshot. Single-step form (ref, text, step) still works.',
+      'Guide mode: show the user what to do instead of doing it — or, with auto:true, demonstrate it step by step with pauses. Give each step its action (click / type with value / select with value / check). Pass ALL steps you can see at once (steps[]): every step gets a numbered badge on the page, the active one an arrow and your instruction; Next/Back move between steps (scrolling to them, switching tabs for steps on other tabs) and a click on the element counts as done. The call returns when the user finishes, with what they did or skipped. Steps on pages that only appear after a click cannot have refs yet: give them text only, or start a new browser_guide after a snapshot. Single-step form (ref, text, step) still works.',
     inputSchema: {
-      steps: z.array(z.object({ ref: z.string().optional().describe('Element ref from the latest browser_snapshot of that tab; omit for a text-only step'), text: z.string().describe('Instruction for this step'), tabId: z.number().optional().describe('Tab of this step (default: current tab)') })).optional(),
+      steps: z
+        .array(
+          z.object({
+            ref: z.string().optional().describe('Element ref from the latest browser_snapshot of that tab; omit for a text-only step'),
+            text: z.string().describe('Instruction for this step'),
+            action: z.enum(['click', 'type', 'select', 'check', 'none']).optional().describe('What the step does: click (default), type a value into a field, select an option, check a box, or none (just look)'),
+            value: z.string().optional().describe('For type: the text to enter; for select: the option value or label'),
+            tabId: z.number().optional().describe('Tab of this step (default: current tab)'),
+          }),
+        )
+        .optional(),
+      auto: z.boolean().optional().describe('Play the guide automatically: you perform each step after a pause the user can watch (asks the user first unless auto-approve is on)'),
+      pause: z.number().optional().describe('Seconds to pause before each automatic step (default from the user settings)'),
       ref: z.string().optional().describe('Single-step form: element ref'),
       text: z.string().optional().describe('Single-step form: instruction'),
       step: z.number().optional().describe('Single-step form: step number shown on the page'),

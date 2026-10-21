@@ -221,6 +221,7 @@ async function handleMessageNow(msg) {
       case 'set_features': {
         const session = sessions.get(tabId);
         if (session) {
+          if (Boolean(session.features?.singleTab) && !msg.features?.singleTab) session.modeNote = 'Single-tab mode is off now: you may open and use other tabs again.\n';
           session.features = msg.features || {};
           session.featureSettings = msg.featureSettings || {};
         }

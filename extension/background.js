@@ -1,4 +1,4 @@
-import { runTool, releaseChat, startRecording, stopRecording, ensureGroup, groupInfo, chatForGroupTab, chatDebugState, previewTarget, interject, dropInterjections, markWorking, setGuideAction, runScript } from './browser-tools.js';
+import { runTool, releaseChat, startRecording, stopRecording, ensureGroup, groupInfo, chatForGroupTab, chatDebugState, previewTarget, markWorking, setGuideAction, runScript, focusVisibleTab } from './browser-tools.js';
 import { listScripts, scriptMatches } from './scripts-lib.js';
 import { checkPolicy, pauseChat, resumeChat, isPaused, READ_ONLY } from './policy.js';
 import { getFeatures, getSetting, hostFeaturePayload } from './features.js';
@@ -17,7 +17,7 @@ let nextCriticId = 1;
 let nativePort = null;
 
 // Dev hook for scripts/tools-test.js: lets the test call tools directly from the service worker.
-self.tabhelmDebug = { runTool, ensureGroup, chatDebugState, runSchedule: (id) => runScheduled(id, scheduleDeps), sendPageContext, backupState, restoreState, startRecording, stopRecording, ui: () => ui };
+self.tabhelmDebug = { runTool, ensureGroup, chatDebugState, focusVisibleTab, runSchedule: (id) => runScheduled(id, scheduleDeps), sendPageContext, backupState, restoreState, startRecording, stopRecording, ui: () => ui };
 
 const autoApproveTabs = new Set(); // chats with Auto-approve on (panel checkbox)
 
@@ -136,9 +136,6 @@ const ui = {
   },
   guideDone(chatTabId, info) {
     deliver(chatTabId, { type: 'guide_done', ...info });
-  },
-  onInterjected(chatTabId, texts) {
-    deliver(chatTabId, { type: 'interjected', texts });
   },
   skillsChanged() {
     for (const port of panels.values()) port.postMessage({ type: 'skills_changed' });
@@ -322,7 +319,6 @@ async function onHostMessage(msg) {
   }
   if (msg.type === 'done') {
     markWorking(msg.tabId, false);
-    dropInterjections(msg.tabId); // whatever was not picked up is sent by the panel as the next message
     notify(msg.tabId, msg.stopReason === 'end_turn' ? 'done' : 'failed', 'Task finished');
   }
   if (msg.type === 'permission') notify(msg.tabId, 'needs', msg.title);
@@ -348,10 +344,6 @@ export async function fromPanel(tabId, msg, port) {
   if (msg.type === 'ask_response') {
     asks.get(msg.id)?.resolve(msg.reply);
     asks.delete(msg.id);
-    return;
-  }
-  if (msg.type === 'interject') {
-    interject(tabId, msg.text);
     return;
   }
   // ＋ menu / Settings: run a saved page script on this chat's tab.
@@ -422,6 +414,7 @@ export async function fromPanel(tabId, msg, port) {
     info.actions = [];
     chatInfo.set(tabId, info);
     resumeChat(tabId);
+    await focusVisibleTab(tabId, ui);
     // The tab the agent works on is grouped (green "TabHelm" group) from the first
     // task on, so it is obvious in the tab strip; yellow while a task runs.
     ensureGroup(tabId)

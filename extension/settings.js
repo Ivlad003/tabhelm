@@ -29,6 +29,15 @@ export async function initSettings(panelPort) {
   initRemote();
   const hl = $('highlight-finds');
   hl.onchange = () => chrome.storage.local.set({ highlightFinds: hl.checked });
+  // One-tab mode: two switches (Settings → Page and the ＋ menu), one setting.
+  const singles = [$('single-tab'), $('single-tab-menu')];
+  const setSingle = async (on) => {
+    await chrome.storage.local.set({ singleTab: on });
+    for (const b of singles) b.checked = on;
+    port.postMessage({ type: 'set_features' }); // tells the running agent
+  };
+  for (const b of singles) b.onchange = () => setSingle(b.checked);
+  chrome.storage.local.get('singleTab').then((s) => singles.forEach((b) => (b.checked = Boolean(s.singleTab))));
   const gp = $('guide-pause');
   gp.onchange = () => chrome.storage.local.set({ guidePause: Math.min(30, Math.max(1, Number(gp.value) || 3)) });
   const stored = await chrome.storage.local.get(['skills', 'highlightFinds', 'guidePause']);

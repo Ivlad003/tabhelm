@@ -2,6 +2,19 @@
 
 All notable changes to TabHelm. The newest release is at the top; the panel's update banner links here.
 
+## [0.29.0] - 2026-10-21
+
+### Added
+- **Work in one tab** (Settings → Page, or ＋ → Stay in this tab): the agent stays in the chat's tab — no new tabs or switching; "open in a new tab" and pop-ups load in this tab.
+
+### Fixed
+- **Pressing Send jumped to the last tab of the chat's group** when Record video was on: recording started on the agent's last tab and pulled it to the front. It now records the tab you are looking at and never switches on Send; each new message also makes that tab the agent's default.
+- **Guide auto-play did not start when the agent asked for it** (the tool schema dropped `auto`), and it could only click. Steps now have an action — click, type a value, select an option, check — performed by auto-play; in manual mode typing steps complete when the value changes.
+- **Messages typed while the agent works were treated as prompt injection** (they arrived inside a tool result). Enter now interrupts the current step and sends the message as a normal user message asking the agent to continue.
+- **Recording across tabs** now also follows the agent when it only reads another tab, so the video shows every tab it works with.
+- **Guide scrolling:** each step's element is scrolled into view smoothly whenever it is not comfortably visible (with room for the arrow and the bubble), so recordings show where the guide goes next.
+- Voice (Chrome recognition): a result arriving just after Stop no longer throws in the panel (found by the monkey test).
+
 ## [0.28.0] - 2026-10-21
 
 A feature release that rounds up everything since 0.19. No code changes since 0.27.3 beyond the panel's news: the update banner and five news items now announce these features in the panel and on the website.

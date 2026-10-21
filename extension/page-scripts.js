@@ -619,7 +619,7 @@ export function guideTour(steps, active, total, opts = {}) {
   }
   function finish(status) {
     state.guide = { status, index: active };
-    document.removeEventListener('click', state.guideListener, true);
+    for (const ev of ['click', 'change']) document.removeEventListener(ev, state.guideListener, true);
     removeEventListener('scroll', place, true);
     removeEventListener('resize', place);
     clearInterval(state.guideTimer);
@@ -627,19 +627,29 @@ export function guideTour(steps, active, total, opts = {}) {
   }
   // The user's click on the active element completes the step; the event itself
   // is left alone so the page reacts normally.
+  // A click on the active element completes a click step; typing and choosing
+  // steps complete when the value changes (a click into a field is not enough).
+  const needsValue = ['type', 'select'].includes(current?.action);
   state.guideListener = (e) => {
-    if (target && e.composedPath().includes(target)) finish('clicked');
+    if (!target || !e.composedPath().includes(target)) return;
+    if (needsValue ? e.type === 'change' : e.type === 'click') finish('clicked');
   };
-  document.addEventListener('click', state.guideListener, true);
+  for (const ev of ['click', 'change']) document.addEventListener(ev, state.guideListener, true);
   addEventListener('scroll', place, true);
   addEventListener('resize', place);
   state.guideTimer = setInterval(place, 250);
+  // Bring the step's element comfortably into view (room for the arrow and the
+  // bubble), smoothly so a recording shows where the guide goes next.
   if (target) {
     const r = target.getBoundingClientRect();
-    if (r.bottom < 0 || r.top > innerHeight) target.scrollIntoView({ block: 'center', inline: 'nearest' });
+    const margin = 170;
+    if (r.top < 60 || r.bottom > innerHeight - margin || r.left < 0 || r.right > innerWidth) {
+      const smooth = !matchMedia('(prefers-reduced-motion: reduce)').matches;
+      target.scrollIntoView({ block: 'center', inline: 'nearest', behavior: smooth ? 'smooth' : 'auto' });
+    }
   }
   place();
-  return { ok: true, found: Boolean(target), label: target ? (target.getAttribute('aria-label') || target.innerText || target.value || '').replace(/\s+/g, ' ').trim().slice(0, 80) : '' };
+  return { ok: true, found: Boolean(target), label: target ? (target.getAttribute('aria-label') || target.labels?.[0]?.innerText || (['INPUT', 'SELECT', 'TEXTAREA'].includes(target.tagName) ? target.placeholder || target.name : target.innerText) || target.value || '').replace(/\s+/g, ' ').trim().slice(0, 80) : '' };
 }
 
 export function guideStatus() {
@@ -649,7 +659,7 @@ export function guideStatus() {
 export function guideHide() {
   const state = window.__tabhelm;
   document.getElementById('tabhelm-guide')?.remove();
-  if (state?.guideListener) document.removeEventListener('click', state.guideListener, true);
+  if (state?.guideListener) for (const ev of ['click', 'change']) document.removeEventListener(ev, state.guideListener, true);
   clearInterval(state?.guideTimer);
   if (state) state.guide = { status: 'cancelled' };
 }

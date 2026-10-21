@@ -71,6 +71,9 @@ const browser = await puppeteer.launch({
   pipe: true,
   enableExtensions: [EXT],
   args: ['--no-first-run'],
+  // E2E_REAL_THROTTLING=1: keep Chrome's normal throttling of hidden pages (puppeteer
+  // turns it off by default), so hidden side-panel behaviour matches real Chrome.
+  ...(process.env.E2E_REAL_THROTTLING ? { ignoreDefaultArgs: ['--disable-renderer-backgrounding', '--disable-background-timer-throttling', '--disable-backgrounding-occluded-windows'] } : {}),
   // Inherited by the native host: keep test videos out of ~/Videos.
   env: { ...process.env, TABHELM_RECORDINGS_DIR: join(profile, 'videos') },
   protocolTimeout: 300_000,
@@ -91,7 +94,7 @@ if (process.env.E2E_NEWS) await sw.evaluate((u) => chrome.storage.local.set({ ne
 const panelUrl = `chrome-extension://${extId}/sidepanel.html?tabId=${tabId}`;
 // For the tab-group test the panel is a background tab of the same window: in
 // headless Chrome a popup window disables tab grouping in the other windows.
-if (process.env.E2E_TABS) await sw.evaluate((url) => chrome.tabs.create({ url, active: true }), panelUrl);
+if (process.env.E2E_TABS || process.env.E2E_RECORD_TABS) await sw.evaluate((url) => chrome.tabs.create({ url, active: true }), panelUrl);
 else await sw.evaluate((url) => chrome.windows.create({ url, type: 'popup', width: 420, height: 800 }), panelUrl);
 const panel = await (await browser.waitForTarget((t) => t.url() === panelUrl)).page();
 panel.on('console', (m) => console.log('[panel]', m.text()));
@@ -277,6 +280,90 @@ if (process.env.E2E_CONTEXT) {
   process.exit(ok ? 0 : 1);
 }
 
+// E2E_RECORD_TABS=1: record a task that moves between two tabs and check the
+// video keeps running (no long freeze) while the agent works on the other tab.
+// The panel is a tab of the same window, so — like the real side panel — it is
+// hidden whenever the agent's tab is in front.
+if (process.env.E2E_RECORD_TABS) {
+  if (process.env.E2E_SINGLE_TAB) await sw.evaluate(() => chrome.storage.local.set({ singleTab: true }));
+  await panel.bringToFront();
+  await panel.select('#agent', agent);
+  await panel.click('#auto');
+  await panel.click('#plus-menu summary');
+  await panel.click('#record');
+  await panel.click('#plus-menu summary');
+  await panel.type('#input', `Open ${url}contacts in a new tab with browser_tabs, read the email address there, wait 3 seconds on that tab (browser_wait), then switch back to the signup tab, type the email into the Name field and click Save.`);
+  const t0 = Date.now();
+  await panel.click('#send');
+  await panel.waitForFunction(() => document.querySelector('#send').textContent === 'Stop', { timeout: 30000 });
+  const vis = new Set();
+  while (await panel.evaluate(() => document.querySelector('#send').textContent === 'Stop')) {
+    vis.add(await panel.evaluate(() => document.visibilityState));
+    await new Promise((r) => setTimeout(r, 500));
+    if (Date.now() - t0 > 300000) break;
+  }
+  const took = (Date.now() - t0) / 1000;
+  console.log('panel visibility while the agent worked:', [...vis].join(', '));
+  await panel.bringToFront();
+  await panel.waitForFunction(() => /Saved to /.test(document.querySelector('.video')?.innerText || '') || /No video/.test(document.body.innerText), { timeout: 60000 }).catch(() => {});
+  const info = await panel.$eval('.video', (e) => e.innerText.replace(/\s+/g, ' ')).catch(() => 'no video card');
+  const path = /Saved to (\S+)/.exec(info)?.[1];
+  const out = await page.$eval('#out', (e) => e.textContent);
+  let duration = 0;
+  let freezes = [];
+  if (path && existsSync(path)) {
+    duration = Number(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', path]).toString().trim()) || 0;
+    const fd = execFileSync('ffmpeg', ['-v', 'info', '-i', path, '-vf', 'freezedetect=n=0.001:d=4', '-map', '0:v:0', '-f', 'null', '-'], { stdio: ['ignore', 'pipe', 'pipe'] }).toString();
+    freezes = [...(fd.match(/freeze_duration: [\d.]+/g) || [])];
+  }
+  const steps = await panel.$$eval('.action', (a) => a.map((x) => x.innerText.replace(/\s+/g, ' ')));
+  console.log('steps:', steps.join(' | ').slice(0, 600));
+  console.log(`task ${took.toFixed(1)} s | video ${duration.toFixed(1)} s | ${info.slice(0, 120)}`);
+  console.log('freezes over 4 s:', freezes.join(', ') || 'none', '| page:', out);
+  if (path) {
+    // Frames for eyeballing: one every 3 s.
+    execFileSync('ffmpeg', ['-v', 'error', '-i', path, '-vf', 'fps=1/3,scale=480:-1', join(profile, 'frame-%02d.png')]);
+    console.log('frames in', profile);
+  }
+  const tabCount = await sw.evaluate(async () => (await chrome.tabs.query({})).length);
+  if (process.env.E2E_SINGLE_TAB) console.log('tabs open at the end:', tabCount, '(single-tab mode: page + panel = 2)');
+  const ok = Boolean(path) && duration >= took * 0.6 && freezes.length === 0 && /grace@navy\.example/.test(out) && (!process.env.E2E_SINGLE_TAB || tabCount === 2);
+  console.log(ok ? 'E2E PASS' : 'E2E FAIL');
+  await browser.close();
+  server.close();
+  process.exit(ok ? 0 : 1);
+}
+
+// E2E_GUIDE=1: the agent guides through the form and plays it automatically.
+if (process.env.E2E_GUIDE) {
+  await panel.select('#agent', agent);
+  await panel.click('#auto');
+  await panel.type('#input', 'Guide me through filling this form as a guide tour (browser_guide) with the name "Ada Lovelace", color Blue, the agreement ticked and Save — and play it automatically (auto) so I can watch. Do not fill it yourself with other tools.');
+  await panel.click('#send');
+  const t0 = Date.now();
+  let lastCard = '';
+  while (Date.now() - t0 < 240000) {
+    await new Promise((r) => setTimeout(r, 1000));
+    const st = await panel.evaluate(() => ({ busy: document.querySelector('#send').textContent === 'Stop', card: document.querySelector('.card.guide')?.innerText.replace(/\s+/g, ' ') || '', confirm: [...document.querySelectorAll('.card:not(.resolved) .title')].map((t) => t.textContent).join(' | ') }));
+    if (st.card !== lastCard) console.log('guide card:', st.card.slice(0, 160));
+    lastCard = st.card;
+    if (st.confirm) console.log('pending confirm:', st.confirm);
+    if (!st.busy && Date.now() - t0 > 5000) break;
+  }
+  const out = await page.$eval('#out', (e) => e.textContent);
+  const fields = await page.evaluate(() => ({ name: document.getElementById('name').value, color: document.getElementById('color').value, terms: document.getElementById('terms').checked }));
+  const actions = await panel.$$eval('.action', (a) => a.map((x) => x.innerText.replace(/\s+/g, ' ')));
+  const answer = await panel.$$eval('.msg.agent', (m) => m.map((x) => x.innerText).join(' ').replace(/\s+/g, ' '));
+  console.log('steps:', actions.join(' | ').slice(0, 800));
+  console.log('fields:', JSON.stringify(fields), '| out:', out);
+  console.log('answer:', answer.slice(0, 400));
+  const ok = out === 'Saved: Ada Lovelace / blue / agreed';
+  console.log(ok ? 'E2E PASS' : 'E2E FAIL');
+  await browser.close();
+  server.close();
+  process.exit(ok ? 0 : 1);
+}
+
 if (process.env.E2E_SKILLS) {
   await panel.click('#settings-open');
   await panel.type('#skill-url', `${url}skills/signup-secret`);
@@ -449,11 +536,16 @@ const out = await page.$eval('#out', (e) => e.textContent);
 
 let extraOk = true;
 if (process.env.E2E_INTERJECT) {
+  // The interrupt ends the first turn; the message then starts a second one.
+  await panel.waitForFunction(() => /handed over/.test(document.querySelector('.queued-tag')?.textContent || ''), { timeout: 60000 }).catch(() => {});
+  await new Promise((r) => setTimeout(r, 1500));
+  await panel.waitForFunction(() => document.querySelector('#send').textContent === 'Send' && document.querySelector('#status').dataset.state !== 'working', { timeout: 240000, polling: 1000 });
   const tag = await panel.$$eval('.queued-tag', (l) => l.map((e) => e.textContent).join(' | '));
   const reply = await panel.$$eval('.msg.agent', (m) => m.map((x) => x.innerText).join(' '));
-  const picked = /picked up|sent/.test(tag) && /PINEAPPLE/.test(reply);
-  console.log('interject tag:', tag, '| answer mentions PINEAPPLE:', /PINEAPPLE/.test(reply));
-  extraOk &&= picked;
+  const outNow = await page.$eval('#out', (e) => e.textContent);
+  const flagged = /posing as|prompt injection|claims? to be (from )?(you|the user)/i.test(reply);
+  console.log('interject tag:', tag, '| PINEAPPLE:', /PINEAPPLE/.test(reply), '| treated as injection:', flagged, '| page:', outNow);
+  extraOk &&= /handed over/.test(tag) && /PINEAPPLE/.test(reply) && !flagged && outNow === 'Saved: Ada Lovelace / blue / agreed';
 }
 if (process.env.E2E_HISTORY) {
   const count = await panel.$eval('.activity .activity-count', (e) => Number(e.textContent)).catch(() => 0);
@@ -584,7 +676,7 @@ if (process.env.E2E_SHOTS) {
   console.log('extra screenshots in', profile);
 }
 for (const p of relayProcs) p.kill();
-const pass = out === 'Saved: Ada Lovelace / blue / agreed' && extraOk && usageOk && copyOk;
+const pass = (out === 'Saved: Ada Lovelace / blue / agreed' || process.env.E2E_INTERJECT) && extraOk && usageOk && copyOk;
 console.log(pass ? 'E2E PASS' : 'E2E FAIL');
 await browser.close();
 server.close();
