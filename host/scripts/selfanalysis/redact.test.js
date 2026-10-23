@@ -5,6 +5,9 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readdirSync, readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   REDACTION_TABLE, redactText, normalize, norm, blankQuotes, hostOf, topFrame, aliasHosts, safeDesc, argKeys, stableHash, fnv1a32,
 } from '../../../extension/redact.js';
@@ -169,15 +172,16 @@ test('pairing codes in the real relay format; ordinary capitals stay', () => {
 });
 
 test('API keys, tokens and JWTs become <key>', () => {
+  // Fake keys are split in two so secret scanners do not report them as leaks.
   for (const key of [
-    'sk-ant-api03-exampleexampleexample',
-    'pk-live-0000example0000',
-    'ghp_exampleExampleExample0123456789ab',
-    'github_pat_11ABCDEFG0exampleexampleexample',
-    'xoxb-1234-example',
-    'AKIAIOSFODNN7EXAMPLE',
-    'AIzaSyExampleExampleExampleExample12345',
-    'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ0ZXN0In0.c2lnbmF0dXJlMTIz',
+    'sk-' + 'ant-api03-exampleexampleexample',
+    'pk-' + 'live-0000example0000',
+    'ghp' + '_exampleExampleExample0123456789ab',
+    'github' + '_pat_11ABCDEFG0exampleexampleexample',
+    'xoxb' + '-1234-example',
+    'AKIA' + 'IOSFODNN7EXAMPLE',
+    'AIza' + 'SyExampleExampleExampleExample12345',
+    'eyJhbGciOiJIUzI1NiJ9' + '.eyJzdWIiOiJ0ZXN0In0.c2lnbmF0dXJlMTIz',
   ]) assert.equal(redactText(`key ${key} rejected`), 'key <key> rejected', key);
   assert.equal(redactText('Authorization: Bearer abc.def'), 'Authorization: <key>');
 });
@@ -432,4 +436,17 @@ test('truncation never leaves part of a host name: the cut word is dropped', () 
   assert.match(out, /failed at…$/);
   // A cut inside a plain word keeps the cut as before.
   assert.match(norm(`${'y'.repeat(158)} abcdef`), /^y+ a…$|^y+…$/);
+});
+
+// GitHub secret scanning reported the fake Google key once (0.31.0). No test
+// or fixture may hold a whole key-shaped literal again; build fakes from parts.
+test('no test or fixture source contains a whole key-shaped literal', () => {
+  const dir = dirname(fileURLToPath(import.meta.url));
+  const files = [
+    ...readdirSync(dir).filter((f) => /\.(?:js|mjs)$/.test(f)).map((f) => join(dir, f)),
+    ...readdirSync(join(dir, 'fixtures')).map((f) => join(dir, 'fixtures', f)),
+    join(dir, '../../../extension/redact.js'),
+  ];
+  const KEYISH = /AIza[\w-]{35}|AKIA[0-9A-Z]{16}|\bgh[pousr]_[A-Za-z0-9]{30,}|github_pat_\w{20,}|xox[abprs]-\d|sk-ant-\w|eyJ[\w-]{10,}\.eyJ/;
+  for (const f of files) assert.doesNotMatch(readFileSync(f, 'utf8'), KEYISH, f);
 });

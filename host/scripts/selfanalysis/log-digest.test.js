@@ -421,9 +421,10 @@ describe('redactLine', () => {
     ['/home/ivanko/x/y.pdf', '<path>.pdf'],
     ['relay: pairing code K7PM-3QWX', 'relay: pairing code <code>'],
     ['See AUTHORS and HTTPS docs', 'See AUTHORS and HTTPS docs'],
-    ['Invalid API key sk-test-0000example0000example', 'Invalid API key <key>'],
-    ['Bad credentials ghp_exampleExampleExample0123456789ab', 'Bad credentials <key>'],
-    ['jwt eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ0ZXN0In0.c2lnbmF0dXJlMTIz expired', 'jwt <key> expired'],
+    // Fake keys are split in two so secret scanners do not report them as leaks.
+    ['Invalid API key sk-' + 'test-0000example0000example', 'Invalid API key <key>'],
+    ['Bad credentials ghp' + '_exampleExampleExample0123456789ab', 'Bad credentials <key>'],
+    ['jwt eyJhbGciOiJIUzI1NiJ9' + '.eyJzdWIiOiJ0ZXN0In0.c2lnbmF0dXJlMTIz expired', 'jwt <key> expired'],
     ['GET https://shop.example.com/cart/checkout?session=abc123&user=42#top failed', 'GET shop.example.com failed'],
     ['relay: connect ECONNREFUSED 127.0.0.1:18958', 'relay: connect ECONNREFUSED N.0.0.1:N'],
     ['No option matching "Ada Lovelace" in f1:e12', 'No option matching "…" in <ref>'],
