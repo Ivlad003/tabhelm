@@ -6,6 +6,8 @@
 import { cdp, attach, detach, dialogs, consoleLogs, requests, fileChoosers, dragData, screencastListeners } from './cdp.js';
 import { getFeatures, setFeature } from './features.js';
 import { listScripts, scriptMatches, saveScript } from './scripts-lib.js';
+import { topFrame } from './redact.js';
+import { diagnoseTool } from './selfanalysis-data.js';
 import * as P from './page-scripts.js';
 
 const chats = new Map(); // chatTabId -> { chatTabId, current, owned: Set, notes: [] }
@@ -634,7 +636,11 @@ export async function runTool(chatTabId, tool, args, ui) {
     return await runToolInner(chatTabId, tool, args, ui);
   } catch (err) {
     // Wrong argument types surface as a clear message for the agent, not as internals.
-    if (err instanceof TypeError) throw new Error(`Invalid arguments for ${tool} (${err.message}). Check the tool's parameters and try again.`);
+    if (err instanceof TypeError) {
+      const e = new Error(`Invalid arguments for ${tool} (${err.message}). Check the tool's parameters and try again.`);
+      e.frame = topFrame(err.stack); // where it broke, for a TabHelm bug report
+      throw e;
+    }
     throw err;
   }
 }
@@ -646,6 +652,7 @@ async function runToolInner(chatTabId, tool, args, ui) {
     result = await tabsTool(c, args, ui);
     await rememberVisit(c, c.current);
   } else if (tool === 'skill_save') result = await saveSkill(args, ui);
+  else if (tool === 'tabhelm_diagnose') result = await diagnoseTool(chatTabId, args, ui);
   else if (tool === 'browser_search_tabs') result = await searchTabs(c, args);
   else if (tool === 'browser_handle_dialog') result = await handleDialog(await targetTab(c, args.tabId, ui), args);
   else {
@@ -661,6 +668,7 @@ async function runToolInner(chatTabId, tool, args, ui) {
       c.actingUntil = Infinity;
       try {
         result = await runPageTool(tabId, tab, tool, args, ui, chatTabId);
+        result.tabId = tabId;
       } finally {
         // Popups may open a moment after the action finished.
         c.actingUntil = Date.now() + 3000;
@@ -958,7 +966,7 @@ async function runPageTool(tabId, tab, tool, args, ui, chatTabId) {
           if (refs.length) await inject(tabId, P.highlightRefs, [refs, args.text, f.frameId === 0], f.frameId).catch(() => {});
         }
       }
-      return { content: text(lines.length ? lines.join('\n') : `No visible element contains "${args.text}".`), label: `"${args.text}": ${lines.length} found` };
+      return { content: text(lines.length ? lines.join('\n') : `No visible element contains "${args.text}".`), label: `"${args.text}": ${lines.length} found`, ...(lines.length ? {} : { note: 'no_match' }) };
     }
 
     case 'browser_get_text': {
@@ -986,7 +994,8 @@ async function runPageTool(tabId, tab, tool, args, ui, chatTabId) {
         how += await settle(tabId, urlBefore);
       });
       const warn = loc.covered ? ` Warning: the point was covered by ${loc.covered}.` : '';
-      return { content: text(`Clicked ${args.ref} "${loc.label}".${how}${warn}${chooserNote(tabId)}`), label: loc.label };
+      const note = loc.covered ? 'covered' : !loc.exact ? 'dom_click_fallback' : undefined;
+      return { content: text(`Clicked ${args.ref} "${loc.label}".${how}${warn}${chooserNote(tabId)}`), label: loc.label, ...(note ? { note } : {}) };
     }
 
     case 'browser_click_xy': {
@@ -1087,7 +1096,7 @@ async function runPageTool(tabId, tab, tool, args, ui, chatTabId) {
           if (await inject(tabId, P.hasText, [args.text]).catch(() => false)) return { content: text(`Text "${args.text}" is on the page.`) };
           await sleep(500);
         }
-        return { content: text(`Text "${args.text}" did not appear within 30s.`) };
+        return { content: text(`Text "${args.text}" did not appear within 30s.`), note: 'wait_timeout' };
       }
       const seconds = Math.min(Math.max(Number(args.seconds) || 1, 0), 30);
       await sleep(seconds * 1000);

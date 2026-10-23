@@ -176,6 +176,10 @@ function initRemote() {
 // A stored-but-paused pairing resumes without a new code.
 chrome.storage.onChanged.addListener((changes, area) => area === 'local' && changes.remote && renderRemote());
 
+export function getHostVersion() {
+  return hostVersion;
+}
+
 export function hostVersionMismatch() {
   const mine = chrome.runtime.getManifest().version;
   return hostVersion && hostVersion !== mine ? { host: hostVersion, extension: mine } : null;
@@ -185,10 +189,28 @@ function toggle(open) {
   $('settings').hidden = !open;
   if (open) {
     $('history').hidden = true;
+    $('report').hidden = true;
     $('history-open').setAttribute('aria-pressed', 'false');
   }
-  $('log').hidden = open;
+  $('log').hidden = open || !$('report').hidden;
   $('settings-open').setAttribute('aria-pressed', String(open));
+}
+
+export function closeSettings() {
+  toggle(false);
+}
+
+// Opens Settings at a section ('skills') or a feature ('experimental:<flag>')
+// and briefly highlights it — used by self-analysis remedies, which never
+// change a setting themselves.
+export function openSettingsAt(target) {
+  toggle(true);
+  const [kind, id] = String(target || '').split(':');
+  const node = kind === 'experimental' ? document.querySelector(`#features-list li[data-id="${id}"]`) : kind === 'skills' ? $('skill-form') : null;
+  if (!node) return;
+  node.scrollIntoView({ block: 'center' });
+  node.classList.add('flash');
+  setTimeout(() => node.classList.remove('flash'), 2000);
 }
 
 function preview(url) {

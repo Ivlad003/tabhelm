@@ -18,6 +18,7 @@ export const FEATURES = [
   { id: 'guideDetail', name: 'Detailed guide', desc: 'In guide mode the agent explains every step: what the element is, why this step, what will happen after the click and what to check — instead of a one-line instruction.' },
   { id: 'pageScripts', name: 'Page scripts & styles', desc: 'A library of your own JavaScript and CSS presets: run one on the current page from the ＋ menu, run it automatically on matching sites, and let the agent save, list and run presets or restyle a page.' },
   { id: 'trimWaits', name: 'Skip waiting in recordings', desc: 'Recordings keep only a moment of each wait (page loading, the agent thinking) and mark the cut with "⏩ N s of waiting skipped", so videos stay short.' },
+  { id: 'selfAnalysis', name: 'Self-analysis', desc: 'Finds what went wrong in your chats: errors by cause, site knowledge or skills the agent was missing, setup problems and bugs in TabHelm itself. Diagnose a chat from a failed task, the ＋ menu or /diagnose; see all chats in History → Report; copy a redacted bug report. Analysed on this computer — the agent sees only a redacted summary, and only when you or it asks.' },
   { id: 'voice', name: 'Voice', desc: 'Record a voice message from the microphone, or capture what the tab is playing, with live transcription; the text becomes one message you can edit and send.' },
 ];
 
@@ -30,6 +31,7 @@ export const DEFAULT_SETTINGS = {
   passwordManager: { onePassword: true, chrome: true },
   voice: { engine: 'browser', language: 'auto', chunkSeconds: 8 },
   trimWaits: { maxPause: 1.5 },
+  selfAnalysis: { agentTool: true, hideSites: true, includeHostLog: true, days: 30 },
 };
 
 export async function getFeatures() {
@@ -58,5 +60,7 @@ export async function setSetting(id, value) {
 export async function hostFeaturePayload() {
   const page = await chrome.storage.local.get(['singleTab', 'guideAutoPlay']);
   const features = { ...(await getFeatures()), singleTab: Boolean(page.singleTab), guideAutoPlay: Boolean(page.guideAutoPlay) };
+  // The agent's self-check tool is offered only with the flag and its setting on.
+  features.selfAnalysisAgent = Boolean(features.selfAnalysis && (await getSetting('selfAnalysis')).agentTool !== false);
   return { features, critic: await getSetting('critic'), passwordManager: await getSetting('passwordManager') };
 }

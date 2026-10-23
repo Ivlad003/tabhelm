@@ -1,0 +1,202 @@
+2026-10-20T09:00:00.000Z host started, tool server http://127.0.0.1:36619/call
+2026-10-20T09:00:01.000Z relay: pairing code K7PM-3QWX
+2026-10-20T09:00:02.000Z relay: paired, waiting for the panel
+2026-10-20T09:00:03.000Z relay: panel connected
+2026-10-20T09:01:00.000Z relay: disconnected (1006 ); retrying in 1s
+2026-10-20T09:01:30.000Z relay: connect ECONNREFUSED 127.0.0.1:18958
+2026-10-20T09:02:00.000Z relay: disconnected (1006 ); retrying in 4s
+2026-10-20T09:02:30.000Z relay: connect ECONNREFUSED 127.0.0.1:18958
+2026-10-20T09:03:00.000Z relay: disconnected (1006 ); retrying in 16s
+2026-10-20T09:03:30.000Z relay: connect ECONNREFUSED 127.0.0.1:18958
+2026-10-20T09:03:31.000Z [codex:43] Reading prompt from stdin
+2026-10-20T09:04:00.000Z relay: disconnected (1006 ); retrying in 30s
+2026-10-20T09:04:30.000Z relay: connect ECONNREFUSED 127.0.0.1:18958
+2026-10-20T09:05:00.000Z relay: disconnected (1006 ); retrying in 30s
+2026-10-20T09:05:30.000Z relay: connect ECONNREFUSED 127.0.0.1:18958
+2026-10-20T09:06:00.000Z relay: disconnected (1006 ); retrying in 30s
+2026-10-20T09:06:30.000Z relay: connect ECONNREFUSED 127.0.0.1:18958
+2026-10-20T09:07:00.000Z relay: disconnected (1006 ); retrying in 30s
+2026-10-20T09:07:30.000Z relay: connect ECONNREFUSED 127.0.0.1:18958
+2026-10-20T09:08:00.000Z relay: disconnected (1006 ); retrying in 30s
+2026-10-20T09:08:30.000Z relay: connect ECONNREFUSED 127.0.0.1:18958
+2026-10-20T09:08:31.000Z [codex:43] Reading prompt from stdin
+2026-10-20T09:09:00.000Z relay: disconnected (1006 ); retrying in 30s
+2026-10-20T09:09:30.000Z relay: connect ECONNREFUSED 127.0.0.1:18958
+2026-10-20T09:10:00.000Z relay: disconnected (1006 ); retrying in 30s
+2026-10-20T09:10:30.000Z relay: connect ECONNREFUSED 127.0.0.1:18958
+2026-10-20T09:11:00.000Z relay: disconnected (1006 ); retrying in 30s
+2026-10-20T09:11:01.000Z [codex:43] Reading prompt from stdin
+2026-10-20T09:11:30.000Z relay: connect ECONNREFUSED 127.0.0.1:18958
+2026-10-20T09:12:00.000Z relay: disconnected (1006 ); retrying in 30s
+2026-10-20T09:12:30.000Z relay: connect ECONNREFUSED 127.0.0.1:18958
+2026-10-20T09:13:00.000Z relay: disconnected (1006 ); retrying in 30s
+2026-10-20T09:13:30.000Z relay: connected to ws://127.0.0.1:18958
+2026-10-20T09:15:00.000Z relay: disconnected (1006 ); retrying in 1s
+2026-10-20T09:15:01.000Z relay: connect ECONNREFUSED 127.0.0.1:18958
+2026-10-20T09:15:02.000Z relay: disconnected (1006 ); retrying in 1s
+2026-10-20T09:15:05.000Z relay: connected to ws://127.0.0.1:18958
+2026-10-20T10:00:00.000Z [4242] host started v0.31.0 node=v22.11.0 linux, tool server http://127.0.0.1:41000/call
+2026-10-20T10:00:05.000Z [4242] [claude:41] [session/create] sessionId=0a3d608b-2411-4a9d-908c-df1b7c88517d phase=validate-cwd durationMs=0 totalMs=0
+2026-10-20T10:00:06.000Z [4242] [claude:41] Failed to set up watcher for /home/ivanko/.claude/settings.json: Error: ENOSPC: System limit for number of file watchers reached, watch '/home/ivanko/.claude'
+    at FSWatcher.<computed> (node:internal/fs/watchers:247:19)
+    at Object.watch (node:fs:2418:36)
+  errno: -28,
+  syscall: 'watch',
+  code: 'ENOSPC',
+  path: '/home/ivanko/.claude'
+}
+2026-10-20T10:00:10.000Z [4242] [qoder:12] Error handling request {
+  jsonrpc: '2.0',
+  id: 1,
+  method: 'session/new',
+  params: {
+    cwd: '/home/ivanko/.tabhelm/workspace',
+    mcpServers: [ [Object] ]
+  }
+} {
+  code: -32000,
+  message: 'Authentication required: Authentication is required.',
+  data: undefined
+}
+2026-10-20T10:01:00.000Z [4242] [claude:41] Unexpected case: {"type":"system","subtype":"post_turn_summary","status_detail":"CANARY_7 typed for jane@example.com"}
+2026-10-20T10:02:00.000Z [4242] [claude:41] Session 0a3d608b-2411-4a9d-908c-000000000000: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:02:10.000Z [4242] [claude:42] Session 0a3d608b-2411-4a9d-908c-000000000001: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:02:20.000Z [4242] [claude:43] Session 0a3d608b-2411-4a9d-908c-000000000002: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:02:30.000Z [4242] [claude:41] Session 0a3d608b-2411-4a9d-908c-000000000003: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:02:40.000Z [4242] [claude:42] Session 0a3d608b-2411-4a9d-908c-000000000004: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:02:50.000Z [4242] [claude:43] Session 0a3d608b-2411-4a9d-908c-000000000005: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:03:00.000Z [4242] [claude:41] Session 0a3d608b-2411-4a9d-908c-000000000006: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:03:10.000Z [4242] [claude:42] Session 0a3d608b-2411-4a9d-908c-000000000007: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:03:20.000Z [4242] [claude:43] Session 0a3d608b-2411-4a9d-908c-000000000008: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:03:30.000Z [4242] [claude:41] Session 0a3d608b-2411-4a9d-908c-000000000009: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:03:40.000Z [4242] [claude:42] Session 0a3d608b-2411-4a9d-908c-000000000010: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:03:50.000Z [4242] [claude:43] Session 0a3d608b-2411-4a9d-908c-000000000011: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:04:00.000Z [4242] [claude:41] Session 0a3d608b-2411-4a9d-908c-000000000012: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:04:10.000Z [4242] [claude:42] Session 0a3d608b-2411-4a9d-908c-000000000013: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:04:20.000Z [4242] [claude:43] Session 0a3d608b-2411-4a9d-908c-000000000014: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:04:30.000Z [4242] [claude:41] Session 0a3d608b-2411-4a9d-908c-000000000015: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:04:40.000Z [4242] [claude:42] Session 0a3d608b-2411-4a9d-908c-000000000016: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:04:50.000Z [4242] [claude:43] Session 0a3d608b-2411-4a9d-908c-000000000017: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:05:00.000Z [4242] [claude:41] Session 0a3d608b-2411-4a9d-908c-000000000018: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:05:10.000Z [4242] [claude:42] Session 0a3d608b-2411-4a9d-908c-000000000019: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:05:20.000Z [4242] [claude:43] Session 0a3d608b-2411-4a9d-908c-000000000020: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:05:30.000Z [4242] [claude:41] Session 0a3d608b-2411-4a9d-908c-000000000021: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:05:40.000Z [4242] [claude:42] Session 0a3d608b-2411-4a9d-908c-000000000022: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:05:50.000Z [4242] [claude:43] Session 0a3d608b-2411-4a9d-908c-000000000023: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:06:00.000Z [4242] [claude:41] Session 0a3d608b-2411-4a9d-908c-000000000024: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:06:10.000Z [4242] [claude:42] Session 0a3d608b-2411-4a9d-908c-000000000025: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:06:20.000Z [4242] [claude:43] Session 0a3d608b-2411-4a9d-908c-000000000026: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:06:30.000Z [4242] [claude:41] Session 0a3d608b-2411-4a9d-908c-000000000027: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:06:40.000Z [4242] [claude:42] Session 0a3d608b-2411-4a9d-908c-000000000028: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:06:50.000Z [4242] [claude:43] Session 0a3d608b-2411-4a9d-908c-000000000029: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:07:00.000Z [4242] [claude:41] Session 0a3d608b-2411-4a9d-908c-000000000030: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:07:10.000Z [4242] [claude:42] Session 0a3d608b-2411-4a9d-908c-000000000031: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:07:20.000Z [4242] [claude:43] Session 0a3d608b-2411-4a9d-908c-000000000032: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:07:30.000Z [4242] [claude:41] Session 0a3d608b-2411-4a9d-908c-000000000033: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:07:40.000Z [4242] [claude:42] Session 0a3d608b-2411-4a9d-908c-000000000034: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:07:50.000Z [4242] [claude:43] Session 0a3d608b-2411-4a9d-908c-000000000035: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:08:00.000Z [4242] [claude:41] Session 0a3d608b-2411-4a9d-908c-000000000036: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:08:10.000Z [4242] [claude:42] Session 0a3d608b-2411-4a9d-908c-000000000037: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:08:20.000Z [4242] [claude:43] Session 0a3d608b-2411-4a9d-908c-000000000038: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:08:30.000Z [4242] [claude:41] Session 0a3d608b-2411-4a9d-908c-000000000039: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:08:40.000Z [4242] [claude:42] Session 0a3d608b-2411-4a9d-908c-000000000040: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:08:50.000Z [4242] [claude:43] Session 0a3d608b-2411-4a9d-908c-000000000041: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:09:00.000Z [4242] [claude:41] Session 0a3d608b-2411-4a9d-908c-000000000042: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:09:10.000Z [4242] [claude:42] Session 0a3d608b-2411-4a9d-908c-000000000043: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:09:20.000Z [4242] [claude:43] Session 0a3d608b-2411-4a9d-908c-000000000044: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:09:30.000Z [4242] [claude:41] Session 0a3d608b-2411-4a9d-908c-000000000045: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:09:40.000Z [4242] [claude:42] Session 0a3d608b-2411-4a9d-908c-000000000046: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:09:50.000Z [4242] [claude:43] Session 0a3d608b-2411-4a9d-908c-000000000047: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:10:00.000Z [4242] [claude:41] Session 0a3d608b-2411-4a9d-908c-000000000048: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:10:10.000Z [4242] [claude:42] Session 0a3d608b-2411-4a9d-908c-000000000049: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:10:20.000Z [4242] [claude:43] Session 0a3d608b-2411-4a9d-908c-000000000050: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:10:30.000Z [4242] [claude:41] Session 0a3d608b-2411-4a9d-908c-000000000051: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:10:40.000Z [4242] [claude:42] Session 0a3d608b-2411-4a9d-908c-000000000052: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:10:50.000Z [4242] [claude:43] Session 0a3d608b-2411-4a9d-908c-000000000053: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:11:00.000Z [4242] [claude:41] Session 0a3d608b-2411-4a9d-908c-000000000054: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:11:10.000Z [4242] [claude:42] Session 0a3d608b-2411-4a9d-908c-000000000055: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:11:20.000Z [4242] [claude:43] Session 0a3d608b-2411-4a9d-908c-000000000056: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:11:30.000Z [4242] [claude:41] Session 0a3d608b-2411-4a9d-908c-000000000057: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:11:40.000Z [4242] [claude:42] Session 0a3d608b-2411-4a9d-908c-000000000058: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:11:50.000Z [4242] [claude:43] Session 0a3d608b-2411-4a9d-908c-000000000059: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:12:00.000Z [4242] [claude:41] Session 0a3d608b-2411-4a9d-908c-000000000060: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:12:10.000Z [4242] [claude:42] Session 0a3d608b-2411-4a9d-908c-000000000061: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:12:20.000Z [4242] [claude:43] Session 0a3d608b-2411-4a9d-908c-000000000062: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:12:30.000Z [4242] [claude:41] Session 0a3d608b-2411-4a9d-908c-000000000063: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:12:40.000Z [4242] [claude:42] Session 0a3d608b-2411-4a9d-908c-000000000064: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:12:50.000Z [4242] [claude:43] Session 0a3d608b-2411-4a9d-908c-000000000065: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:13:00.000Z [4242] [claude:41] Session 0a3d608b-2411-4a9d-908c-000000000066: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:13:10.000Z [4242] [claude:42] Session 0a3d608b-2411-4a9d-908c-000000000067: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:13:20.000Z [4242] [claude:43] Session 0a3d608b-2411-4a9d-908c-000000000068: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:13:30.000Z [4242] [claude:41] Session 0a3d608b-2411-4a9d-908c-000000000069: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:13:40.000Z [4242] [claude:42] Session 0a3d608b-2411-4a9d-908c-000000000070: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:13:50.000Z [4242] [claude:43] Session 0a3d608b-2411-4a9d-908c-000000000071: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:14:00.000Z [4242] [claude:41] Session 0a3d608b-2411-4a9d-908c-000000000072: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:14:10.000Z [4242] [claude:42] Session 0a3d608b-2411-4a9d-908c-000000000073: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:14:20.000Z [4242] [claude:43] Session 0a3d608b-2411-4a9d-908c-000000000074: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:14:30.000Z [4242] [claude:41] Session 0a3d608b-2411-4a9d-908c-000000000075: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:14:40.000Z [4242] [claude:42] Session 0a3d608b-2411-4a9d-908c-000000000076: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:14:50.000Z [4242] [claude:43] Session 0a3d608b-2411-4a9d-908c-000000000077: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:15:00.000Z [4242] [claude:41] Session 0a3d608b-2411-4a9d-908c-000000000078: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:15:10.000Z [4242] [claude:42] Session 0a3d608b-2411-4a9d-908c-000000000079: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:15:20.000Z [4242] [claude:43] Session 0a3d608b-2411-4a9d-908c-000000000080: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:15:30.000Z [4242] [claude:41] Session 0a3d608b-2411-4a9d-908c-000000000081: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:15:40.000Z [4242] [claude:42] Session 0a3d608b-2411-4a9d-908c-000000000082: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:15:50.000Z [4242] [claude:43] Session 0a3d608b-2411-4a9d-908c-000000000083: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:16:00.000Z [4242] [claude:41] Session 0a3d608b-2411-4a9d-908c-000000000084: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:16:10.000Z [4242] [claude:42] Session 0a3d608b-2411-4a9d-908c-000000000085: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:16:20.000Z [4242] [claude:43] Session 0a3d608b-2411-4a9d-908c-000000000086: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:16:30.000Z [4242] [claude:41] Session 0a3d608b-2411-4a9d-908c-000000000087: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:16:40.000Z [4242] [claude:42] Session 0a3d608b-2411-4a9d-908c-000000000088: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:16:50.000Z [4242] [claude:43] Session 0a3d608b-2411-4a9d-908c-000000000089: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:17:00.000Z [4242] [claude:41] Session 0a3d608b-2411-4a9d-908c-000000000090: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:17:10.000Z [4242] [claude:42] Session 0a3d608b-2411-4a9d-908c-000000000091: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:17:20.000Z [4242] [claude:43] Session 0a3d608b-2411-4a9d-908c-000000000092: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:17:30.000Z [4242] [claude:41] Session 0a3d608b-2411-4a9d-908c-000000000093: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:17:40.000Z [4242] [claude:42] Session 0a3d608b-2411-4a9d-908c-000000000094: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:17:50.000Z [4242] [claude:43] Session 0a3d608b-2411-4a9d-908c-000000000095: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:18:00.000Z [4242] [claude:41] Session 0a3d608b-2411-4a9d-908c-000000000096: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:18:10.000Z [4242] [claude:42] Session 0a3d608b-2411-4a9d-908c-000000000097: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:18:20.000Z [4242] [claude:43] Session 0a3d608b-2411-4a9d-908c-000000000098: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:18:30.000Z [4242] [claude:41] Session 0a3d608b-2411-4a9d-908c-000000000099: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:18:40.000Z [4242] [claude:42] Session 0a3d608b-2411-4a9d-908c-000000000100: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:18:50.000Z [4242] [claude:43] Session 0a3d608b-2411-4a9d-908c-000000000101: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:19:00.000Z [4242] [claude:41] Session 0a3d608b-2411-4a9d-908c-000000000102: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:19:10.000Z [4242] [claude:42] Session 0a3d608b-2411-4a9d-908c-000000000103: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:19:20.000Z [4242] [claude:43] Session 0a3d608b-2411-4a9d-908c-000000000104: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:19:30.000Z [4242] [claude:41] Session 0a3d608b-2411-4a9d-908c-000000000105: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:19:40.000Z [4242] [claude:42] Session 0a3d608b-2411-4a9d-908c-000000000106: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:19:50.000Z [4242] [claude:43] Session 0a3d608b-2411-4a9d-908c-000000000107: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:20:00.000Z [4242] [claude:41] Session 0a3d608b-2411-4a9d-908c-000000000108: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:20:10.000Z [4242] [claude:42] Session 0a3d608b-2411-4a9d-908c-000000000109: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:20:20.000Z [4242] [claude:43] Session 0a3d608b-2411-4a9d-908c-000000000110: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:20:30.000Z [4242] [claude:41] Session 0a3d608b-2411-4a9d-908c-000000000111: failed to generate a session title: Error: Query closed before response received
+2026-10-20T10:21:00.000Z [4242] tool error [tab 41] browser_select_option: No option matching "CANARY_2 Large" in e12
+2026-10-20T10:21:05.000Z [4242] tool error [tab 41] browser_navigate: Cannot reach https://shop.example.com/cart/CANARY_3?id=CANARY_4 for jane.doe@example.com: net::ERR_NAME_NOT_RESOLVED
+2026-10-20T10:21:10.000Z [4242] tool error: Ref e40 is stale or unknown. Take a new browser_snapshot.
+2026-10-20T10:22:00.000Z [4242] prompt failed for tab 41: ACP connection closed
+2026-10-20T10:22:01.000Z [4242] error handling start: Error: ACP connection closed
+    at Connection.close (file:///home/ivanko/tabhelm/host/node_modules/@agentclientprotocol/sdk/dist/jsonrpc.js:589:37)
+    at Connection.receive (file:///home/ivanko/tabhelm/host/node_modules/@agentclientprotocol/sdk/dist/jsonrpc.js:653:18)
+2026-10-20T10:23:00.000Z [4242] prompt failed for tab 99: ACP connection closed
+2026-10-20T10:24:00.000Z [4242] agent claude for tab 41 exited (0)
+2026-10-20T10:24:10.000Z [4242] agent opencode for tab 43 exited (130)
+2026-10-20T10:24:20.000Z [4242] agent codex for tab 43 exited (SIGTERM)
+2026-10-20T10:25:00.000Z [4242] stopping agent claude for tab 41
+2026-10-20T10:25:03.000Z [4242] agent claude for tab 41 exited (SIGKILL)
+2026-10-20T10:26:00.000Z [4242] agent claude for tab 42 exited (SIGKILL)
+2026-10-20T10:27:00.000Z [4242] unknown message type frobnicate
+2026-10-20T10:27:30.000Z [4242] config model after start: Invalid value for config option model
+2026-10-20T10:27:40.000Z [4242] default model gpt-9 not applied: Invalid params: Unknown model gpt-9
+2026-10-20T10:28:00.000Z [4242] skill collection lookup failed for https://github.com/acme/skills/tree/main/CANARY_5?token=CANARY_6: HTTP 404
+2026-10-20T10:29:00.000Z [4242] recording saved: /home/ivanko/Videos/TabHelm/CANARY_8.webm
+2026-10-20T10:29:30.000Z [4242] [codex:43] Reading prompt from stdin
+2026-10-20T10:30:00.000Z [4242] uncaught: Error: write EPIPE
+    at afterWriteDispatched (node:internal/stream_base_commons:159:15)
+    at writeGeneric (node:internal/stream_base_commons:150:3)
+    at Socket._writeGeneric (node:net:1258:11)
+    at Socket._write (node:net:1270:8)
+2026-10-20T10:31:00.000Z [4242] extension disconnected, shutting down
+2026-10-20T10:31:02.000Z [4242] agent cursor for tab 44 exited (SIGKILL)
+2026-10-20T11:00:00.000Z [5151] host started v0.31.1 pid=5151 node=v22.11.0 linux relay, tool server http://127.0.0.1:42000/call
+2026-10-20T11:00:01.000Z [5151] relay: pairing code issued (valid 10 minutes)

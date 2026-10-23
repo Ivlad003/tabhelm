@@ -24,11 +24,15 @@ export async function startToolServer({ runTool, log }) {
     for await (const chunk of req) body += chunk;
 
     let result;
+    let call = {};
     try {
-      const { tabId, tool, args } = JSON.parse(body);
+      call = JSON.parse(body);
+    } catch {}
+    const { tabId, tool, args } = call;
+    try {
       result = await withTimeout(runTool(tabId, tool, args || {}), TOOL_TIMEOUT_MS, tool);
     } catch (err) {
-      log(`tool error: ${err.message}`);
+      log(`tool error [tab ${tabId ?? '?'}] ${tool ?? '?'}: ${err.message}`);
       result = { ok: false, error: err.message };
     }
     res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(result));

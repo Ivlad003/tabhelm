@@ -31,7 +31,7 @@ export async function runScheduled(id, { runners, send, release, notify }) {
   const tab = await chrome.tabs.create({ url: s.url, active: false });
   const tabId = tab.id;
   const journal = [];
-  const record = (type, data) => journal.push({ ts: new Date().toISOString(), type, ...data });
+  const record = (type, data) => journal.push({ ts: new Date().toISOString(), type, ...data, turn: 1 });
   let answer = '';
   let finished;
   const done = new Promise((r) => (finished = r));
@@ -54,6 +54,14 @@ export async function runScheduled(id, { runners, send, release, notify }) {
       case 'auth':
         finished({ failure: 'the agent needs you to sign in' });
         break;
+      // Nobody can answer an agent's permission request in an unattended run:
+      // reject it at once instead of waiting for the 15-minute timeout.
+      case 'permission': {
+        const reject = msg.options?.find((o) => o.kind?.startsWith('reject'));
+        if (reject) send(tabId, { type: 'permission_response', id: msg.id, optionId: reject.optionId });
+        finished({ failure: 'needs approval (scheduled runs cannot ask)' });
+        break;
+      }
       case 'done':
         finished({ stopReason: msg.stopReason });
         break;
@@ -71,11 +79,11 @@ export async function runScheduled(id, { runners, send, release, notify }) {
 
   const result = await Promise.race([done, new Promise((r) => setTimeout(() => r({ failure: 'timed out after 15 minutes' }), RUN_TIMEOUT_MS))]);
   runners.delete(tabId);
-  record('agent', { agent: s.agentName, text: answer.trim(), failure: result.failure || null, stats: null });
+  record('agent', { agent: s.agentName, text: answer.trim(), failure: result.failure || null, stopReason: result.stopReason || null, stats: null });
   record('notice', { text: `Scheduled run of "${s.name}"${result.failure ? ` failed: ${result.failure}` : ' finished'}`, error: Boolean(result.failure) });
 
   const page = await chrome.tabs.get(tabId).catch(() => null);
-  await saveChat({ id: newChatId(), created: Date.now(), tabId, url: page?.url || s.url, pageTitle: page?.title || s.name, agent: s.agentName, folder: s.folder || null, journal });
+  await saveChat({ id: newChatId(), created: Date.now(), tabId, url: page?.url || s.url, pageTitle: page?.title || s.name, agent: s.agentName, folder: s.folder || null, scheduled: true, journal });
   const { items: latest } = await getSetting('schedules');
   await setSetting('schedules', { items: latest.map((x) => (x.id === id ? { ...x, lastRun: Date.now(), lastResult: result.failure ? `failed: ${result.failure}` : answer.trim().slice(0, 200) } : x)) });
   await notify(tabId, result.failure ? 'failed' : 'done', `${s.name}: ${result.failure || answer.trim().slice(0, 100) || 'finished'}`);

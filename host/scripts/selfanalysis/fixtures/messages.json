@@ -1,0 +1,977 @@
+[
+  {
+    "text": "Tab groups need a normal Chrome window — this page is in a pop-up or app window. Open it in a regular window (⋮ → Open in Chrome) to share tabs.",
+    "expected": "CHROME_LIMIT"
+  },
+  {
+    "text": "Chrome does not allow tab groups in this window right now (it happens next to pop-up windows). Use a regular window to share tabs.",
+    "expected": "CHROME_LIMIT"
+  },
+  {
+    "text": "Single-tab mode is on: work only in this tab — navigate it (browser_navigate) instead of opening or switching tabs.",
+    "expected": "AGENT_MISUSE"
+  },
+  {
+    "text": "No tab 123. Use browser_tabs list.",
+    "expected": "PAGE_STATE"
+  },
+  {
+    "text": "The user did not allow using that tab.",
+    "expected": "USER_DECISION"
+  },
+  {
+    "text": "Invalid ref \"button\". Use a ref from browser_snapshot or browser_find, e.g. \"e12\" or \"f3:e5\".",
+    "expected": "AGENT_MISUSE"
+  },
+  {
+    "text": "The page did not respond (it may be navigating). Try again.",
+    "expected": "PAGE_STATE"
+  },
+  {
+    "text": "The tab was closed.",
+    "expected": "PAGE_STATE"
+  },
+  {
+    "text": "Chrome does not allow extensions to control chrome://newtab/. Navigate to a normal web page first.",
+    "expected": "CHROME_LIMIT"
+  },
+  {
+    "text": "Chrome does not allow extensions to control about:blank. Navigate to a normal web page first.",
+    "expected": "CHROME_LIMIT"
+  },
+  {
+    "text": "A JavaScript confirm dialog is blocking the page: \"Proceed?\". Use browser_handle_dialog first.",
+    "expected": "PAGE_STATE"
+  },
+  {
+    "text": "Cannot position f3:e5: it is inside a cross-origin iframe we could not locate.",
+    "expected": "PAGE_ELEMENT"
+  },
+  {
+    "text": "Provide the start (fromRef or from): a ref or x/y coordinates.",
+    "expected": "AGENT_MISUSE"
+  },
+  {
+    "text": "Unknown modifier in \"Hyper+A\". Use Control, Shift, Alt, Meta.",
+    "expected": "AGENT_MISUSE"
+  },
+  {
+    "text": "Unsupported key \"NumpadEnter\". Use names like Enter, Tab, Escape, ArrowDown, F5, a single character, or combos like Control+A.",
+    "expected": "AGENT_MISUSE"
+  },
+  {
+    "text": "Screenshot timed out. Background tabs may not render; switch to a visible tab.",
+    "expected": "CHROME_LIMIT"
+  },
+  {
+    "text": "No tab 77.",
+    "expected": "PAGE_STATE"
+  },
+  {
+    "text": "The user did not allow controlling that tab.",
+    "expected": "USER_DECISION"
+  },
+  {
+    "text": "The chat tab cannot be closed by the agent.",
+    "expected": "AGENT_MISUSE"
+  },
+  {
+    "text": "Only tabs the agent opened or was allowed to control can be closed (not tabs you shared).",
+    "expected": "AGENT_MISUSE"
+  },
+  {
+    "text": "action must be list, new, switch or close.",
+    "expected": "AGENT_MISUSE"
+  },
+  {
+    "text": "Invalid arguments for browser_get_text (Cannot read properties of null (reading 'text')). Check the tool's parameters and try again.",
+    "expected": "TABHELM_BUG"
+  },
+  {
+    "text": "Invalid arguments for browser_upload_file (Failed to construct 'URL': Invalid URL). Check the tool's parameters and try again.",
+    "expected": "TABHELM_BUG"
+  },
+  {
+    "text": "Invalid arguments for browser_tabs (Error in invocation of tabs.get(integer tabId, optional function callback): No matching signature.). Check the tool's parameters and try again.",
+    "expected": "AGENT_MISUSE"
+  },
+  {
+    "text": "Step 2 points at tab 55, which this chat cannot use.",
+    "expected": "AGENT_MISUSE"
+  },
+  {
+    "text": "Tab 55 of step 2 is gone.",
+    "expected": "PAGE_STATE"
+  },
+  {
+    "text": "The user stopped the guide.",
+    "expected": "USER_DECISION"
+  },
+  {
+    "text": "The guide timed out after 30 minutes.",
+    "expected": "TIMEOUT"
+  },
+  {
+    "text": "There is no next page in this tab.",
+    "expected": "AGENT_MISUSE"
+  },
+  {
+    "text": "There is no previous page in this tab. Use browser_navigate with the address instead.",
+    "expected": "AGENT_MISUSE"
+  },
+  {
+    "text": "skill_save needs a name and a Markdown body.",
+    "expected": "AGENT_MISUSE"
+  },
+  {
+    "text": "Could not read the page (it may still be loading).",
+    "expected": "PAGE_STATE"
+  },
+  {
+    "text": "paths must list at least one absolute file path.",
+    "expected": "AGENT_MISUSE"
+  },
+  {
+    "text": "The user declined the upload.",
+    "expected": "USER_DECISION"
+  },
+  {
+    "text": "File inputs inside iframes are not supported yet.",
+    "expected": "TABHELM_GAP"
+  },
+  {
+    "text": "Could not find the file input.",
+    "expected": "PAGE_ELEMENT"
+  },
+  {
+    "text": "Pass the ref of a file input (hidden ones are listed at the end of the snapshot), or click the upload button first so a file chooser opens.",
+    "expected": "AGENT_MISUSE"
+  },
+  {
+    "text": "browser_fill_form needs fields: [{ ref, value }, …].",
+    "expected": "AGENT_MISUSE"
+  },
+  {
+    "text": "No captured request containing \"/api/x\". Call browser_network first (capture starts when the agent touches the tab).",
+    "expected": "AGENT_MISUSE"
+  },
+  {
+    "text": "The user declined changing storage.",
+    "expected": "USER_DECISION"
+  },
+  {
+    "text": "key is required",
+    "expected": "AGENT_MISUSE"
+  },
+  {
+    "text": "browser_highlight needs refs: [\"e12\", …].",
+    "expected": "AGENT_MISUSE"
+  },
+  {
+    "text": "Give js and/or css.",
+    "expected": "AGENT_MISUSE"
+  },
+  {
+    "text": "No page script named \"x\". See browser_script_list.",
+    "expected": "AGENT_MISUSE"
+  },
+  {
+    "text": "The user declined running this script.",
+    "expected": "USER_DECISION"
+  },
+  {
+    "text": "The user cancelled the task.",
+    "expected": "USER_DECISION"
+  },
+  {
+    "text": "The user cancelled signing in.",
+    "expected": "USER_DECISION"
+  },
+  {
+    "text": "Unknown tool browser_frobnicate",
+    "expected": "TABHELM_BUG"
+  },
+  {
+    "text": "This tool needs the \"Developer tools\" feature, which is off. The user can enable it in TabHelm → Settings → Experimental.",
+    "expected": "FEATURE_OFF"
+  },
+  {
+    "text": "Clicked e12 \"Buy\". Warning: the point was covered by <div#overlay> \"Accept cookies\".",
+    "expected": "PAGE_ELEMENT"
+  },
+  {
+    "text": "Text \"Done\" did not appear within 30s.",
+    "expected": "PAGE_ELEMENT"
+  },
+  {
+    "text": "No visible element contains \"Checkout\".",
+    "expected": "PAGE_ELEMENT"
+  },
+  {
+    "text": "auto-click failed: Ref e9 is stale or unknown. Take a new browser_snapshot.",
+    "expected": "PAGE_ELEMENT"
+  },
+  {
+    "text": "Ref e12 is stale or unknown. Take a new browser_snapshot.",
+    "expected": "PAGE_ELEMENT"
+  },
+  {
+    "text": "Element e12 is not visible (zero size).",
+    "expected": "PAGE_ELEMENT"
+  },
+  {
+    "text": "e4 is not a <select>; click it and pick the option instead.",
+    "expected": "PAGE_ELEMENT"
+  },
+  {
+    "text": "No option matching \"Kyiv\".",
+    "expected": "PAGE_ELEMENT"
+  },
+  {
+    "text": "e4 is not a file input. Use the \"file-input\" ref from the snapshot.",
+    "expected": "PAGE_ELEMENT"
+  },
+  {
+    "text": "Another debugger (probably DevTools) is attached to this tab. Close DevTools and retry.",
+    "expected": "CHROME_LIMIT"
+  },
+  {
+    "text": "Cannot control this tab: Cannot access a chrome-extension:// URL of different extension",
+    "expected": "CHROME_LIMIT"
+  },
+  {
+    "text": "That script no longer exists.",
+    "expected": "UI_INPUT"
+  },
+  {
+    "text": "Failed to start OpenCode: spawn /usr/bin/opencode ENOENT",
+    "expected": "SETUP"
+  },
+  {
+    "text": "OpenRouter error 400: {\"error\":\"tools[3].parameters invalid\"}",
+    "expected": "TABHELM_BUG"
+  },
+  {
+    "text": "OpenRouter error 400: This model's maximum context length is 131072 tokens",
+    "expected": "BUDGET"
+  },
+  {
+    "text": "Scheduled run of \"news\" failed: timed out after 15 minutes",
+    "expected": "TIMEOUT"
+  },
+  {
+    "text": "unknown message type frobnicate",
+    "expected": "TABHELM_BUG"
+  },
+  {
+    "text": "TabHelm host unreachable: Unexpected end of JSON input",
+    "expected": "HOST_LINK"
+  },
+  {
+    "text": "Cannot list OpenRouter models: https://openrouter.ai/api/v1/models → HTTP 401: no auth",
+    "expected": "AUTH"
+  },
+  {
+    "text": "Critic: critic unavailable: openrouter HTTP 429: slow down",
+    "expected": "SETUP"
+  },
+  {
+    "text": "Paired with the relay, but the remote TabHelm host \"nas\" is offline right now.",
+    "expected": "HOST_LINK"
+  },
+  {
+    "text": "The relay rejected the pairing code (unknown or expired). Get a new code from the remote host.",
+    "expected": "AUTH"
+  },
+  {
+    "text": "Too many attempts — wait a minute.",
+    "expected": "QUOTA"
+  },
+  {
+    "text": "Relay connection closed (1006)",
+    "expected": "HOST_LINK"
+  },
+  {
+    "text": "The remote host disconnected",
+    "expected": "HOST_LINK"
+  },
+  {
+    "text": "Blocked by site rules: banking site (https://www.privat24.ua/). Change this in Settings → Site rules.",
+    "expected": "POLICY"
+  },
+  {
+    "text": "Blocked by site rules: on your deny list (example.com) (https://example.com/). Change this in Settings → Site rules.",
+    "expected": "POLICY"
+  },
+  {
+    "text": "The user did not allow acting on this site.",
+    "expected": "USER_DECISION"
+  },
+  {
+    "text": "The user did not allow this sensitive action (pay).",
+    "expected": "USER_DECISION"
+  },
+  {
+    "text": "Blocked by the action critic: Sends a message unrelated to the task.",
+    "expected": "POLICY"
+  },
+  {
+    "text": "The user did not allow this action after the critic flagged it.",
+    "expected": "USER_DECISION"
+  },
+  {
+    "text": "Critic: critic unavailable: openrouter is not configured (key missing in ~/.tabhelm/env)",
+    "expected": "SETUP"
+  },
+  {
+    "text": "Critic: critic timed out",
+    "expected": "SETUP"
+  },
+  {
+    "text": "The TabHelm host (0.29.0) and extension (0.30.0) are different versions. Run the installer again, then press ↻ for TabHelm on chrome://extensions.",
+    "expected": "SETUP"
+  },
+  {
+    "text": "Script “dark” failed: TypeError: Cannot read properties of null (reading 'style')",
+    "expected": "AGENT_MISUSE",
+    "ctx": {
+      "source": "P"
+    }
+  },
+  {
+    "text": "Recording failed: Chrome does not allow extensions to control chrome://newtab/. Navigate to a normal web page first.",
+    "expected": "CHROME_LIMIT"
+  },
+  {
+    "text": "Cannot reach the TabHelm host: Specified native messaging host not found.. Run \"npm run install-host\" in the host folder, then reopen this panel.",
+    "expected": "SETUP"
+  },
+  {
+    "text": "Cannot reach the TabHelm host: Native host has exited.. Run \"npm run install-host\" in the host folder, then reopen this panel.",
+    "expected": "HOST_LINK"
+  },
+  {
+    "text": "Cannot reach the TabHelm host: Access to the specified native messaging host is forbidden.. Run \"npm run install-host\"",
+    "expected": "SETUP"
+  },
+  {
+    "text": "No agent is installed. See Settings → Skills or the README to install one.",
+    "expected": "SETUP"
+  },
+  {
+    "text": "No 1Password logins for this site.",
+    "expected": "UI_INPUT"
+  },
+  {
+    "text": "Run \"op signin\" in a terminal first.",
+    "expected": "AUTH"
+  },
+  {
+    "text": "No answer from the host.",
+    "expected": "HOST_LINK"
+  },
+  {
+    "text": "This chat is no longer saved.",
+    "expected": "UI_INPUT"
+  },
+  {
+    "text": "No video recorded: the tab did not render any frames (is the window minimized?).",
+    "expected": "CHROME_LIMIT"
+  },
+  {
+    "text": "Could not encode the video: This Chrome cannot encode H.264 or VP9 video.",
+    "expected": "SETUP"
+  },
+  {
+    "text": "Nothing was transcribed.",
+    "expected": "UI_INPUT"
+  },
+  {
+    "text": "Claude Code stopped before finishing: ACP connection closed",
+    "expected": "AGENT_CRASH"
+  },
+  {
+    "text": "Nothing to turn into a skill yet — do something first.",
+    "expected": "UI_INPUT"
+  },
+  {
+    "text": "Elements can be picked only on web pages.",
+    "expected": "CHROME_LIMIT"
+  },
+  {
+    "text": "Cannot pick on this page: Cannot access a chrome:// URL",
+    "expected": "CHROME_LIMIT"
+  },
+  {
+    "text": "Cannot read the selection on this page: The extensions gallery cannot be scripted.",
+    "expected": "CHROME_LIMIT"
+  },
+  {
+    "text": "stopped early (max_turn_requests)",
+    "expected": "BUDGET"
+  },
+  {
+    "text": "stopped early (max_tokens)",
+    "expected": "BUDGET"
+  },
+  {
+    "text": "stopped early (refusal)",
+    "expected": "MODEL_REFUSAL"
+  },
+  {
+    "text": "the agent exited",
+    "expected": "AGENT_CRASH"
+  },
+  {
+    "text": "Stopped",
+    "expected": "USER_DECISION"
+  },
+  {
+    "text": "Cannot capture the tab's audio: click the TabHelm icon on that tab once (Chrome needs it before an extension may capture a tab), then try again.",
+    "expected": "CHROME_LIMIT"
+  },
+  {
+    "text": "Microphone access needed: press “Allow microphone” on the page that just opened — recording starts by itself afterwards.",
+    "expected": "SETUP"
+  },
+  {
+    "text": "Speech recognition is not available in this Chrome; switch the engine to the host in Settings → Voice.",
+    "expected": "SETUP"
+  },
+  {
+    "text": "Speech recognition: network",
+    "expected": "NETWORK"
+  },
+  {
+    "text": "Speech recognition: audio-capture",
+    "expected": "SETUP"
+  },
+  {
+    "text": "GitHub API HTTP 403 (rate limit — try again later)",
+    "expected": "QUOTA"
+  },
+  {
+    "text": "OpenAI-compatible error 403: forbidden",
+    "expected": "AUTH"
+  },
+  {
+    "text": "Transcription failed: No transcription engine: set TABHELM_TRANSCRIBE_BASE_URL (+ key, model) in ~/.tabhelm/env, or install whisper-cli + ffmpeg and a ggml model.",
+    "expected": "SETUP"
+  },
+  {
+    "text": "Transcription failed: transcription API HTTP 401: {\"error\":\"invalid key\"}",
+    "expected": "AUTH"
+  },
+  {
+    "text": "Transcription failed: no answer from the host",
+    "expected": "HOST_LINK"
+  },
+  {
+    "text": "Up to 10 files per message.",
+    "expected": "UI_INPUT"
+  },
+  {
+    "text": "\"a.pdf\" is not supported. Attach images or text files (txt, md, csv, tsv, json, log).",
+    "expected": "UI_INPUT"
+  },
+  {
+    "text": "Could not attach \"big.txt\": text files are limited to 300 KB",
+    "expected": "UI_INPUT"
+  },
+  {
+    "text": "Could not add the image: HTTP 403",
+    "expected": "UI_INPUT"
+  },
+  {
+    "text": "Nothing is selected on the page.",
+    "expected": "UI_INPUT"
+  },
+  {
+    "text": "Memory is off. The user can enable it in Settings → Experimental → Memory.",
+    "expected": "FEATURE_OFF"
+  },
+  {
+    "text": "Unknown agent kiro",
+    "expected": "SETUP"
+  },
+  {
+    "text": "Codex is not installed. Install Codex CLI: npm i -g @openai/codex",
+    "expected": "SETUP"
+  },
+  {
+    "text": "No agent is connected for this tab yet. Send a message to start the selected agent.",
+    "expected": "TABHELM_BUG"
+  },
+  {
+    "text": "Tool \"browser_guide\" timed out after 1800s",
+    "expected": "TIMEOUT"
+  },
+  {
+    "text": "Claude Code exited during startup. Check that it is installed and logged in.",
+    "expected": "AGENT_CRASH"
+  },
+  {
+    "text": "Agent is still working on the previous message",
+    "expected": "TABHELM_BUG"
+  },
+  {
+    "text": "The agent is not ready yet — finish signing in (or wait for it to start), then send the message again.",
+    "expected": "AUTH"
+  },
+  {
+    "text": "Agent exited (1)",
+    "expected": "AGENT_CRASH"
+  },
+  {
+    "text": "Agent exited (SIGKILL)",
+    "expected": "AGENT_CRASH"
+  },
+  {
+    "text": "Failed to start OpenCode: spawn opencode ENOENT",
+    "expected": "SETUP"
+  },
+  {
+    "text": "Failed to start OpenCode: read EPIPE",
+    "expected": "AGENT_CRASH"
+  },
+  {
+    "text": "ACP connection closed",
+    "expected": "AGENT_CRASH"
+  },
+  {
+    "text": "TabHelm host unreachable: fetch failed",
+    "expected": "HOST_LINK"
+  },
+  {
+    "text": "Unknown error",
+    "expected": "TABHELM_BUG"
+  },
+  {
+    "text": "Message of type \"update\" exceeded the 1 MB native messaging limit and was dropped.",
+    "expected": "TABHELM_BUG"
+  },
+  {
+    "text": "No transcription engine: set TABHELM_TRANSCRIBE_BASE_URL (+ key, model) in ~/.tabhelm/env, or install whisper-cli + ffmpeg and a ggml model.",
+    "expected": "SETUP"
+  },
+  {
+    "text": "Cannot load skill from https://github.com/a/b: HTTP 404",
+    "expected": "SETUP"
+  },
+  {
+    "text": "No skill named \"linkedin\". Available: none",
+    "expected": "AGENT_MISUSE"
+  },
+  {
+    "text": "Use a path relative to the skill folder",
+    "expected": "AGENT_MISUSE"
+  },
+  {
+    "text": "This skill was written in the panel and has no extra files.",
+    "expected": "AGENT_MISUSE"
+  },
+  {
+    "text": "Empty note",
+    "expected": "AGENT_MISUSE"
+  },
+  {
+    "text": "Unknown memory tool memory_delete",
+    "expected": "TABHELM_BUG"
+  },
+  {
+    "text": "openrouter is not configured (key missing in ~/.tabhelm/env)",
+    "expected": "SETUP"
+  },
+  {
+    "text": "No folder dialog is available here; type the folder path instead.",
+    "expected": "SETUP"
+  },
+  {
+    "text": "Not a folder: /home/x/proj",
+    "expected": "SETUP"
+  },
+  {
+    "text": "Not a TabHelm recording",
+    "expected": "TABHELM_BUG"
+  },
+  {
+    "text": "critic needs an action",
+    "expected": "TABHELM_BUG"
+  },
+  {
+    "text": "Authentication required: Run \"npm run set-key -- openrouter\" in the TabHelm host folder (~/.tabhelm/app/host), or add OPENROUTER_API_KEY=... to ~/.tabhelm/env, then sign in again.",
+    "expected": "AUTH"
+  },
+  {
+    "text": "Set TABHELM_OPENAI_BASE_URL in ~/.tabhelm/env to use a custom OpenAI-compatible endpoint.",
+    "expected": "SETUP"
+  },
+  {
+    "text": "Cannot list OpenRouter models: https://openrouter.ai/api/v1/models → HTTP 502: bad gateway",
+    "expected": "NETWORK"
+  },
+  {
+    "text": "Cannot list Ollama models: fetch failed",
+    "expected": "NETWORK"
+  },
+  {
+    "text": "Ollama has no models. Pull one first, e.g. \"ollama pull qwen3:30b\".",
+    "expected": "SETUP"
+  },
+  {
+    "text": "Invalid params: Unknown model foo/bar:free",
+    "expected": "SETUP"
+  },
+  {
+    "text": "OpenRouter rejected the API key (401). Run \"npm run set-key -- openrouter\" …",
+    "expected": "AUTH"
+  },
+  {
+    "text": "OpenRouter rate limit reached for x:free (free models: 20 requests/minute and 50/day, or 1000/day after a one-time $10 top-up). Try again later or pick another model. {}",
+    "expected": "QUOTA"
+  },
+  {
+    "text": "OpenRouter: not enough credits for anthropic/claude. Pick a free model. {}",
+    "expected": "QUOTA"
+  },
+  {
+    "text": "OpenRouter error 500: upstream",
+    "expected": "NETWORK"
+  },
+  {
+    "text": "Error: arguments for browser_click were not valid JSON. Call the tool again with a JSON object.",
+    "expected": "AGENT_MISUSE"
+  },
+  {
+    "text": "Error: unknown tool browser_open.",
+    "expected": "AGENT_MISUSE"
+  },
+  {
+    "text": "The user rejected this action. Ask them how to proceed or try something else.",
+    "expected": "USER_DECISION"
+  },
+  {
+    "text": "cancelled",
+    "expected": "USER_DECISION"
+  },
+  {
+    "text": "Internal error",
+    "expected": "AGENT_CRASH"
+  },
+  {
+    "text": "MCP error -32602: Input validation error: Invalid arguments for tool browser_click: [{\"code\":\"invalid_type\",\"expected\":\"string\",\"path\":[\"ref\"]}]",
+    "expected": "AGENT_MISUSE"
+  },
+  {
+    "text": "MCP error -32602: Tool browser_open not found",
+    "expected": "AGENT_MISUSE"
+  },
+  {
+    "text": "Cannot access contents of url \"file:///home/x/a.html\". Extension manifest must request permission to access this host.",
+    "expected": "SETUP"
+  },
+  {
+    "text": "Frame with ID 0 is showing error page",
+    "expected": "NETWORK"
+  },
+  {
+    "text": "No frame with id 7 in tab 12.",
+    "expected": "PAGE_STATE"
+  },
+  {
+    "text": "No tab with id: 12.",
+    "expected": "PAGE_STATE"
+  },
+  {
+    "text": "Tabs cannot be edited right now (user may be dragging a tab).",
+    "expected": "CHROME_LIMIT"
+  },
+  {
+    "text": "The extensions gallery cannot be scripted.",
+    "expected": "CHROME_LIMIT"
+  },
+  {
+    "text": "Debugger is not attached to the tab with id: 12.",
+    "expected": "TABHELM_BUG"
+  },
+  {
+    "text": "{\"code\":-32000,\"message\":\"Cannot find context with specified id\"}",
+    "expected": "PAGE_STATE"
+  },
+  {
+    "text": "{\"code\":-32000,\"message\":\"Unable to capture screenshot\"}",
+    "expected": "CHROME_LIMIT"
+  },
+  {
+    "text": "TypeError: Cannot read properties of null (reading 'click')\n    at <anonymous>:1:30",
+    "expected": "AGENT_MISUSE",
+    "ctx": {
+      "tool": "browser_evaluate"
+    }
+  },
+  {
+    "text": "ReferenceError: $ is not defined",
+    "expected": "AGENT_MISUSE",
+    "ctx": {
+      "tool": "browser_evaluate"
+    }
+  },
+  {
+    "text": "The user did not allow using that tab.",
+    "expected": "SCHEDULE_NO_APPROVAL",
+    "ctx": {
+      "scheduled": true
+    }
+  },
+  {
+    "text": "timed out after 15 minutes",
+    "expected": "TIMEOUT"
+  },
+  {
+    "text": "the agent needs you to sign in",
+    "expected": "AUTH"
+  },
+  {
+    "text": "host disconnected",
+    "expected": "HOST_LINK"
+  },
+  {
+    "text": "uncaught: Error: write EPIPE",
+    "expected": "TABHELM_BUG"
+  },
+  {
+    "text": "error handling start: TypeError: x is not a function",
+    "expected": "TABHELM_BUG"
+  },
+  {
+    "text": "[claude:1] Failed to set up watcher for /home/u/.claude/settings.json: Error: ENOSPC: System limit for number of file watchers reached",
+    "expected": "SETUP"
+  },
+  {
+    "text": "relay: connect ECONNREFUSED 127.0.0.1:8787",
+    "expected": "HOST_LINK"
+  },
+  {
+    "text": "The Claude Agent session has ended. Please start a new session.",
+    "expected": "AGENT_CRASH"
+  },
+  {
+    "text": "Query closed before response received",
+    "expected": "AGENT_CRASH"
+  },
+  {
+    "text": "API Error: 529 {\"type\":\"error\",\"error\":{\"type\":\"overloaded_error\"}}",
+    "expected": "QUOTA"
+  },
+  {
+    "text": "Invalid API key · Please run /login",
+    "expected": "AUTH"
+  },
+  {
+    "text": "prompt is too long: 210000 tokens > 200000 maximum",
+    "expected": "BUDGET"
+  },
+  {
+    "text": "stream disconnected before completion: error sending request",
+    "expected": "NETWORK"
+  },
+  {
+    "text": "No one could approve \"Allow JavaScript…\": no panel is open (scheduled run or closed panel).",
+    "expected": "SCHEDULE_NO_APPROVAL",
+    "rule": "sched.no-approval"
+  },
+  {
+    "text": "needs approval (scheduled runs cannot ask)",
+    "expected": "SCHEDULE_NO_APPROVAL",
+    "rule": "sched.no-approval"
+  },
+  {
+    "text": "Scheduled run of \"news\" failed: No one could approve \"Run JavaScript\": no panel is open (scheduled run or closed panel).",
+    "expected": "SCHEDULE_NO_APPROVAL",
+    "rule": "sched.no-approval"
+  },
+  {
+    "text": "host disconnected",
+    "expected": "HOST_LINK",
+    "rule": "link.host"
+  },
+  {
+    "text": "Invalid arguments for browser_tabs (Error in invocation of tabs.get(integer tabId, optional function callback): No matching signature.). Check the tool's parameters and try again.",
+    "expected": "AGENT_MISUSE",
+    "rule": "misuse.chrome-signature"
+  },
+  {
+    "text": "Invalid arguments for browser_tabs (Invalid value for argument 1. Value must be one of: [normal, popup].). Check the tool's parameters and try again.",
+    "expected": "AGENT_MISUSE",
+    "rule": "misuse.chrome-signature"
+  },
+  {
+    "text": "Invalid arguments for browser_find (Cannot read properties of null (reading 'x')). Check the tool's parameters and try again.",
+    "expected": "TABHELM_BUG",
+    "rule": "bug.invalid-args"
+  },
+  {
+    "text": "Input validation error: Invalid arguments for tool browser_click: [{\"code\":\"invalid_type\"}]",
+    "expected": "AGENT_MISUSE",
+    "rule": "misuse.mcp"
+  },
+  {
+    "text": "Cannot reach the TabHelm host: Specified native messaging host not found.",
+    "expected": "SETUP",
+    "rule": "setup.native-host"
+  },
+  {
+    "text": "Failed to start OpenCode: spawn opencode EACCES",
+    "expected": "SETUP",
+    "rule": "setup.spawn"
+  },
+  {
+    "text": "Failed to start OpenCode: read EPIPE",
+    "expected": "AGENT_CRASH",
+    "rule": "crash.agent"
+  },
+  {
+    "text": "OpenRouter error 400: This model's maximum context length is 131072 tokens",
+    "expected": "BUDGET",
+    "rule": "budget"
+  },
+  {
+    "text": "OpenRouter error 422: bad tool schema",
+    "expected": "TABHELM_BUG",
+    "rule": "bug.provider-4xx"
+  },
+  {
+    "text": "e4 is not a <select>; click it and pick the option instead.",
+    "expected": "PAGE_ELEMENT",
+    "rule": "page.not-select"
+  },
+  {
+    "text": "Ref e12 is stale or unknown. Take a new browser_snapshot.",
+    "expected": "PAGE_ELEMENT",
+    "rule": "page.stale-ref"
+  },
+  {
+    "text": "No skill named \"shop\". Available: none",
+    "expected": "AGENT_MISUSE",
+    "rule": "misuse.no-skill"
+  },
+  {
+    "text": "Single-tab mode is on: work only in this tab — navigate it (browser_navigate) instead.",
+    "expected": "AGENT_MISUSE",
+    "rule": "misuse.single-tab"
+  },
+  {
+    "text": "TypeError: x is not a function",
+    "expected": "AGENT_MISUSE",
+    "rule": "misuse.page-script",
+    "ctx": {
+      "source": "P"
+    }
+  },
+  {
+    "text": "TypeError: x is not a function",
+    "expected": "TABHELM_BUG",
+    "rule": "bug.js-error"
+  },
+  {
+    "text": "Uncaught SyntaxError: Unexpected token )",
+    "expected": "AGENT_MISUSE",
+    "rule": "misuse.page-script",
+    "ctx": {
+      "tool": "browser_script_run"
+    }
+  },
+  {
+    "text": "ReferenceError: $ is not defined",
+    "expected": "AGENT_MISUSE",
+    "rule": "misuse.page-script",
+    "ctx": {
+      "tool": "browser_evaluate"
+    }
+  },
+  {
+    "text": "Script “dark” failed: TypeError: Cannot read properties of null (reading 'style')",
+    "expected": "AGENT_MISUSE",
+    "rule": "misuse.page-script"
+  },
+  {
+    "text": "That script no longer exists.",
+    "expected": "UI_INPUT",
+    "rule": "ui.input",
+    "ctx": {
+      "source": "P"
+    }
+  },
+  {
+    "text": "The user did not allow using that tab.",
+    "expected": "SCHEDULE_NO_APPROVAL",
+    "rule": "sched.user-decision",
+    "ctx": {
+      "scheduled": true
+    }
+  },
+  {
+    "text": "Scheduled run of \"news\" failed: The user declined the upload.",
+    "expected": "SCHEDULE_NO_APPROVAL",
+    "rule": "sched.user-decision"
+  },
+  {
+    "text": "The user did not allow using that tab.",
+    "expected": "USER_DECISION",
+    "rule": "user.decision"
+  },
+  {
+    "text": "Ref e1 is stale or unknown.",
+    "expected": "PAGE_ELEMENT",
+    "rule": "page.stale-ref",
+    "ctx": {
+      "scheduled": true
+    }
+  },
+  {
+    "text": "TypeError: Cannot read properties of undefined (reading 'x')",
+    "expected": "AGENT_CRASH",
+    "rule": "crash.agent-stderr",
+    "ctx": {
+      "source": "L",
+      "kind": "agent_stderr"
+    }
+  },
+  {
+    "text": "unhandled: ReferenceError: foo is not defined",
+    "expected": "AGENT_CRASH",
+    "rule": "crash.agent-stderr",
+    "ctx": {
+      "source": "L",
+      "kind": "agent_stderr"
+    }
+  },
+  {
+    "text": "uncaught: Error: write EPIPE",
+    "expected": "TABHELM_BUG",
+    "rule": "bug.host-uncaught",
+    "ctx": {
+      "source": "L",
+      "kind": "uncaught"
+    }
+  },
+  {
+    "text": "ENOSPC: System limit for number of file watchers reached",
+    "expected": "SETUP",
+    "rule": "setup.enospc",
+    "ctx": {
+      "source": "L",
+      "kind": "agent_stderr"
+    }
+  },
+  {
+    "text": "Something odd happened in the flux capacitor",
+    "expected": "UNCLASSIFIED",
+    "rule": "unclassified"
+  },
+  {
+    "text": "",
+    "expected": "UNCLASSIFIED",
+    "rule": "unclassified"
+  }
+]

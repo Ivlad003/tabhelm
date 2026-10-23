@@ -29,7 +29,7 @@ const INSTALL = fileURLToPath(new URL('./install.js', import.meta.url));
 const CHROME = process.env.CHROME_PATH || '/usr/bin/google-chrome';
 const HOME = mkdtempSync(join(tmpdir(), 'tabhelm-monkey-home-'));
 mkdirSync(join(HOME, '.tabhelm'), { recursive: true });
-const ENV = { ...process.env, HOME, USERPROFILE: HOME, DISPLAY: '', WAYLAND_DISPLAY: '', TABHELM_RECORDINGS_DIR: join(HOME, 'videos') };
+const ENV = { ...process.env, TABHELM_TEST: '1', HOME, USERPROFILE: HOME, DISPLAY: '', WAYLAND_DISPLAY: '', TABHELM_RECORDINGS_DIR: join(HOME, 'videos') };
 
 // Deterministic RNG so a failing run can be replayed with the same seed.
 let s = SEED >>> 0 || 1;
@@ -101,7 +101,7 @@ async function monkeyHost() {
     l.writeUInt32LE(b.length);
     host.stdin.write(Buffer.concat([l, b]));
   };
-  const TYPES = ['ping', 'list_agents', 'start', 'prompt', 'cancel', 'stop', 'permission_response', 'set_skills', 'set_features', 'page_url', 'critic', 'critic_status', 'transcribe', 'transcribe_status', 'memory_list', 'memory_add', 'memory_delete', 'memory_clear', 'folder_info', 'skill_preview', 'set_auto_approve', 'authenticate', 'set_config', 'save_recording', 'backup_state', 'restore_state', 'delete_recording', 'tool_result', 'interject', 'no_such_type'];
+  const TYPES = ['ping', 'list_agents', 'start', 'prompt', 'cancel', 'stop', 'permission_response', 'set_skills', 'set_features', 'page_url', 'critic', 'critic_status', 'transcribe', 'transcribe_status', 'memory_list', 'memory_add', 'memory_delete', 'memory_clear', 'folder_info', 'skill_preview', 'set_auto_approve', 'authenticate', 'set_config', 'save_recording', 'backup_state', 'restore_state', 'delete_recording', 'tool_result', 'interject', 'log_digest', 'no_such_type'];
   // pick_folder (desktop dialog) and password_* (1Password CLI) are left out on purpose.
   for (let i = 0; i < STEPS && !exited; i++) {
     const r = rand();
@@ -254,11 +254,12 @@ async function monkeyBrowser() {
   const swErrors = [];
   sw.on('console', (m) => m.type() === 'error' && swErrors.push(m.text()));
   const tabId = await sw.evaluate(async (u) => (await chrome.tabs.query({ url: `${u}*` }))[0].id, url);
-  // Every flag on, so flagged tools and panels are exercised too.
-  await sw.evaluate(async () => {
-    const ids = ['critic', 'siteRules', 'sensitiveGate', 'planPreview', 'takeOver', 'schedules', 'devTools', 'secrets', 'memory', 'skillAuthoring', 'passwordManager', 'actionDb', 'notifications', 'voice', 'pageScripts', 'guideDetail'];
+  // Every flag on (read from features.js, so new flags are included), so
+  // flagged tools and panels are exercised too.
+  const featureIds = [...readFileSync(fileURLToPath(new URL('../../extension/features.js', import.meta.url)), 'utf8').matchAll(/^\s+\{ id: '(\w+)'/gm)].map((m) => m[1]).filter((id) => !(process.env.MONKEY_FLAGS_OFF || '').split(',').includes(id));
+  await sw.evaluate(async (ids) => {
     await chrome.storage.local.set({ features: Object.fromEntries(ids.map((i) => [i, true])) });
-  });
+  }, featureIds);
 
   if (ONLY.includes('tools')) {
     console.log('\n[tools] random tool calls');
@@ -384,8 +385,8 @@ async function monkeyBrowser() {
     if (!healthy) finding('panel', 'panel unhealthy after the run (Settings would not open)');
     const ignore = /Failed to load resource|net::ERR_|Could not establish connection|The message port closed|favicon|Cannot reach the TabHelm host/;
     for (const e of [...new Set(panelErrors)]) if (!ignore.test(e)) finding('panel', 'error in the panel', e);
-    const stats = await panel.evaluate(() => ({ user: document.querySelectorAll('.msg.user').length, agent: document.querySelectorAll('.msg.agent').length, notices: [...document.querySelectorAll('#log .notice.error')].map((n) => n.textContent).slice(-5) })).catch(() => ({}));
-    console.log(`  panel: ${actions} actions, ${panelErrors.length} console errors, ${stats.user} sent, ${stats.agent} replies`);
+    const stats = await panel.evaluate(() => ({ user: document.querySelectorAll('.msg.user').length, agent: document.querySelectorAll('.msg.agent').length, notices: [...document.querySelectorAll('#log .notice.error')].map((n) => n.textContent).slice(-5), views: ['log', 'history', 'settings', 'report'].filter((id) => document.getElementById(id) && !document.getElementById(id).hidden) })).catch(() => ({}));
+    console.log(`  panel: ${actions} actions, ${panelErrors.length} console errors, ${stats.user} sent, ${stats.agent} replies in the open chat · open view: ${stats.views?.join('+') || 'none'}`);
     if (stats.notices?.length) console.log(`  last error notices: ${stats.notices.join(' | ')}`);
   }
 

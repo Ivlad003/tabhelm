@@ -1,0 +1,2570 @@
+{
+ "description": "Real-use variant: the golden patterns on public hosts, instrumented journals. No real content.",
+ "env": {
+  "ext": "0.31.0",
+  "host": "0.31.0",
+  "chrome": "141.0.7390.54",
+  "platform": "linux",
+  "features": [
+   "trimWaits",
+   "selfAnalysis"
+  ],
+  "agents": [
+   {
+    "id": "claude",
+    "name": "Claude Code",
+    "installHint": "npm i -g @anthropic-ai/claude-code"
+   },
+   {
+    "id": "codex",
+    "name": "Codex",
+    "installHint": "npm i -g @openai/codex"
+   },
+   {
+    "id": "opencode",
+    "name": "OpenCode",
+    "installHint": "npm i -g opencode-ai"
+   }
+  ]
+ },
+ "versionHistory": [
+  {
+   "v": "0.30.0",
+   "at": "2026-10-01T00:00:00.000Z"
+  },
+  {
+   "v": "0.31.0",
+   "at": "2026-10-14T00:00:00.000Z"
+  }
+ ],
+ "now": "2026-10-23T12:00:00.000Z",
+ "chats": [
+  {
+   "id": "c000rl",
+   "created": 1792310400000,
+   "tabId": 910000,
+   "url": "https://shop.example.com/catalog/t-shirts?color=blue",
+   "agent": "Claude Code",
+   "folder": null,
+   "journal": [
+    {
+     "ts": "2026-10-18T08:00:02.000Z",
+     "type": "agent_connected",
+     "agent": "Claude Code",
+     "agentId": "claude",
+     "ext": "0.31.0",
+     "host": "0.31.0",
+     "features": [
+      "trimWaits"
+     ],
+     "autoApprove": false,
+     "skills": []
+    },
+    {
+     "ts": "2026-10-18T08:00:04.000Z",
+     "type": "model",
+     "agent": "Claude Code",
+     "model": "sonnet"
+    },
+    {
+     "ts": "2026-10-18T08:00:09.000Z",
+     "type": "user",
+     "text": "Order the blue T-shirt in size M.",
+     "attachments": [],
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-18T08:00:11.000Z",
+     "type": "action",
+     "agent": "Claude Code",
+     "tool": "browser_snapshot",
+     "args": {},
+     "desc": "snapshot",
+     "ok": true,
+     "error": null,
+     "host": "shop.example.com",
+     "ms": 120,
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-18T08:00:13.000Z",
+     "type": "action",
+     "agent": "Claude Code",
+     "tool": "browser_select_option",
+     "args": {
+      "ref": "e21",
+      "values": [
+       "M"
+      ]
+     },
+     "desc": "select_option",
+     "ok": false,
+     "error": "e21 is not a <select>; click it and pick the option instead.",
+     "host": "shop.example.com",
+     "ms": 120,
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-18T08:00:15.000Z",
+     "type": "action",
+     "agent": "Claude Code",
+     "tool": "browser_select_option",
+     "args": {
+      "ref": "e21",
+      "values": [
+       "Medium"
+      ]
+     },
+     "desc": "select_option",
+     "ok": false,
+     "error": "e21 is not a <select>; click it and pick the option instead.",
+     "host": "shop.example.com",
+     "ms": 120,
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-18T08:00:17.000Z",
+     "type": "action",
+     "agent": "Claude Code",
+     "tool": "browser_click",
+     "args": {
+      "ref": "e21"
+     },
+     "desc": "click",
+     "ok": true,
+     "error": null,
+     "host": "shop.example.com",
+     "ms": 120,
+     "label": "Size",
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-18T08:00:19.000Z",
+     "type": "action",
+     "agent": "Claude Code",
+     "tool": "browser_click",
+     "args": {
+      "ref": "e33"
+     },
+     "desc": "click",
+     "ok": true,
+     "error": null,
+     "host": "shop.example.com",
+     "ms": 120,
+     "label": "M",
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-18T08:00:21.000Z",
+     "type": "action",
+     "agent": "Claude Code",
+     "tool": "browser_click",
+     "args": {
+      "ref": "e40"
+     },
+     "desc": "click",
+     "ok": true,
+     "error": null,
+     "host": "shop.example.com",
+     "ms": 120,
+     "label": "Add to cart",
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-18T08:00:24.000Z",
+     "type": "agent",
+     "agent": "Claude Code",
+     "model": "sonnet",
+     "text": "Added to the cart.",
+     "thought": "",
+     "failure": null,
+     "stopReason": "end_turn",
+     "stats": {
+      "ms": 14500,
+      "tokens": null,
+      "cost": null,
+      "context": null
+     },
+     "turn": 1
+    }
+   ],
+   "updated": 1792310424000
+  },
+  {
+   "id": "c001rl",
+   "created": 1792328400000,
+   "tabId": 910001,
+   "url": "https://shop.example.com/catalog/t-shirts?color=blue",
+   "agent": "Claude Code",
+   "folder": null,
+   "journal": [
+    {
+     "ts": "2026-10-18T13:00:02.000Z",
+     "type": "agent_connected",
+     "agent": "Claude Code",
+     "agentId": "claude",
+     "ext": "0.31.0",
+     "host": "0.31.0",
+     "features": [
+      "trimWaits"
+     ],
+     "autoApprove": false,
+     "skills": []
+    },
+    {
+     "ts": "2026-10-18T13:00:04.000Z",
+     "type": "model",
+     "agent": "Claude Code",
+     "model": "sonnet"
+    },
+    {
+     "ts": "2026-10-18T13:00:09.000Z",
+     "type": "user",
+     "text": "Order the blue T-shirt in size M.",
+     "attachments": [],
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-18T13:00:11.000Z",
+     "type": "action",
+     "agent": "Claude Code",
+     "tool": "browser_snapshot",
+     "args": {},
+     "desc": "snapshot",
+     "ok": true,
+     "error": null,
+     "host": "shop.example.com",
+     "ms": 120,
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-18T13:00:13.000Z",
+     "type": "action",
+     "agent": "Claude Code",
+     "tool": "browser_select_option",
+     "args": {
+      "ref": "e21",
+      "values": [
+       "M"
+      ]
+     },
+     "desc": "select_option",
+     "ok": false,
+     "error": "e21 is not a <select>; click it and pick the option instead.",
+     "host": "shop.example.com",
+     "ms": 120,
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-18T13:00:15.000Z",
+     "type": "action",
+     "agent": "Claude Code",
+     "tool": "browser_click",
+     "args": {
+      "ref": "e21"
+     },
+     "desc": "click",
+     "ok": true,
+     "error": null,
+     "host": "shop.example.com",
+     "ms": 120,
+     "label": "Size",
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-18T13:00:17.000Z",
+     "type": "action",
+     "agent": "Claude Code",
+     "tool": "browser_click",
+     "args": {
+      "ref": "e33"
+     },
+     "desc": "click",
+     "ok": true,
+     "error": null,
+     "host": "shop.example.com",
+     "ms": 120,
+     "label": "M",
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-18T13:00:19.000Z",
+     "type": "action",
+     "agent": "Claude Code",
+     "tool": "browser_click",
+     "args": {
+      "ref": "e40"
+     },
+     "desc": "click",
+     "ok": true,
+     "error": null,
+     "host": "shop.example.com",
+     "ms": 120,
+     "label": "Add to cart",
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-18T13:00:22.000Z",
+     "type": "agent",
+     "agent": "Claude Code",
+     "model": "sonnet",
+     "text": "Added to the cart.",
+     "thought": "",
+     "failure": null,
+     "stopReason": "end_turn",
+     "stats": {
+      "ms": 14500,
+      "tokens": null,
+      "cost": null,
+      "context": null
+     },
+     "turn": 1
+    }
+   ],
+   "updated": 1792328422000
+  },
+  {
+   "id": "c002rl",
+   "created": 1792346400000,
+   "tabId": 910002,
+   "url": "https://shop.example.com/catalog/t-shirts?color=blue",
+   "agent": "Claude Code",
+   "folder": null,
+   "journal": [
+    {
+     "ts": "2026-10-18T18:00:02.000Z",
+     "type": "agent_connected",
+     "agent": "Claude Code",
+     "agentId": "claude",
+     "ext": "0.31.0",
+     "host": "0.31.0",
+     "features": [
+      "trimWaits"
+     ],
+     "autoApprove": false,
+     "skills": []
+    },
+    {
+     "ts": "2026-10-18T18:00:04.000Z",
+     "type": "model",
+     "agent": "Claude Code",
+     "model": "sonnet"
+    },
+    {
+     "ts": "2026-10-18T18:00:09.000Z",
+     "type": "user",
+     "text": "Order the blue T-shirt in size M.",
+     "attachments": [],
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-18T18:00:11.000Z",
+     "type": "action",
+     "agent": "Claude Code",
+     "tool": "browser_navigate",
+     "args": {
+      "url": "https://shop.example.com/catalog/t-shirts?color=blue"
+     },
+     "desc": "navigate",
+     "ok": true,
+     "error": null,
+     "host": "shop.example.com",
+     "ms": 120,
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-18T18:00:13.000Z",
+     "type": "action",
+     "agent": "Claude Code",
+     "tool": "browser_snapshot",
+     "args": {},
+     "desc": "snapshot",
+     "ok": true,
+     "error": null,
+     "host": "shop.example.com",
+     "ms": 120,
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-18T18:00:15.000Z",
+     "type": "action",
+     "agent": "Claude Code",
+     "tool": "browser_click",
+     "args": {
+      "ref": "e40"
+     },
+     "desc": "click",
+     "ok": true,
+     "error": null,
+     "host": "shop.example.com",
+     "ms": 120,
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-18T18:00:18.000Z",
+     "type": "agent",
+     "agent": "Claude Code",
+     "model": "sonnet",
+     "text": "Done.",
+     "thought": "",
+     "failure": null,
+     "stopReason": "end_turn",
+     "stats": {
+      "ms": 14500,
+      "tokens": null,
+      "cost": null,
+      "context": null
+     },
+     "turn": 1
+    }
+   ],
+   "updated": 1792346418000
+  },
+  {
+   "id": "c003rl",
+   "created": 1792364400000,
+   "tabId": 910003,
+   "url": "https://shop.example.com/catalog/t-shirts?color=blue",
+   "agent": "Claude Code",
+   "folder": null,
+   "journal": [
+    {
+     "ts": "2026-10-18T23:00:02.000Z",
+     "type": "agent_connected",
+     "agent": "Claude Code",
+     "agentId": "claude",
+     "ext": "0.31.0",
+     "host": "0.31.0",
+     "features": [
+      "trimWaits"
+     ],
+     "autoApprove": false,
+     "skills": []
+    },
+    {
+     "ts": "2026-10-18T23:00:04.000Z",
+     "type": "model",
+     "agent": "Claude Code",
+     "model": "sonnet"
+    },
+    {
+     "ts": "2026-10-18T23:00:09.000Z",
+     "type": "user",
+     "text": "Order the blue T-shirt in size M.",
+     "attachments": [],
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-18T23:00:11.000Z",
+     "type": "action",
+     "agent": "Claude Code",
+     "tool": "browser_navigate",
+     "args": {
+      "url": "https://shop.example.com/catalog/t-shirts?color=blue"
+     },
+     "desc": "navigate",
+     "ok": true,
+     "error": null,
+     "host": "shop.example.com",
+     "ms": 120,
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-18T23:00:13.000Z",
+     "type": "action",
+     "agent": "Claude Code",
+     "tool": "browser_snapshot",
+     "args": {},
+     "desc": "snapshot",
+     "ok": true,
+     "error": null,
+     "host": "shop.example.com",
+     "ms": 120,
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-18T23:00:15.000Z",
+     "type": "action",
+     "agent": "Claude Code",
+     "tool": "browser_click",
+     "args": {
+      "ref": "e40"
+     },
+     "desc": "click",
+     "ok": true,
+     "error": null,
+     "host": "shop.example.com",
+     "ms": 120,
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-18T23:00:18.000Z",
+     "type": "agent",
+     "agent": "Claude Code",
+     "model": "sonnet",
+     "text": "Done.",
+     "thought": "",
+     "failure": null,
+     "stopReason": "end_turn",
+     "stats": {
+      "ms": 14500,
+      "tokens": null,
+      "cost": null,
+      "context": null
+     },
+     "turn": 1
+    }
+   ],
+   "updated": 1792364418000
+  },
+  {
+   "id": "c004rl",
+   "created": 1792382400000,
+   "tabId": 910004,
+   "url": "https://mail.example.org/inbox",
+   "agent": "Claude Code",
+   "folder": null,
+   "journal": [
+    {
+     "ts": "2026-10-19T04:00:02.000Z",
+     "type": "agent_connected",
+     "agent": "Claude Code",
+     "agentId": "claude",
+     "ext": "0.31.0",
+     "host": "0.31.0",
+     "features": [
+      "trimWaits"
+     ],
+     "autoApprove": false,
+     "skills": []
+    },
+    {
+     "ts": "2026-10-19T04:00:04.000Z",
+     "type": "model",
+     "agent": "Claude Code",
+     "model": "sonnet"
+    },
+    {
+     "ts": "2026-10-19T04:00:09.000Z",
+     "type": "user",
+     "text": "Archive every newsletter in the inbox.",
+     "attachments": [],
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-19T04:00:11.000Z",
+     "type": "action",
+     "agent": "Claude Code",
+     "tool": "browser_snapshot",
+     "args": {},
+     "desc": "snapshot",
+     "ok": true,
+     "error": null,
+     "host": "mail.example.org",
+     "ms": 120,
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-19T04:00:13.000Z",
+     "type": "action",
+     "agent": "Claude Code",
+     "tool": "browser_click",
+     "args": {
+      "ref": "e11"
+     },
+     "desc": "click",
+     "ok": true,
+     "error": null,
+     "host": "mail.example.org",
+     "ms": 120,
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-19T04:00:14.000Z",
+     "type": "notice",
+     "text": "ACP connection closed",
+     "error": true,
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-19T04:00:14.000Z",
+     "type": "agent_exit",
+     "agent": "Claude Code",
+     "code": null,
+     "signal": "SIGKILL",
+     "detail": "Agent exited (SIGKILL)",
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-19T04:00:14.000Z",
+     "type": "agent",
+     "agent": "Claude Code",
+     "model": "sonnet",
+     "text": "",
+     "thought": "",
+     "failure": "ACP connection closed",
+     "stopReason": null,
+     "stats": {
+      "ms": 14500,
+      "tokens": null,
+      "cost": null,
+      "context": null
+     },
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-19T04:00:15.000Z",
+     "type": "notice",
+     "text": "Agent exited (SIGKILL)",
+     "error": true,
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-19T04:00:17.000Z",
+     "type": "agent_switch",
+     "to": "Codex",
+     "reason": "ACP connection closed",
+     "turn": 1
+    }
+   ],
+   "updated": 1792382417000
+  },
+  {
+   "id": "c005rl",
+   "created": 1792400400000,
+   "tabId": 910005,
+   "url": "https://mail.example.org/inbox",
+   "agent": "Claude Code",
+   "folder": null,
+   "journal": [
+    {
+     "ts": "2026-10-19T09:00:02.000Z",
+     "type": "agent_connected",
+     "agent": "Claude Code",
+     "agentId": "claude",
+     "ext": "0.31.0",
+     "host": "0.31.0",
+     "features": [
+      "trimWaits"
+     ],
+     "autoApprove": false,
+     "skills": []
+    },
+    {
+     "ts": "2026-10-19T09:00:04.000Z",
+     "type": "model",
+     "agent": "Claude Code",
+     "model": "sonnet"
+    },
+    {
+     "ts": "2026-10-19T09:00:09.000Z",
+     "type": "user",
+     "text": "Archive every newsletter in the inbox.",
+     "attachments": [],
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-19T09:00:11.000Z",
+     "type": "action",
+     "agent": "Claude Code",
+     "tool": "browser_snapshot",
+     "args": {},
+     "desc": "snapshot",
+     "ok": true,
+     "error": null,
+     "host": "mail.example.org",
+     "ms": 120,
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-19T09:00:13.000Z",
+     "type": "action",
+     "agent": "Claude Code",
+     "tool": "browser_click",
+     "args": {
+      "ref": "e11"
+     },
+     "desc": "click",
+     "ok": true,
+     "error": null,
+     "host": "mail.example.org",
+     "ms": 120,
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-19T09:00:14.000Z",
+     "type": "notice",
+     "text": "ACP connection closed",
+     "error": true,
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-19T09:00:14.000Z",
+     "type": "agent_exit",
+     "agent": "Claude Code",
+     "code": null,
+     "signal": "SIGKILL",
+     "detail": "Agent exited (SIGKILL)",
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-19T09:00:14.000Z",
+     "type": "agent",
+     "agent": "Claude Code",
+     "model": "sonnet",
+     "text": "",
+     "thought": "",
+     "failure": "ACP connection closed",
+     "stopReason": null,
+     "stats": {
+      "ms": 14500,
+      "tokens": null,
+      "cost": null,
+      "context": null
+     },
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-19T09:00:15.000Z",
+     "type": "notice",
+     "text": "Agent exited (SIGKILL)",
+     "error": true,
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-19T09:00:17.000Z",
+     "type": "agent_switch",
+     "to": "Codex",
+     "reason": "ACP connection closed",
+     "turn": 1
+    }
+   ],
+   "updated": 1792400417000
+  },
+  {
+   "id": "c006rl",
+   "created": 1792418400000,
+   "tabId": 910006,
+   "url": "https://mail.example.org/inbox",
+   "agent": "Claude Code",
+   "folder": null,
+   "journal": [
+    {
+     "ts": "2026-10-19T14:00:02.000Z",
+     "type": "agent_connected",
+     "agent": "Claude Code",
+     "agentId": "claude",
+     "ext": "0.31.0",
+     "host": "0.31.0",
+     "features": [
+      "trimWaits"
+     ],
+     "autoApprove": false,
+     "skills": []
+    },
+    {
+     "ts": "2026-10-19T14:00:04.000Z",
+     "type": "model",
+     "agent": "Claude Code",
+     "model": "sonnet"
+    },
+    {
+     "ts": "2026-10-19T14:00:09.000Z",
+     "type": "user",
+     "text": "Archive every newsletter in the inbox.",
+     "attachments": [],
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-19T14:00:11.000Z",
+     "type": "action",
+     "agent": "Claude Code",
+     "tool": "browser_snapshot",
+     "args": {},
+     "desc": "snapshot",
+     "ok": true,
+     "error": null,
+     "host": "mail.example.org",
+     "ms": 120,
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-19T14:00:13.000Z",
+     "type": "action",
+     "agent": "Claude Code",
+     "tool": "browser_click",
+     "args": {
+      "ref": "e11"
+     },
+     "desc": "click",
+     "ok": true,
+     "error": null,
+     "host": "mail.example.org",
+     "ms": 120,
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-19T14:00:14.000Z",
+     "type": "notice",
+     "text": "ACP connection closed",
+     "error": true,
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-19T14:00:14.000Z",
+     "type": "agent_exit",
+     "agent": "Claude Code",
+     "code": null,
+     "signal": "SIGKILL",
+     "detail": "Agent exited (SIGKILL)",
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-19T14:00:14.000Z",
+     "type": "agent",
+     "agent": "Claude Code",
+     "model": "sonnet",
+     "text": "",
+     "thought": "",
+     "failure": "ACP connection closed",
+     "stopReason": null,
+     "stats": {
+      "ms": 14500,
+      "tokens": null,
+      "cost": null,
+      "context": null
+     },
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-19T14:00:15.000Z",
+     "type": "notice",
+     "text": "Agent exited (SIGKILL)",
+     "error": true,
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-19T14:00:17.000Z",
+     "type": "agent_switch",
+     "to": "Codex",
+     "reason": "ACP connection closed",
+     "turn": 1
+    }
+   ],
+   "updated": 1792418417000
+  },
+  {
+   "id": "c007rl",
+   "created": 1792436400000,
+   "tabId": 910007,
+   "url": "https://news.example.com.ua/contacts",
+   "agent": "Claude Code",
+   "folder": null,
+   "journal": [
+    {
+     "ts": "2026-10-19T19:00:02.000Z",
+     "type": "agent_connected",
+     "agent": "Claude Code",
+     "agentId": "claude",
+     "ext": "0.31.0",
+     "host": "0.31.0",
+     "features": [
+      "trimWaits"
+     ],
+     "autoApprove": false,
+     "skills": []
+    },
+    {
+     "ts": "2026-10-19T19:00:04.000Z",
+     "type": "model",
+     "agent": "Claude Code",
+     "model": "sonnet"
+    },
+    {
+     "ts": "2026-10-19T19:00:09.000Z",
+     "type": "user",
+     "text": "Open the contacts page of this site and read the phone number.",
+     "attachments": [],
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-19T19:00:11.000Z",
+     "type": "action",
+     "agent": "Claude Code",
+     "tool": "browser_tabs",
+     "args": {
+      "action": "new"
+     },
+     "desc": "tabs",
+     "ok": true,
+     "error": null,
+     "host": "about:blank",
+     "ms": 120,
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-19T19:00:13.000Z",
+     "type": "action",
+     "agent": "Claude Code",
+     "tool": "browser_go_back",
+     "args": {},
+     "desc": "go_back",
+     "ok": true,
+     "error": null,
+     "host": "about:blank",
+     "ms": 120,
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-19T19:00:15.000Z",
+     "type": "action",
+     "agent": "Claude Code",
+     "tool": "browser_navigate",
+     "args": {
+      "url": "https://news.example.com.ua/contacts"
+     },
+     "desc": "navigate",
+     "ok": false,
+     "error": "Chrome does not allow extensions to control about:blank. Navigate to a normal web page first.",
+     "host": "about:blank",
+     "ms": 120,
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-19T19:00:17.000Z",
+     "type": "action",
+     "agent": "Claude Code",
+     "tool": "browser_navigate",
+     "args": {
+      "url": "https://news.example.com.ua/contacts"
+     },
+     "desc": "navigate",
+     "ok": false,
+     "error": "Chrome does not allow extensions to control about:blank. Navigate to a normal web page first.",
+     "host": "about:blank",
+     "ms": 120,
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-19T19:00:19.000Z",
+     "type": "action",
+     "agent": "Claude Code",
+     "tool": "browser_go_forward",
+     "args": {},
+     "desc": "go_forward",
+     "ok": false,
+     "error": "Chrome does not allow extensions to control about:blank. Navigate to a normal web page first.",
+     "host": "about:blank",
+     "ms": 120,
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-19T19:00:21.000Z",
+     "type": "action",
+     "agent": "Claude Code",
+     "tool": "browser_tabs",
+     "args": {
+      "action": "new",
+      "url": "https://news.example.com.ua/contacts"
+     },
+     "desc": "tabs",
+     "ok": true,
+     "error": null,
+     "host": "news.example.com.ua",
+     "ms": 120,
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-19T19:00:23.000Z",
+     "type": "action",
+     "agent": "Claude Code",
+     "tool": "browser_snapshot",
+     "args": {},
+     "desc": "snapshot",
+     "ok": true,
+     "error": null,
+     "host": "news.example.com.ua",
+     "ms": 120,
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-19T19:00:26.000Z",
+     "type": "agent",
+     "agent": "Claude Code",
+     "model": "sonnet",
+     "text": "The number is on the page.",
+     "thought": "",
+     "failure": null,
+     "stopReason": "end_turn",
+     "stats": {
+      "ms": 14500,
+      "tokens": null,
+      "cost": null,
+      "context": null
+     },
+     "turn": 1
+    }
+   ],
+   "updated": 1792436426000
+  },
+  {
+   "id": "c008rl",
+   "created": 1792454400000,
+   "tabId": 910008,
+   "url": "https://news.example.com.ua/contacts",
+   "agent": "Claude Code",
+   "folder": null,
+   "journal": [
+    {
+     "ts": "2026-10-20T00:00:02.000Z",
+     "type": "agent_connected",
+     "agent": "Claude Code",
+     "agentId": "claude",
+     "ext": "0.31.0",
+     "host": "0.31.0",
+     "features": [
+      "trimWaits"
+     ],
+     "autoApprove": false,
+     "skills": []
+    },
+    {
+     "ts": "2026-10-20T00:00:04.000Z",
+     "type": "model",
+     "agent": "Claude Code",
+     "model": "sonnet"
+    },
+    {
+     "ts": "2026-10-20T00:00:09.000Z",
+     "type": "user",
+     "text": "Open the contacts page of this site and read the phone number.",
+     "attachments": [],
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-20T00:00:11.000Z",
+     "type": "action",
+     "agent": "Claude Code",
+     "tool": "browser_tabs",
+     "args": {
+      "action": "new"
+     },
+     "desc": "tabs",
+     "ok": true,
+     "error": null,
+     "host": "about:blank",
+     "ms": 120,
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-20T00:00:13.000Z",
+     "type": "action",
+     "agent": "Claude Code",
+     "tool": "browser_go_back",
+     "args": {},
+     "desc": "go_back",
+     "ok": true,
+     "error": null,
+     "host": "about:blank",
+     "ms": 120,
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-20T00:00:15.000Z",
+     "type": "action",
+     "agent": "Claude Code",
+     "tool": "browser_navigate",
+     "args": {
+      "url": "https://news.example.com.ua/contacts"
+     },
+     "desc": "navigate",
+     "ok": false,
+     "error": "Chrome does not allow extensions to control about:blank. Navigate to a normal web page first.",
+     "host": "about:blank",
+     "ms": 120,
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-20T00:00:17.000Z",
+     "type": "action",
+     "agent": "Claude Code",
+     "tool": "browser_go_forward",
+     "args": {},
+     "desc": "go_forward",
+     "ok": false,
+     "error": "Chrome does not allow extensions to control about:blank. Navigate to a normal web page first.",
+     "host": "about:blank",
+     "ms": 120,
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-20T00:00:19.000Z",
+     "type": "action",
+     "agent": "Claude Code",
+     "tool": "browser_tabs",
+     "args": {
+      "action": "new",
+      "url": "https://news.example.com.ua/contacts"
+     },
+     "desc": "tabs",
+     "ok": true,
+     "error": null,
+     "host": "news.example.com.ua",
+     "ms": 120,
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-20T00:00:21.000Z",
+     "type": "action",
+     "agent": "Claude Code",
+     "tool": "browser_snapshot",
+     "args": {},
+     "desc": "snapshot",
+     "ok": true,
+     "error": null,
+     "host": "news.example.com.ua",
+     "ms": 120,
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-20T00:00:24.000Z",
+     "type": "agent",
+     "agent": "Claude Code",
+     "model": "sonnet",
+     "text": "The number is on the page.",
+     "thought": "",
+     "failure": null,
+     "stopReason": "end_turn",
+     "stats": {
+      "ms": 14500,
+      "tokens": null,
+      "cost": null,
+      "context": null
+     },
+     "turn": 1
+    }
+   ],
+   "updated": 1792454424000
+  },
+  {
+   "id": "c009rl",
+   "created": 1792472400000,
+   "tabId": 910009,
+   "url": "https://docs.example.net/feedback",
+   "agent": "Claude Code",
+   "folder": null,
+   "journal": [
+    {
+     "ts": "2026-10-20T05:00:02.000Z",
+     "type": "agent_connected",
+     "agent": "Claude Code",
+     "agentId": "claude",
+     "ext": "0.31.0",
+     "host": "0.31.0",
+     "features": [
+      "trimWaits"
+     ],
+     "autoApprove": false,
+     "skills": []
+    },
+    {
+     "ts": "2026-10-20T05:00:04.000Z",
+     "type": "model",
+     "agent": "Claude Code",
+     "model": "sonnet"
+    },
+    {
+     "ts": "2026-10-20T05:00:09.000Z",
+     "type": "user",
+     "text": "Fill the feedback form with my name and a short comment.",
+     "attachments": [],
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-20T05:00:11.000Z",
+     "type": "action",
+     "agent": "Claude Code",
+     "tool": "browser_snapshot",
+     "args": {},
+     "desc": "snapshot",
+     "ok": true,
+     "error": null,
+     "host": "docs.example.net",
+     "ms": 120,
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-20T05:00:13.000Z",
+     "type": "action",
+     "agent": "Claude Code",
+     "tool": "browser_fill_form",
+     "args": {
+      "fields": [
+       {
+        "ref": "e3",
+        "value": "Ada"
+       },
+       {
+        "ref": "e4",
+        "value": "Nice docs"
+       }
+      ]
+     },
+     "desc": "fill_form",
+     "ok": false,
+     "error": "This tool needs the \"Developer tools\" feature, which is off. The user can enable it in TabHelm → Settings → Experimental.",
+     "host": "docs.example.net",
+     "ms": 120,
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-20T05:00:15.000Z",
+     "type": "action",
+     "agent": "Claude Code",
+     "tool": "browser_type",
+     "args": {
+      "ref": "e3",
+      "text": "Ada"
+     },
+     "desc": "type",
+     "ok": true,
+     "error": null,
+     "host": "docs.example.net",
+     "ms": 120,
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-20T05:00:17.000Z",
+     "type": "action",
+     "agent": "Claude Code",
+     "tool": "browser_type",
+     "args": {
+      "ref": "e4",
+      "text": "Nice docs"
+     },
+     "desc": "type",
+     "ok": true,
+     "error": null,
+     "host": "docs.example.net",
+     "ms": 120,
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-20T05:00:19.000Z",
+     "type": "action",
+     "agent": "Claude Code",
+     "tool": "browser_click",
+     "args": {
+      "ref": "e9"
+     },
+     "desc": "click",
+     "ok": true,
+     "error": null,
+     "host": "docs.example.net",
+     "ms": 120,
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-20T05:00:22.000Z",
+     "type": "agent",
+     "agent": "Claude Code",
+     "model": "sonnet",
+     "text": "Sent.",
+     "thought": "",
+     "failure": null,
+     "stopReason": "end_turn",
+     "stats": {
+      "ms": 14500,
+      "tokens": null,
+      "cost": null,
+      "context": null
+     },
+     "turn": 1
+    }
+   ],
+   "updated": 1792472422000
+  },
+  {
+   "id": "c010rl",
+   "created": 1792490400000,
+   "tabId": 910010,
+   "url": "https://docs.example.net/feedback",
+   "agent": "Claude Code",
+   "folder": null,
+   "journal": [
+    {
+     "ts": "2026-10-20T10:00:02.000Z",
+     "type": "agent_connected",
+     "agent": "Claude Code",
+     "agentId": "claude",
+     "ext": "0.31.0",
+     "host": "0.31.0",
+     "features": [
+      "trimWaits"
+     ],
+     "autoApprove": false,
+     "skills": []
+    },
+    {
+     "ts": "2026-10-20T10:00:04.000Z",
+     "type": "model",
+     "agent": "Claude Code",
+     "model": "sonnet"
+    },
+    {
+     "ts": "2026-10-20T10:00:09.000Z",
+     "type": "user",
+     "text": "Fill the feedback form with my name and a short comment.",
+     "attachments": [],
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-20T10:00:11.000Z",
+     "type": "action",
+     "agent": "Claude Code",
+     "tool": "browser_snapshot",
+     "args": {},
+     "desc": "snapshot",
+     "ok": true,
+     "error": null,
+     "host": "docs.example.net",
+     "ms": 120,
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-20T10:00:13.000Z",
+     "type": "action",
+     "agent": "Claude Code",
+     "tool": "browser_fill_form",
+     "args": {
+      "fields": [
+       {
+        "ref": "e3",
+        "value": "Ada"
+       },
+       {
+        "ref": "e4",
+        "value": "Nice docs"
+       }
+      ]
+     },
+     "desc": "fill_form",
+     "ok": false,
+     "error": "This tool needs the \"Developer tools\" feature, which is off. The user can enable it in TabHelm → Settings → Experimental.",
+     "host": "docs.example.net",
+     "ms": 120,
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-20T10:00:15.000Z",
+     "type": "action",
+     "agent": "Claude Code",
+     "tool": "browser_type",
+     "args": {
+      "ref": "e3",
+      "text": "Ada"
+     },
+     "desc": "type",
+     "ok": true,
+     "error": null,
+     "host": "docs.example.net",
+     "ms": 120,
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-20T10:00:17.000Z",
+     "type": "action",
+     "agent": "Claude Code",
+     "tool": "browser_type",
+     "args": {
+      "ref": "e4",
+      "text": "Nice docs"
+     },
+     "desc": "type",
+     "ok": true,
+     "error": null,
+     "host": "docs.example.net",
+     "ms": 120,
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-20T10:00:19.000Z",
+     "type": "action",
+     "agent": "Claude Code",
+     "tool": "browser_click",
+     "args": {
+      "ref": "e9"
+     },
+     "desc": "click",
+     "ok": true,
+     "error": null,
+     "host": "docs.example.net",
+     "ms": 120,
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-20T10:00:22.000Z",
+     "type": "agent",
+     "agent": "Claude Code",
+     "model": "sonnet",
+     "text": "Sent.",
+     "thought": "",
+     "failure": null,
+     "stopReason": "end_turn",
+     "stats": {
+      "ms": 14500,
+      "tokens": null,
+      "cost": null,
+      "context": null
+     },
+     "turn": 1
+    }
+   ],
+   "updated": 1792490422000
+  },
+  {
+   "id": "c011rl",
+   "created": 1792508400000,
+   "tabId": 910011,
+   "url": "https://docs.example.net/feedback",
+   "agent": "Claude Code",
+   "folder": null,
+   "journal": [
+    {
+     "ts": "2026-10-20T15:00:02.000Z",
+     "type": "agent_connected",
+     "agent": "Claude Code",
+     "agentId": "claude",
+     "ext": "0.31.0",
+     "host": "0.31.0",
+     "features": [
+      "trimWaits"
+     ],
+     "autoApprove": false,
+     "skills": []
+    },
+    {
+     "ts": "2026-10-20T15:00:04.000Z",
+     "type": "model",
+     "agent": "Claude Code",
+     "model": "sonnet"
+    },
+    {
+     "ts": "2026-10-20T15:00:09.000Z",
+     "type": "user",
+     "text": "Fill the feedback form with my name and a short comment.",
+     "attachments": [],
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-20T15:00:11.000Z",
+     "type": "action",
+     "agent": "Claude Code",
+     "tool": "browser_snapshot",
+     "args": {},
+     "desc": "snapshot",
+     "ok": true,
+     "error": null,
+     "host": "docs.example.net",
+     "ms": 120,
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-20T15:00:13.000Z",
+     "type": "action",
+     "agent": "Claude Code",
+     "tool": "browser_fill_form",
+     "args": {
+      "fields": [
+       {
+        "ref": "e3",
+        "value": "Ada"
+       },
+       {
+        "ref": "e4",
+        "value": "Nice docs"
+       }
+      ]
+     },
+     "desc": "fill_form",
+     "ok": false,
+     "error": "This tool needs the \"Developer tools\" feature, which is off. The user can enable it in TabHelm → Settings → Experimental.",
+     "host": "docs.example.net",
+     "ms": 120,
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-20T15:00:15.000Z",
+     "type": "action",
+     "agent": "Claude Code",
+     "tool": "browser_type",
+     "args": {
+      "ref": "e3",
+      "text": "Ada"
+     },
+     "desc": "type",
+     "ok": true,
+     "error": null,
+     "host": "docs.example.net",
+     "ms": 120,
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-20T15:00:17.000Z",
+     "type": "action",
+     "agent": "Claude Code",
+     "tool": "browser_type",
+     "args": {
+      "ref": "e4",
+      "text": "Nice docs"
+     },
+     "desc": "type",
+     "ok": true,
+     "error": null,
+     "host": "docs.example.net",
+     "ms": 120,
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-20T15:00:19.000Z",
+     "type": "action",
+     "agent": "Claude Code",
+     "tool": "browser_click",
+     "args": {
+      "ref": "e9"
+     },
+     "desc": "click",
+     "ok": true,
+     "error": null,
+     "host": "docs.example.net",
+     "ms": 120,
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-20T15:00:22.000Z",
+     "type": "agent",
+     "agent": "Claude Code",
+     "model": "sonnet",
+     "text": "Sent.",
+     "thought": "",
+     "failure": null,
+     "stopReason": "end_turn",
+     "stats": {
+      "ms": 14500,
+      "tokens": null,
+      "cost": null,
+      "context": null
+     },
+     "turn": 1
+    }
+   ],
+   "updated": 1792508422000
+  },
+  {
+   "id": "c012rl",
+   "created": 1792526400000,
+   "tabId": 910012,
+   "url": "https://mail.example.org/contacts",
+   "agent": "Claude Code",
+   "folder": null,
+   "journal": [
+    {
+     "ts": "2026-10-20T20:00:02.000Z",
+     "type": "agent_connected",
+     "agent": "Claude Code",
+     "agentId": "claude",
+     "ext": "0.31.0",
+     "host": "0.31.0",
+     "features": [
+      "trimWaits"
+     ],
+     "autoApprove": false,
+     "skills": []
+    },
+    {
+     "ts": "2026-10-20T20:00:04.000Z",
+     "type": "model",
+     "agent": "Claude Code",
+     "model": "sonnet"
+    },
+    {
+     "ts": "2026-10-20T20:00:09.000Z",
+     "type": "user",
+     "text": "Open the contacts page of this site and read the phone number.",
+     "attachments": [],
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-20T20:00:11.000Z",
+     "type": "action",
+     "agent": "Claude Code",
+     "tool": "browser_get_text",
+     "args": {
+      "tabId": 7
+     },
+     "desc": "get_text",
+     "ok": false,
+     "error": "Single-tab mode is on: work only in this tab — navigate it (browser_navigate) instead of opening or switching tabs.",
+     "host": "mail.example.org",
+     "ms": 120,
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-20T20:00:13.000Z",
+     "type": "action",
+     "agent": "Claude Code",
+     "tool": "browser_navigate",
+     "args": {
+      "url": "https://mail.example.org/contacts"
+     },
+     "desc": "navigate",
+     "ok": true,
+     "error": null,
+     "host": "mail.example.org",
+     "ms": 120,
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-20T20:00:15.000Z",
+     "type": "action",
+     "agent": "Claude Code",
+     "tool": "browser_snapshot",
+     "args": {},
+     "desc": "snapshot",
+     "ok": true,
+     "error": null,
+     "host": "mail.example.org",
+     "ms": 120,
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-20T20:00:18.000Z",
+     "type": "agent",
+     "agent": "Claude Code",
+     "model": "sonnet",
+     "text": "Found it.",
+     "thought": "",
+     "failure": null,
+     "stopReason": "end_turn",
+     "stats": {
+      "ms": 14500,
+      "tokens": null,
+      "cost": null,
+      "context": null
+     },
+     "turn": 1
+    }
+   ],
+   "updated": 1792526418000
+  },
+  {
+   "id": "c013rl",
+   "created": 1792544400000,
+   "tabId": 910013,
+   "url": "https://shop.example.com/account",
+   "agent": "Claude Code",
+   "folder": null,
+   "journal": [
+    {
+     "ts": "2026-10-21T01:00:02.000Z",
+     "type": "agent_connected",
+     "agent": "Claude Code",
+     "agentId": "claude",
+     "ext": "0.31.0",
+     "host": "0.31.0",
+     "features": [
+      "trimWaits"
+     ],
+     "autoApprove": false,
+     "skills": []
+    },
+    {
+     "ts": "2026-10-21T01:00:04.000Z",
+     "type": "model",
+     "agent": "Claude Code",
+     "model": "sonnet"
+    },
+    {
+     "ts": "2026-10-21T01:00:09.000Z",
+     "type": "user",
+     "text": "Guide me through changing the delivery address, one step at a time.",
+     "attachments": [],
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-21T01:00:11.000Z",
+     "type": "action",
+     "agent": "Claude Code",
+     "tool": "browser_snapshot",
+     "args": {},
+     "desc": "snapshot",
+     "ok": true,
+     "error": null,
+     "host": "shop.example.com",
+     "ms": 120,
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-21T01:00:13.000Z",
+     "type": "action",
+     "agent": "Claude Code",
+     "tool": "browser_guide",
+     "args": {
+      "steps": [
+       {
+        "text": "Open the address form"
+       }
+      ]
+     },
+     "desc": "guide",
+     "ok": true,
+     "error": null,
+     "host": "shop.example.com",
+     "ms": 120,
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-21T01:00:15.000Z",
+     "type": "ask",
+     "kind": "guide",
+     "message": "Step 1: open Account.",
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-21T01:00:17.000Z",
+     "type": "ask",
+     "kind": "guide",
+     "message": "Step 2: press Edit.",
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-21T01:00:19.000Z",
+     "type": "ask",
+     "kind": "guide",
+     "answer": "Finished (1 skipped)",
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-21T01:00:22.000Z",
+     "type": "agent",
+     "agent": "Claude Code",
+     "model": "sonnet",
+     "text": "Guided.",
+     "thought": "",
+     "failure": null,
+     "stopReason": "end_turn",
+     "stats": {
+      "ms": 14500,
+      "tokens": null,
+      "cost": null,
+      "context": null
+     },
+     "turn": 1
+    }
+   ],
+   "updated": 1792544422000
+  },
+  {
+   "id": "c014rl",
+   "created": 1792562400000,
+   "tabId": 910014,
+   "url": "https://docs.example.net/page-0",
+   "agent": "Claude Code",
+   "folder": null,
+   "journal": [
+    {
+     "ts": "2026-10-21T06:00:02.000Z",
+     "type": "agent_connected",
+     "agent": "Claude Code",
+     "agentId": "claude",
+     "ext": "0.31.0",
+     "host": "0.31.0",
+     "features": [
+      "trimWaits"
+     ],
+     "autoApprove": false,
+     "skills": []
+    },
+    {
+     "ts": "2026-10-21T06:00:04.000Z",
+     "type": "model",
+     "agent": "Claude Code",
+     "model": "sonnet"
+    },
+    {
+     "ts": "2026-10-21T06:00:09.000Z",
+     "type": "user",
+     "text": "Open the contacts page of this site and read the phone number.",
+     "attachments": [],
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-21T06:00:11.000Z",
+     "type": "action",
+     "agent": "Claude Code",
+     "tool": "browser_navigate",
+     "args": {
+      "url": "https://docs.example.net/page-0"
+     },
+     "desc": "navigate",
+     "ok": true,
+     "error": null,
+     "host": "docs.example.net",
+     "ms": 120,
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-21T06:00:13.000Z",
+     "type": "action",
+     "agent": "Claude Code",
+     "tool": "browser_snapshot",
+     "args": {},
+     "desc": "snapshot",
+     "ok": true,
+     "error": null,
+     "host": "docs.example.net",
+     "ms": 120,
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-21T06:00:15.000Z",
+     "type": "action",
+     "agent": "Claude Code",
+     "tool": "browser_get_text",
+     "args": {},
+     "desc": "get_text",
+     "ok": true,
+     "error": null,
+     "host": "docs.example.net",
+     "ms": 120,
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-21T06:00:18.000Z",
+     "type": "agent",
+     "agent": "Claude Code",
+     "model": "sonnet",
+     "text": "Read it.",
+     "thought": "",
+     "failure": null,
+     "stopReason": "end_turn",
+     "stats": {
+      "ms": 14500,
+      "tokens": null,
+      "cost": null,
+      "context": null
+     },
+     "turn": 1
+    }
+   ],
+   "updated": 1792562418000
+  },
+  {
+   "id": "c015rl",
+   "created": 1792580400000,
+   "tabId": 910015,
+   "url": "https://docs.example.net/page-1",
+   "agent": "Claude Code",
+   "folder": null,
+   "journal": [
+    {
+     "ts": "2026-10-21T11:00:02.000Z",
+     "type": "agent_connected",
+     "agent": "Claude Code",
+     "agentId": "claude",
+     "ext": "0.31.0",
+     "host": "0.31.0",
+     "features": [
+      "trimWaits"
+     ],
+     "autoApprove": false,
+     "skills": []
+    },
+    {
+     "ts": "2026-10-21T11:00:04.000Z",
+     "type": "model",
+     "agent": "Claude Code",
+     "model": "sonnet"
+    },
+    {
+     "ts": "2026-10-21T11:00:09.000Z",
+     "type": "user",
+     "text": "Open the contacts page of this site and read the phone number.",
+     "attachments": [],
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-21T11:00:11.000Z",
+     "type": "action",
+     "agent": "Claude Code",
+     "tool": "browser_navigate",
+     "args": {
+      "url": "https://docs.example.net/page-1"
+     },
+     "desc": "navigate",
+     "ok": true,
+     "error": null,
+     "host": "docs.example.net",
+     "ms": 120,
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-21T11:00:13.000Z",
+     "type": "action",
+     "agent": "Claude Code",
+     "tool": "browser_snapshot",
+     "args": {},
+     "desc": "snapshot",
+     "ok": true,
+     "error": null,
+     "host": "docs.example.net",
+     "ms": 120,
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-21T11:00:15.000Z",
+     "type": "action",
+     "agent": "Claude Code",
+     "tool": "browser_get_text",
+     "args": {},
+     "desc": "get_text",
+     "ok": true,
+     "error": null,
+     "host": "docs.example.net",
+     "ms": 120,
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-21T11:00:18.000Z",
+     "type": "agent",
+     "agent": "Claude Code",
+     "model": "sonnet",
+     "text": "Read it.",
+     "thought": "",
+     "failure": null,
+     "stopReason": "end_turn",
+     "stats": {
+      "ms": 14500,
+      "tokens": null,
+      "cost": null,
+      "context": null
+     },
+     "turn": 1
+    }
+   ],
+   "updated": 1792580418000
+  },
+  {
+   "id": "c016rl",
+   "created": 1792598400000,
+   "tabId": 910016,
+   "url": "https://docs.example.net/page-2",
+   "agent": "Claude Code",
+   "folder": null,
+   "journal": [
+    {
+     "ts": "2026-10-21T16:00:02.000Z",
+     "type": "agent_connected",
+     "agent": "Claude Code",
+     "agentId": "claude",
+     "ext": "0.31.0",
+     "host": "0.31.0",
+     "features": [
+      "trimWaits"
+     ],
+     "autoApprove": false,
+     "skills": []
+    },
+    {
+     "ts": "2026-10-21T16:00:04.000Z",
+     "type": "model",
+     "agent": "Claude Code",
+     "model": "sonnet"
+    },
+    {
+     "ts": "2026-10-21T16:00:09.000Z",
+     "type": "user",
+     "text": "Open the contacts page of this site and read the phone number.",
+     "attachments": [],
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-21T16:00:11.000Z",
+     "type": "action",
+     "agent": "Claude Code",
+     "tool": "browser_navigate",
+     "args": {
+      "url": "https://docs.example.net/page-2"
+     },
+     "desc": "navigate",
+     "ok": true,
+     "error": null,
+     "host": "docs.example.net",
+     "ms": 120,
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-21T16:00:13.000Z",
+     "type": "action",
+     "agent": "Claude Code",
+     "tool": "browser_snapshot",
+     "args": {},
+     "desc": "snapshot",
+     "ok": true,
+     "error": null,
+     "host": "docs.example.net",
+     "ms": 120,
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-21T16:00:15.000Z",
+     "type": "action",
+     "agent": "Claude Code",
+     "tool": "browser_get_text",
+     "args": {},
+     "desc": "get_text",
+     "ok": true,
+     "error": null,
+     "host": "docs.example.net",
+     "ms": 120,
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-21T16:00:18.000Z",
+     "type": "agent",
+     "agent": "Claude Code",
+     "model": "sonnet",
+     "text": "Read it.",
+     "thought": "",
+     "failure": null,
+     "stopReason": "end_turn",
+     "stats": {
+      "ms": 14500,
+      "tokens": null,
+      "cost": null,
+      "context": null
+     },
+     "turn": 1
+    }
+   ],
+   "updated": 1792598418000
+  },
+  {
+   "id": "c017rl",
+   "created": 1792616400000,
+   "tabId": 910017,
+   "url": "https://docs.example.net/page-3",
+   "agent": "Claude Code",
+   "folder": null,
+   "journal": [
+    {
+     "ts": "2026-10-21T21:00:02.000Z",
+     "type": "agent_connected",
+     "agent": "Claude Code",
+     "agentId": "claude",
+     "ext": "0.31.0",
+     "host": "0.31.0",
+     "features": [
+      "trimWaits"
+     ],
+     "autoApprove": false,
+     "skills": []
+    },
+    {
+     "ts": "2026-10-21T21:00:04.000Z",
+     "type": "model",
+     "agent": "Claude Code",
+     "model": "sonnet"
+    },
+    {
+     "ts": "2026-10-21T21:00:09.000Z",
+     "type": "user",
+     "text": "Open the contacts page of this site and read the phone number.",
+     "attachments": [],
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-21T21:00:11.000Z",
+     "type": "action",
+     "agent": "Claude Code",
+     "tool": "browser_navigate",
+     "args": {
+      "url": "https://docs.example.net/page-3"
+     },
+     "desc": "navigate",
+     "ok": true,
+     "error": null,
+     "host": "docs.example.net",
+     "ms": 120,
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-21T21:00:13.000Z",
+     "type": "action",
+     "agent": "Claude Code",
+     "tool": "browser_snapshot",
+     "args": {},
+     "desc": "snapshot",
+     "ok": true,
+     "error": null,
+     "host": "docs.example.net",
+     "ms": 120,
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-21T21:00:15.000Z",
+     "type": "action",
+     "agent": "Claude Code",
+     "tool": "browser_get_text",
+     "args": {},
+     "desc": "get_text",
+     "ok": true,
+     "error": null,
+     "host": "docs.example.net",
+     "ms": 120,
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-21T21:00:18.000Z",
+     "type": "agent",
+     "agent": "Claude Code",
+     "model": "sonnet",
+     "text": "Read it.",
+     "thought": "",
+     "failure": null,
+     "stopReason": "end_turn",
+     "stats": {
+      "ms": 14500,
+      "tokens": null,
+      "cost": null,
+      "context": null
+     },
+     "turn": 1
+    }
+   ],
+   "updated": 1792616418000
+  },
+  {
+   "id": "c018rl",
+   "created": 1792634400000,
+   "tabId": 910018,
+   "url": "https://docs.example.net/",
+   "agent": "Claude Code",
+   "folder": null,
+   "journal": [
+    {
+     "ts": "2026-10-22T02:00:02.000Z",
+     "type": "agent_connected",
+     "agent": "Claude Code",
+     "agentId": "claude",
+     "ext": "0.31.0",
+     "host": "0.31.0",
+     "features": [
+      "trimWaits"
+     ],
+     "autoApprove": false,
+     "skills": []
+    },
+    {
+     "ts": "2026-10-22T02:00:04.000Z",
+     "type": "model",
+     "agent": "Claude Code",
+     "model": "sonnet"
+    },
+    {
+     "ts": "2026-10-22T02:00:09.000Z",
+     "type": "user",
+     "text": "Do not use any tools. Reply with the single word ready.",
+     "attachments": [],
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-22T02:00:12.000Z",
+     "type": "agent",
+     "agent": "Claude Code",
+     "model": "sonnet",
+     "text": "ready",
+     "thought": "",
+     "failure": null,
+     "stopReason": "end_turn",
+     "stats": {
+      "ms": 14500,
+      "tokens": null,
+      "cost": null,
+      "context": null
+     },
+     "turn": 1
+    }
+   ],
+   "updated": 1792634412000
+  },
+  {
+   "id": "c019rl",
+   "created": 1792652400000,
+   "tabId": 910019,
+   "url": "https://mail.example.org/inbox",
+   "agent": "Codex",
+   "folder": null,
+   "journal": [
+    {
+     "ts": "2026-10-22T07:00:02.000Z",
+     "type": "agent_connected",
+     "agent": "Codex",
+     "agentId": "codex",
+     "ext": "0.31.0",
+     "host": "0.31.0",
+     "features": [
+      "trimWaits"
+     ],
+     "autoApprove": false,
+     "skills": []
+    },
+    {
+     "ts": "2026-10-22T07:00:04.000Z",
+     "type": "model",
+     "agent": "Codex",
+     "model": "sonnet"
+    },
+    {
+     "ts": "2026-10-22T07:00:09.000Z",
+     "type": "user",
+     "text": "Archive every newsletter in the inbox.",
+     "attachments": [],
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-22T07:00:11.000Z",
+     "type": "action",
+     "agent": "Codex",
+     "tool": "browser_snapshot",
+     "args": {},
+     "desc": "snapshot",
+     "ok": true,
+     "error": null,
+     "host": "mail.example.org",
+     "ms": 120,
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-22T07:00:13.000Z",
+     "type": "action",
+     "agent": "Codex",
+     "tool": "browser_click",
+     "args": {
+      "ref": "e12"
+     },
+     "desc": "click",
+     "ok": true,
+     "error": null,
+     "host": "mail.example.org",
+     "ms": 120,
+     "turn": 1
+    },
+    {
+     "ts": "2026-10-22T07:00:16.000Z",
+     "type": "agent",
+     "agent": "Codex",
+     "model": "sonnet",
+     "text": "Archived.",
+     "thought": "",
+     "failure": null,
+     "stopReason": "end_turn",
+     "stats": {
+      "ms": 14500,
+      "tokens": null,
+      "cost": null,
+      "context": null
+     },
+     "turn": 1
+    }
+   ],
+   "updated": 1792652416000
+  }
+ ],
+ "index": [
+  {
+   "id": "c019rl",
+   "title": "Archive every newsletter in the inbox.",
+   "updated": 1792652416000,
+   "created": 1792652400000,
+   "tabId": 910019,
+   "url": "https://mail.example.org/inbox",
+   "pageTitle": "Fixture page",
+   "agent": "Codex",
+   "folder": null,
+   "messages": 1
+  },
+  {
+   "id": "c018rl",
+   "title": "Do not use any tools. Reply with the single word ready.",
+   "updated": 1792634412000,
+   "created": 1792634400000,
+   "tabId": 910018,
+   "url": "https://docs.example.net/",
+   "pageTitle": "Fixture page",
+   "agent": "Claude Code",
+   "folder": null,
+   "messages": 1
+  },
+  {
+   "id": "c017rl",
+   "title": "Open the contacts page of this site and read the phone number.",
+   "updated": 1792616418000,
+   "created": 1792616400000,
+   "tabId": 910017,
+   "url": "https://docs.example.net/page-3",
+   "pageTitle": "Fixture page",
+   "agent": "Claude Code",
+   "folder": null,
+   "messages": 1
+  },
+  {
+   "id": "c016rl",
+   "title": "Open the contacts page of this site and read the phone number.",
+   "updated": 1792598418000,
+   "created": 1792598400000,
+   "tabId": 910016,
+   "url": "https://docs.example.net/page-2",
+   "pageTitle": "Fixture page",
+   "agent": "Claude Code",
+   "folder": null,
+   "messages": 1
+  },
+  {
+   "id": "c015rl",
+   "title": "Open the contacts page of this site and read the phone number.",
+   "updated": 1792580418000,
+   "created": 1792580400000,
+   "tabId": 910015,
+   "url": "https://docs.example.net/page-1",
+   "pageTitle": "Fixture page",
+   "agent": "Claude Code",
+   "folder": null,
+   "messages": 1
+  },
+  {
+   "id": "c014rl",
+   "title": "Open the contacts page of this site and read the phone number.",
+   "updated": 1792562418000,
+   "created": 1792562400000,
+   "tabId": 910014,
+   "url": "https://docs.example.net/page-0",
+   "pageTitle": "Fixture page",
+   "agent": "Claude Code",
+   "folder": null,
+   "messages": 1
+  },
+  {
+   "id": "c013rl",
+   "title": "Guide me through changing the delivery address, one step at a time.",
+   "updated": 1792544422000,
+   "created": 1792544400000,
+   "tabId": 910013,
+   "url": "https://shop.example.com/account",
+   "pageTitle": "Fixture page",
+   "agent": "Claude Code",
+   "folder": null,
+   "messages": 1
+  },
+  {
+   "id": "c012rl",
+   "title": "Open the contacts page of this site and read the phone number.",
+   "updated": 1792526418000,
+   "created": 1792526400000,
+   "tabId": 910012,
+   "url": "https://mail.example.org/contacts",
+   "pageTitle": "Fixture page",
+   "agent": "Claude Code",
+   "folder": null,
+   "messages": 1
+  },
+  {
+   "id": "c011rl",
+   "title": "Fill the feedback form with my name and a short comment.",
+   "updated": 1792508422000,
+   "created": 1792508400000,
+   "tabId": 910011,
+   "url": "https://docs.example.net/feedback",
+   "pageTitle": "Fixture page",
+   "agent": "Claude Code",
+   "folder": null,
+   "messages": 1
+  },
+  {
+   "id": "c010rl",
+   "title": "Fill the feedback form with my name and a short comment.",
+   "updated": 1792490422000,
+   "created": 1792490400000,
+   "tabId": 910010,
+   "url": "https://docs.example.net/feedback",
+   "pageTitle": "Fixture page",
+   "agent": "Claude Code",
+   "folder": null,
+   "messages": 1
+  },
+  {
+   "id": "c009rl",
+   "title": "Fill the feedback form with my name and a short comment.",
+   "updated": 1792472422000,
+   "created": 1792472400000,
+   "tabId": 910009,
+   "url": "https://docs.example.net/feedback",
+   "pageTitle": "Fixture page",
+   "agent": "Claude Code",
+   "folder": null,
+   "messages": 1
+  },
+  {
+   "id": "c008rl",
+   "title": "Open the contacts page of this site and read the phone number.",
+   "updated": 1792454424000,
+   "created": 1792454400000,
+   "tabId": 910008,
+   "url": "https://news.example.com.ua/contacts",
+   "pageTitle": "Fixture page",
+   "agent": "Claude Code",
+   "folder": null,
+   "messages": 1
+  },
+  {
+   "id": "c007rl",
+   "title": "Open the contacts page of this site and read the phone number.",
+   "updated": 1792436426000,
+   "created": 1792436400000,
+   "tabId": 910007,
+   "url": "https://news.example.com.ua/contacts",
+   "pageTitle": "Fixture page",
+   "agent": "Claude Code",
+   "folder": null,
+   "messages": 1
+  },
+  {
+   "id": "c006rl",
+   "title": "Archive every newsletter in the inbox.",
+   "updated": 1792418417000,
+   "created": 1792418400000,
+   "tabId": 910006,
+   "url": "https://mail.example.org/inbox",
+   "pageTitle": "Fixture page",
+   "agent": "Claude Code",
+   "folder": null,
+   "messages": 1
+  },
+  {
+   "id": "c005rl",
+   "title": "Archive every newsletter in the inbox.",
+   "updated": 1792400417000,
+   "created": 1792400400000,
+   "tabId": 910005,
+   "url": "https://mail.example.org/inbox",
+   "pageTitle": "Fixture page",
+   "agent": "Claude Code",
+   "folder": null,
+   "messages": 1
+  },
+  {
+   "id": "c004rl",
+   "title": "Archive every newsletter in the inbox.",
+   "updated": 1792382417000,
+   "created": 1792382400000,
+   "tabId": 910004,
+   "url": "https://mail.example.org/inbox",
+   "pageTitle": "Fixture page",
+   "agent": "Claude Code",
+   "folder": null,
+   "messages": 1
+  },
+  {
+   "id": "c003rl",
+   "title": "Order the blue T-shirt in size M.",
+   "updated": 1792364418000,
+   "created": 1792364400000,
+   "tabId": 910003,
+   "url": "https://shop.example.com/catalog/t-shirts?color=blue",
+   "pageTitle": "Fixture page",
+   "agent": "Claude Code",
+   "folder": null,
+   "messages": 1
+  },
+  {
+   "id": "c002rl",
+   "title": "Order the blue T-shirt in size M.",
+   "updated": 1792346418000,
+   "created": 1792346400000,
+   "tabId": 910002,
+   "url": "https://shop.example.com/catalog/t-shirts?color=blue",
+   "pageTitle": "Fixture page",
+   "agent": "Claude Code",
+   "folder": null,
+   "messages": 1
+  },
+  {
+   "id": "c001rl",
+   "title": "Order the blue T-shirt in size M.",
+   "updated": 1792328422000,
+   "created": 1792328400000,
+   "tabId": 910001,
+   "url": "https://shop.example.com/catalog/t-shirts?color=blue",
+   "pageTitle": "Fixture page",
+   "agent": "Claude Code",
+   "folder": null,
+   "messages": 1
+  },
+  {
+   "id": "c000rl",
+   "title": "Order the blue T-shirt in size M.",
+   "updated": 1792310424000,
+   "created": 1792310400000,
+   "tabId": 910000,
+   "url": "https://shop.example.com/catalog/t-shirts?color=blue",
+   "pageTitle": "Fixture page",
+   "agent": "Claude Code",
+   "folder": null,
+   "messages": 1
+  }
+ ],
+ "storageIds": [
+  "c000rl",
+  "c001rl",
+  "c002rl",
+  "c003rl",
+  "c004rl",
+  "c005rl",
+  "c006rl",
+  "c007rl",
+  "c008rl",
+  "c009rl",
+  "c010rl",
+  "c011rl",
+  "c012rl",
+  "c013rl",
+  "c014rl",
+  "c015rl",
+  "c016rl",
+  "c017rl",
+  "c018rl",
+  "c019rl"
+ ],
+ "sizes": {
+  "c000rl": 2236,
+  "c001rl": 1943,
+  "c002rl": 1450,
+  "c003rl": 1450,
+  "c004rl": 1656,
+  "c005rl": 1656,
+  "c006rl": 1656,
+  "c007rl": 2595,
+  "c008rl": 2271,
+  "c009rl": 2009,
+  "c010rl": 2009,
+  "c011rl": 2009,
+  "c012rl": 1563,
+  "c013rl": 1555,
+  "c014rl": 1435,
+  "c015rl": 1435,
+  "c016rl": 1435,
+  "c017rl": 1435,
+  "c018rl": 801,
+  "c019rl": 1147
+ }
+}

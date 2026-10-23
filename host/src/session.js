@@ -75,7 +75,7 @@ export class AgentSession {
       this.child.on('exit', (code, signal) => {
         this.log(`agent ${agent.id} for tab ${this.tabId} exited (${code ?? signal})`);
         this.cancelPendingPermissions();
-        if (!this.disposed) this.emit({ type: 'status', state: 'stopped', detail: `Agent exited (${code ?? signal})` });
+        if (!this.disposed) this.emit({ type: 'status', state: 'stopped', detail: `Agent exited (${code ?? signal})`, code: code ?? null, signal: signal ?? null });
         resolve();
       });
       this.child.on('error', (err) => {
@@ -91,13 +91,16 @@ export class AgentSession {
       this.connection.initialize({
         protocolVersion: acp.PROTOCOL_VERSION,
         clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false },
-        clientInfo: { name: 'tabhelm', version: '0.30.0' },
+        clientInfo: { name: 'tabhelm', version: '0.31.0' },
       }),
       this.exited.then(() => {
         throw new Error(`${agent.name} exited during startup. Check that it is installed and logged in.`);
       }),
     ]);
 
+    // Flagged tools are offered only when their feature is on (fixed for the
+    // session: mcp-bridge.js FLAG_OF), so prompts name only those.
+    this.toolFeatures = { ...this.features };
     const mcpServers = [
       {
         name: 'tabhelm-browser',
@@ -107,6 +110,7 @@ export class AgentSession {
           { name: 'TABHELM_URL', value: this.toolServer.url },
           { name: 'TABHELM_TOKEN', value: this.toolServer.token },
           { name: 'TABHELM_TAB', value: String(this.tabId) },
+          { name: 'TABHELM_FEATURES', value: Object.keys(this.toolFeatures).filter((k) => this.toolFeatures[k]).join(',') },
         ],
       },
     ];
@@ -140,7 +144,7 @@ export class AgentSession {
       }
       throw new Error(err?.message || String(err));
     }
-    this.emit({ type: 'status', state: 'ready', agent: { id: agent.id, name: agent.name } });
+    this.emit({ type: 'status', state: 'ready', agent: { id: agent.id, name: agent.name }, skills: (this.skills || []).map((s) => ({ name: s.name })) });
     this.emitConfig();
   }
 
@@ -260,23 +264,28 @@ export class AgentSession {
     this.busy = true;
     const history = context ? `Earlier in this chat (with another agent), for context:\n${context}\n\n` : '';
     let skills = '';
-    if (this.firstPrompt) skills = this.folderPreamble() + skillsPreamble(this.skills) + (this.features?.memory ? memoryPreamble(this.pageUrl) : '');
+    // A flag turned on after the agent started has no tools yet (they come
+    // with a restart), so its hints wait too.
+    const hasTools = (flag) => Boolean(this.features?.[flag] && this.toolFeatures?.[flag]);
+    if (this.firstPrompt) skills = this.folderPreamble() + skillsPreamble(this.skills) + (hasTools('memory') ? memoryPreamble(this.pageUrl) : '');
     // Plan preview: the agent proposes a plan and waits for Start.
     if (this.features?.planPreview && !context?.includes('[plan approved]') && !/^\[plan approved\]/.test(text)) {
       skills += '[TabHelm plan preview] Before acting: reply with a short numbered plan of the steps you intend to take (3–8 lines) and then STOP without using any tools. The user will press Start to approve it, after which you will receive "[plan approved] proceed" and can act.\n\n';
     }
-    if (this.features?.takeOver) skills += 'If you need the user to do something themselves (2FA code, captcha, choosing a payment method), call browser_request_human with a short message and wait for it to return.\n';
+    if (hasTools('takeOver')) skills += 'If you need the user to do something themselves (2FA code, captcha, choosing a payment method), call browser_request_human with a short message and wait for it to return.\n';
     if (this.features?.guideDetail) skills += 'Guide mode is set to detailed: for every browser_guide step write 2–4 sentences in "text" — what the element is and where it is, why this step is needed, what happens after the click and what the user should see next. Before the first step, briefly say what the whole procedure will do.\n';
-    if (this.features?.passwordManager) skills += 'For sign-in forms, do not guess credentials: call browser_request_login with the login and password field refs; the user picks the account and the credentials are typed without you seeing them.\n';
+    if (hasTools('passwordManager')) skills += 'For sign-in forms, do not guess credentials: call browser_request_login with the login and password field refs; the user picks the account and the credentials are typed without you seeing them.\n';
     if (this.features?.guideAutoPlay) skills += 'Guide auto-play is on in the user\'s settings: every browser_guide plays automatically (you perform each step after a pause), so give each step its action and value.\n';
+    if (this.firstPrompt && hasTools('selfAnalysisAgent')) skills += 'Self-analysis is on: if the user says TabHelm, a browser tool or the task is not working, or the same browser tool failed 3 times without a clear reason, call tabhelm_diagnose (pass the user\'s words as problem) before guessing or retrying. Summarise its top findings in 2–4 lines in the user\'s language, say how sure they are, and offer the listed fixes. Use scope "recent" only when the cause is not in this chat; the user is asked first.\n';
     if (this.features?.singleTab) skills += 'Single-tab mode is on: work only in this tab. Do not open or switch tabs — navigate this tab instead (browser_tabs new and links that open new tabs load here).\n';
     if (this.modeNote) {
       skills += this.modeNote;
       this.modeNote = null;
     }
-    if (this.features?.pageScripts) skills += 'Page scripts & styles are on: browser_style restyles the page now; browser_script_save keeps JS/CSS automations as presets the user can rerun on other pages; browser_script_list / browser_script_run use them.\n';
-    if (this.features?.secrets) skills += 'Secrets: the user may give you placeholders like {{SECRET:name}}; pass them unchanged in browser_type / browser_fill_form and they are substituted on the page.\n';
-    else if (this.skillsChanged) skills = `[TabHelm] The user changed the enabled skills. ${skillsPreamble(this.skills) || 'No skills are enabled now.\n\n'}`;
+    if (hasTools('pageScripts')) skills += 'Page scripts & styles are on: browser_style restyles the page now; browser_script_save keeps JS/CSS automations as presets the user can rerun on other pages; browser_script_list / browser_script_run use them.\n';
+    if (this.features?.secrets) skills += `Secrets: the user may give you placeholders like {{SECRET:name}}; pass them unchanged in browser_type${hasTools('devTools') ? ' / browser_fill_form' : ''} and they are substituted on the page.\n`;
+    // Skills changed mid-chat (Settings, skill_save): tell the agent, after whatever else this prompt carries.
+    if (this.skillsChanged && !this.firstPrompt) skills += `[TabHelm] The user changed the enabled skills. ${skillsPreamble(this.skills) || 'No skills are enabled now.\n\n'}`;
     this.skillsChanged = false;
     const { blocks, notes } = this.attachmentBlocks(attachments);
     const listed = attachments.length ? `\n\n[Attached: ${attachments.map((a) => a.name).join(', ')}]` : '';
@@ -367,6 +376,7 @@ export class AgentSession {
 
   async dispose() {
     this.disposed = true;
+    this.log(`stopping agent ${this.agent.id} for tab ${this.tabId}`);
     this.cancelPendingPermissions();
     if (this.child && this.child.exitCode === null) {
       this.child.kill('SIGTERM');

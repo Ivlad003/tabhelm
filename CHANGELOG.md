@@ -2,6 +2,27 @@
 
 All notable changes to TabHelm. The newest release is at the top; the panel's update banner links here.
 
+## [0.31.0] - 2026-10-23
+
+### Added
+- **Self-analysis** (Experimental flag): TabHelm looks back at your chats and explains what went wrong and why — a TabHelm bug, site knowledge or a skill the agent was missing, the agent, your setup or the site.
+  - **Diagnose this chat** (＋ menu, `/diagnose [what went wrong]`, or **Diagnose** when a task fails): the top causes, what is happening right now (a question waiting for you, a stuck agent, the host offline) and one-click fixes — open the right setting, draft a skill or a site note from what failed and what worked, switch agents.
+  - **Report** (History → Report, `/report`): every chat of the last 7 / 30 / 90 days, findings grouped by who can fix them, "fix these first", tool and agent tables; hidden findings come back only if they grow, ones that stopped happening move to *Probably fixed*.
+  - **Copy bug report**, **Copy as a fix task**, **Export .md / .json** and **Ask the agent…** — always previewed first, redacted: no messages, typed text, page content, titles, full URLs, file paths or secret values; site and skill names become `site-1`, `skill-1`. The issue page opens with an empty URL.
+  - The agent can run its own self-check with `tabhelm_diagnose` (this chat; other chats only after you allow it).
+  - Uses a redacted digest of `host.log` (crashes, agent sign-in problems, relay errors) — the host never sends raw log lines.
+- `npm run test:selfanalysis` (237 unit tests, including canary values that must never appear in any output); `npm run test:flags` covers Diagnose, `/report`, the agent's self-check and the bug-report preview.
+
+### Fixed
+- **A reopened chat could stop saving.** Reopening a chat that contained an approval or a question card threw while replaying it, and the chat silently stopped being saved; exporting such a chat to Markdown failed too.
+- **The agent was not told that your skills changed** when other start-up notes (secrets, single-tab mode) were also due.
+- **Scheduled runs waited 15 minutes when the agent asked for permission.** They now decline at once and save "needs approval (scheduled runs cannot ask)"; a confirmation with no panel to answer it says so instead of looking like your "no".
+- Agents are offered only the tools of features that are on (Developer tools, Page scripts, Take over, Password manager, Memory), instead of tools that answer "this feature is off". Turning one on applies from the next chat.
+- The panel closing, **New chat** or opening another chat mid-task now records how the task ended (cancelled / panel closed); errors in the panel itself are kept with the chat (redacted) for the self-analysis.
+- The agent picker no longer jumps to another agent while one is connected (it did when another panel started a new chat), so a model you pick is saved for the agent that is actually answering.
+- `host.log` is rotated at 5 MB (one old copy, `host.log.1`) and each line carries the host's process id.
+- Tests write their own host log instead of `~/.tabhelm/host.log`.
+
 ## [0.30.0] - 2026-10-21
 
 ### Added

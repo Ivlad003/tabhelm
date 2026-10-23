@@ -55,6 +55,12 @@ export function takeAttachments() {
   return taken;
 }
 
+// Drops pending text attachments with this name (one generated file replaces its older copy).
+export function removeTextAttachment(name) {
+  pending = pending.filter((a) => !(a.kind === 'text' && a.name === name));
+  render();
+}
+
 export async function addFiles(files) {
   for (const file of files) {
     if (pending.length >= MAX_FILES) {

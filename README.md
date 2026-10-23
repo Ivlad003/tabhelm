@@ -121,6 +121,17 @@ To continue, connect any agent — it gets the whole conversation with your next
 
 Chrome wipes an extension's storage when the extension is removed, so the host keeps a copy of the panel's data (chats, settings, skills, flags — never secrets) in `~/.tabhelm/state.json`, written a few seconds after every change. An extension that starts with empty storage restores from it, so reinstalling with *Load unpacked* keeps your history.
 
+### Self-analysis (flag)
+
+**Settings → Experimental → Self-analysis** makes TabHelm look back at your chats and tell you *why* things went wrong: a TabHelm bug, missing site knowledge or skills, the agent, your setup, or the site itself. Everything is analysed on your computer from the saved chats, the extension's own errors and the host log.
+
+- **Diagnose this chat** (＋ menu, `/diagnose [what went wrong]`, the **Diagnose** button when a task fails or several steps failed): a card with the top causes, what is happening right now (a question waiting for you, a stuck agent, the host offline, a version mismatch) and one-click fixes — open the right setting, draft a skill or a site note from what failed and what worked, switch agents, copy a command. A complaint like "doesn't work" offers Diagnose too. Nothing is sent to the agent.
+- **Report** (History → **Report**, or `/report`): all chats of the last 7 / 30 / 90 days or all of them — tasks and how they ended, findings grouped as *TabHelm bugs*, *Skills & knowledge*, *Agent*, *Setup*, *Sites*, "fix these first", tool and agent tables. Findings you hide stay hidden until they grow; ones that stopped happening move to *Probably fixed*. Test chats are left out unless you tick *Include test chats*.
+- **Copy bug report** / **Copy as a fix task** (for a coding agent) / **Export .md / .json**: you see the text before it is copied; site and skill names are replaced by `site-1`, `skill-1` unless you tick *Include site and skill names*. **Copy & open issue page** copies the report and opens a blank GitHub issue — nothing goes into the URL.
+- **Ask the agent…** attaches the redacted summary to a message for the agent to explain causes and suggest skills; you press Send. With *Let the agent run a self-check* on, the agent can also call `tabhelm_diagnose` itself (this chat; other chats only after you allow it).
+
+What leaves your computer (copies, exports, the agent's summary) never contains your messages, typed text, page content, titles, full URLs, file paths or secret values — only error kinds, tool names, counts, versions and short normalized error texts.
+
 ### Guide mode
 
 Ask to be shown instead of served — *"guide me through enabling two-factor auth here"*, *"show me how to create a project"* — and the agent stops clicking for you. It calls `browser_guide` with **all the steps it can already point at**: every step gets a numbered badge on the page at once, the active one a pulsing outline, an arrow and the instruction; the panel shows the same step. **Next →** / **← Back** move through the steps — the page scrolls to the element and, for a step on another tab, that tab comes to the front — and a click on the active element counts as done. When a step opens a new page, the agent snapshots it and continues the guide from there. **Next →** (I did this step) / **Skip** on the page or in the panel move on without clicking, **← Back** shows the previous step again; **Stop guide** ends the task. The overlay scrolls with the page. With the **Detailed guide** flag (Settings → Experimental) every step comes with a fuller explanation: what the element is, why, what happens after the click and what to check. If your click navigates, the step counts as done. The arrows are part of the page, so a recording of a guided session shows them. Works in iframes.
@@ -203,6 +214,7 @@ Only add skills you trust: their text becomes instructions for the agent.
 | **Action database** | Steps keep timestamps; a recording lists its steps and clicking one jumps to that moment in the video; History search also searches steps. | — |
 | **Notifications** | Badge on the chat's tab (✓ done, ! stopped, ? needs you) and a system notification; clicking it opens the tab. | — |
 | **Detailed guide** | In guide mode every step is explained in 2–4 sentences (what the element is, why, what happens next, what to check) and the procedure is introduced before the first step. | — |
+| **Self-analysis** | Diagnose a chat or report on all chats: errors by cause, site knowledge or skills the agent was missing, setup problems and TabHelm bugs; redacted bug report, coding-agent task and exports; optional `tabhelm_diagnose` tool for the agent. See [Self-analysis](#self-analysis-flag). | — |
 | **Voice** | **🎤 Voice → Microphone** records a voice message; **Tab audio** captures what the tab is playing (a video, a call) — the tab keeps playing for you. Text appears live and, on **Stop**, the whole transcript becomes one message in the box to edit and send. Microphone uses Chrome's own recognition (no setup) or the host; tab audio always uses the host: `whisper-cli` + `ffmpeg` + a ggml model, or an OpenAI-compatible transcription API via `TABHELM_TRANSCRIBE_BASE_URL` / `_API_KEY` / `_MODEL` in `~/.tabhelm/env` (e.g. Groq's Whisper). First microphone use opens a page to grant Chrome access. | whisper.cpp or an API for the host engine |
 
 Security notes: the critic, site rules and the sensitive gate run in the extension before a tool executes, so they also cover agents that auto-approve their own tools. Secrets live in this browser profile's extension storage. Scheduled runs are unattended by design — give them narrow tasks.
@@ -448,6 +460,11 @@ extension/                     Chrome extension (Manifest V3, no build step)
   folder.js                    working folder: picker, typed path, recent folders, auto-approve warning
   history.js                   saved chats: storage, list, search, delete, opening in the chat's tab
   markdown.js                  Markdown → HTML for agent replies (headings, lists, tables, quotes, code)
+  journal-format.js            pure chat-journal functions: replaying a saved chat, Markdown export, hand-over context
+  taxonomy.js | redact.js      self-analysis: error rules → cause/owner/fix; redaction, host names, safe step descriptions
+  analyzer.js                  self-analysis: turns, outcomes, detectors, findings, ranking (pure, deterministic)
+  report-format.js             self-analysis: the only code that renders what may leave the computer (redacted, aliased)
+  selfanalysis-data.js | -ui.js  self-analysis: reading chats and diagnostics, the Diagnose card, Report view, previews
   tokens.css                   copy of design/tokens.css
 host/                          native host (Node 20+)
   src/native-host.js           entry point launched by Chrome; routes messages, saves recordings
@@ -463,6 +480,7 @@ host/                          native host (Node 20+)
   src/state.js                 backup of the panel's storage (~/.tabhelm/state.json) for reinstalls
   src/transcribe.js            speech to text: transcription API or whisper.cpp + ffmpeg
   src/tool-server.js           loopback HTTP endpoint with token
+  src/log-digest.js            redacted host.log digest for the self-analysis (errors, crashes, relay, agent sign-in)
   src/mcp-bridge.js            stdio MCP server spawned by agents (browser_*, skill_*, memory_* tool definitions)
   scripts/install.js           registers the native host (Chrome, Chromium, Brave, Edge)
   scripts/install-agent.js     installs any ACP-registry agent and records how to launch it
@@ -508,7 +526,8 @@ Load `extension/` unpacked in Chrome. After editing extension files press ↻ on
 | `E2E_FOLDER=1 npm run e2e -- claude` | binds a project folder (AGENTS.md + skill) and checks the agent follows it and creates a file there |
 | `E2E_ATTACH=1 npm run e2e -- claude` | attaches an image and a CSV and checks the agent reads both |
 | `E2E_SKILLS=1 npm run e2e -- claude` | adds a skill in Settings and checks the agent reads and follows it |
-| `npm run test:flags` | every experimental feature with the built-in agent against a scripted mock model and a fake microphone (20 checks) |
+| `npm run test:flags` | every experimental feature with the built-in agent against a scripted mock model and a fake microphone (35 checks, including Diagnose, `/report`, the agent's self-check and a redaction canary) |
+| `npm run test:selfanalysis` | self-analysis unit tests: error taxonomy, redaction, host-log digest, analyzer detectors and golden reports, every renderer with canary values that must never appear in output |
 | `npm run test:builtin` | built-in agent against a mock OpenAI-compatible API (streaming, tool calls, 429 retry, missing key) |
 | `TABHELM_RELEASE=../dist/tabhelm-x.y.z npm run e2e -- claude` | the built release |
 

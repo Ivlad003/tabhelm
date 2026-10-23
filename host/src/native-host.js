@@ -15,7 +15,7 @@
 //                permission {tabId, id, ...} | done {tabId} | error {tabId, message}
 //                tool_call {id, tabId, tool, args}
 
-import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync } from 'node:fs';
 import { homedir, hostname } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { createNativeChannel, createRelayChannel } from './native-messaging.js';
@@ -32,6 +32,7 @@ import { transcribe, transcribeStatus } from './transcribe.js';
 import { startToolServer } from './tool-server.js';
 import { AgentSession } from './session.js';
 import { saveState, loadState } from './state.js';
+import { readLogWindow, digestLog } from './log-digest.js';
 
 // API keys and endpoints from ~/.tabhelm/env reach every agent the host starts.
 loadEnvFile();
@@ -39,7 +40,12 @@ loadEnvFile();
 const home = join(homedir(), '.tabhelm');
 const workspace = join(home, 'workspace');
 mkdirSync(workspace, { recursive: true });
-const logFile = join(home, 'host.log');
+// TABHELM_LOG_FILE moves the log (tests use their own, never the user's).
+const logFile = process.env.TABHELM_LOG_FILE || join(home, 'host.log');
+// Keep the log bounded: past 5 MB it moves to host.log.1 (the self-analysis reads both).
+try {
+  if (statSync(logFile).size > 5 * 1024 * 1024) renameSync(logFile, `${logFile}.1`);
+} catch {}
 // Videos go to ~/Videos/TabHelm when ~/Videos exists, else ~/.tabhelm/recordings
 // (TABHELM_RECORDINGS_DIR overrides, e.g. in tests).
 const recordingsDir =
@@ -47,7 +53,9 @@ const recordingsDir =
   (existsSync(join(homedir(), 'Videos')) ? join(homedir(), 'Videos', 'TabHelm') : join(home, 'recordings'));
 
 function log(line) {
-  appendFileSync(logFile, `${new Date().toISOString()} ${line}\n`);
+  try {
+    appendFileSync(logFile, `${new Date().toISOString()} [${process.pid}] ${line}\n`);
+  } catch {}
 }
 
 // stdout carries native messaging frames only; route stray console output to the log.
@@ -124,9 +132,9 @@ const toolServer = await startToolServer({
     });
   },
 });
-log(`host started, tool server ${toolServer.url}`);
 const hostVersion = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
-send({ type: 'agents', agents: listAgents(), hostVersion, remote: relayMode ? { name: argValue('--name') || process.env.TABHELM_RELAY_NAME || hostname() } : null });
+log(`host started v${hostVersion} node=${process.version} ${process.platform}${relayMode ? ' relay' : ''}, tool server ${toolServer.url}`);
+send({ type: 'agents', agents: listAgents(), hostVersion, test: process.env.TABHELM_TEST === '1', remote: relayMode ? { name: argValue('--name') || process.env.TABHELM_RELAY_NAME || hostname() } : null });
 
 // Messages are handled concurrently, so a prompt sent right after `start` (New
 // chat, switching agents, the first message) could overtake the start and find
@@ -153,7 +161,7 @@ async function handleMessageNow(msg) {
       case 'ping':
         break;
       case 'list_agents':
-        send({ type: 'agents', agents: listAgents(), hostVersion, remote: relayMode ? { name: argValue('--name') || process.env.TABHELM_RELAY_NAME || hostname() } : null });
+        send({ type: 'agents', agents: listAgents(), hostVersion, test: process.env.TABHELM_TEST === '1', remote: relayMode ? { name: argValue('--name') || process.env.TABHELM_RELAY_NAME || hostname() } : null });
         break;
 
       case 'start': {
@@ -222,6 +230,12 @@ async function handleMessageNow(msg) {
         const session = sessions.get(tabId);
         if (session) {
           if (Boolean(session.features?.singleTab) && !msg.features?.singleTab) session.modeNote = 'Single-tab mode is off now: you may open and use other tabs again.\n';
+          // Flagged tools are fixed when the session starts (see mcp-bridge.js):
+          // tools turned on now arrive with the next agent, so only tools that
+          // were offered and are now off need a word — their calls now fail.
+          const toolFlags = { devTools: 'Developer tools', pageScripts: 'Page scripts', takeOver: 'Take over', passwordManager: 'Password manager hand-off', memory: 'Memory', selfAnalysisAgent: 'Self-analysis' };
+          const off = Object.keys(toolFlags).filter((f) => session.toolFeatures?.[f] && session.features?.[f] && !msg.features?.[f]);
+          if (off.length) session.modeNote = `${session.modeNote || ''}[TabHelm] The user turned off ${off.map((f) => toolFlags[f]).join(', ')}; do not call those tools now.\n`;
           session.features = msg.features || {};
           session.featureSettings = msg.featureSettings || {};
         }
@@ -372,6 +386,18 @@ async function handleMessageNow(msg) {
           send({ type: 'state_item', key, value });
         }
         send({ type: 'state_done', keys: Object.keys(data).length });
+        break;
+      }
+
+      // A redacted digest of host.log for the self-analysis: the host never sends raw lines.
+      case 'log_digest': {
+        let digest;
+        try {
+          digest = digestLog(readLogWindow(logFile, { since: msg.since }), { since: msg.since, until: msg.until, tabIds: msg.tabIds || [], meta: { hostVersion, relayMode } });
+        } catch (err) {
+          digest = { v: 1, error: err.message };
+        }
+        send({ type: 'log_digest', tabId, requestId: msg.requestId, digest });
         break;
       }
 

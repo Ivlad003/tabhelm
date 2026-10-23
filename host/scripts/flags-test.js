@@ -22,7 +22,7 @@ const fakeHome = mkdtempSync(join(tmpdir(), 'tabhelm-home-'));
 execFileSync(process.execPath, [fileURLToPath(new URL('./install.js', import.meta.url)), '--user-data-dir', profile], { stdio: 'inherit' });
 
 // ---- mock model -----------------------------------------------------------
-const seen = { critic: [], tools: [] };
+const seen = { critic: [], tools: [], offered: [], requests: 0 };
 function sse(res, chunks) {
   res.writeHead(200, { 'content-type': 'text/event-stream' });
   for (const c of chunks) res.write(`data: ${JSON.stringify({ choices: [{ index: 0, ...c }] })}\n\n`);
@@ -46,8 +46,12 @@ const mock = http.createServer(async (req, res) => {
     return res.end(JSON.stringify({ text: `phrase ${seen.audioChunks}` }));
   }
   if (req.url !== '/v1/chat/completions') return res.writeHead(404).end();
-  const { messages, stream } = JSON.parse(body);
+  const { messages, stream, tools: offeredTools } = JSON.parse(body);
   const system = messages[0]?.content || '';
+  if (stream) {
+    seen.requests++;
+    seen.offered.push((offeredTools || []).map((t) => t.function?.name || t.name));
+  }
 
   // The critic (non-streaming): block anything aimed at a "Delete" control.
   if (!stream && /safety reviewer/.test(system)) {
@@ -107,6 +111,21 @@ const mock = http.createServer(async (req, res) => {
     case 'skill':
       if (step === 0) return sse(res, [...call(0, 'c1', 'skill_read', { name: 'greet' }), finishTools]);
       return sse(res, say(`SKILL SAYS: ${/MAGIC-[\w-]+/.exec(lastTool)?.[0] || 'nothing'}`));
+    case 'dropdown':
+      // Three selects on something that is not a <select>: the self-analysis should
+      // explain it as a custom dropdown the agent did not know about.
+      if (step === 0) return sse(res, [...call(0, 'c1', 'browser_snapshot', {}), finishTools]);
+      if (step <= 3) return sse(res, [...call(0, `c${step + 1}`, 'browser_select_option', { ref: ref(snap, 'textbox "Name"'), value: 'Blue CANARY_TYPED_9' }), finishTools]);
+      if (step === 4) return sse(res, [...call(0, 'c5', 'browser_click', { ref: ref(snap, 'button "Save"') }), finishTools]);
+      return sse(res, say('DROPDOWN DONE'));
+    case 'plainlist':
+      return sse(res, say('PLAIN OK'));
+    case 'diag': {
+      // Same chat as earlier scenarios: count only this message's tool results.
+      const mine = messages.slice(messages.findLastIndex((m) => m.role === 'user')).filter((m) => m.role === 'tool');
+      if (!mine.length) return sse(res, [...call(0, 'c1', 'tabhelm_diagnose', { problem: 'вибір кольору не працює' }), finishTools]);
+      return sse(res, say(`DIAG RESULT: ${mine.at(-1).content.replace(/\s+/g, ' ').slice(0, 1500)}`));
+    }
     case 'scheduled':
       if (step === 0) return sse(res, [...call(0, 'c1', 'browser_get_text', {}), finishTools]);
       return sse(res, say(`SCHEDULED DONE: ${/Newsletter signup/.test(lastTool) ? 'page read' : 'no page'}`));
@@ -140,7 +159,7 @@ const browser = await puppeteer.launch({
   enableExtensions: [EXT],
   // Fake microphone so the Voice feature can be exercised headlessly.
   args: ['--no-first-run', '--use-fake-device-for-media-capture', '--use-fake-ui-for-media-capture'],
-  env: { ...process.env, HOME: fakeHome, TABHELM_OPENROUTER_BASE_URL: base, OPENROUTER_API_KEY: 'test-key', TABHELM_RECORDINGS_DIR: join(profile, 'videos'), TABHELM_TRANSCRIBE_BASE_URL: base, TABHELM_TRANSCRIBE_API_KEY: 'test-key', TABHELM_TRANSCRIBE_MODEL: 'mock-whisper' },
+  env: { ...process.env, TABHELM_TEST: '1', HOME: fakeHome, TABHELM_OPENROUTER_BASE_URL: base, OPENROUTER_API_KEY: 'test-key', TABHELM_RECORDINGS_DIR: join(profile, 'videos'), TABHELM_TRANSCRIBE_BASE_URL: base, TABHELM_TRANSCRIBE_API_KEY: 'test-key', TABHELM_TRANSCRIBE_MODEL: 'mock-whisper' },
   protocolTimeout: 300_000,
 });
 const page = (await browser.pages())[0] || (await browser.newPage());
@@ -362,6 +381,85 @@ await sw.evaluate(() => self.tabhelmDebug.restoreState());
 await new Promise((r) => setTimeout(r, 2500));
 const restored = await sw.evaluate(() => chrome.storage.local.get('chatIndex'));
 check('state restored from the host backup after storage was wiped', (restored.chatIndex || []).length === backup.chatIndex?.length, JSON.stringify(restored.chatIndex?.length));
+
+// ---- Self-analysis ----------------------------------------------------------
+{
+  const toolsOffered = () => seen.offered.at(-1) || [];
+  // B5: without the flag the agent is not even offered the self-check tool.
+  await setStorage({ features: {} });
+  await connect();
+  await ask('hello SCENARIO plainlist');
+  await idle();
+  check('self-check tool not offered while Self-analysis is off', !toolsOffered().includes('tabhelm_diagnose') && !toolsOffered().includes('browser_fill_form'), toolsOffered().join(','));
+
+  await setStorage({ features: { selfAnalysis: true, memory: true }, secret_unused: true });
+  await connect();
+  await ask('Choose Blue in the colour list SCENARIO dropdown');
+  await idle();
+  check('self-check tool offered with Self-analysis on', toolsOffered().includes('tabhelm_diagnose'), toolsOffered().join(','));
+  const hint = await panel.$$eval('.stats-warn', (l) => l.map((x) => x.innerText).join(' | '));
+  check('failed steps hint offers Diagnose', /3 steps failed · Diagnose/.test(hint), hint);
+  await panel.evaluate(() => [...document.querySelectorAll('.stats-warn button')].at(-1).click());
+  await panel.waitForFunction(() => /Diagnosis of this chat/.test(document.querySelector('.card.diag:last-of-type')?.innerText || '') && !/analysing/.test(document.querySelector('.card.diag:last-of-type')?.innerText || ''), { timeout: 20000 }).catch(() => {});
+  const card = await panel.$$eval('.card.diag', (l) => (l.at(-1)?.innerText || '').replace(/\s+/g, ' '));
+  if (process.env.FLAGS_DUMP) await panel.screenshot({ path: `${process.env.FLAGS_DUMP}.diagnose.png`, fullPage: true });
+  check('Diagnose explains the not-a-<select> failures', /select|dropdown/i.test(card) && !/CANARY_TYPED/.test(card), card.slice(0, 400));
+
+  // /diagnose answers locally: nothing goes to the agent.
+  const before = seen.requests;
+  await panel.type('#input', '/diagnose the colour list does not work');
+  await panel.keyboard.press('Enter');
+  await new Promise((r) => setTimeout(r, 2500));
+  const reports = await panel.evaluate(() => document.querySelectorAll('.card.diag').length);
+  check('/diagnose shows a card and sends nothing to the agent', reports >= 2 && seen.requests === before, `cards ${reports}, requests ${before}→${seen.requests}`);
+
+  // The agent's own self-check: redacted digest, no typed values.
+  await ask('Something is wrong SCENARIO diag');
+  await idle();
+  const all = (await panel.$$eval('.msg.agent', (m) => m.map((x) => x.innerText).join(' '))).replace(/\s+/g, ' ');
+  const diag = all.slice(all.lastIndexOf('DIAG RESULT'));
+  check('tabhelm_diagnose returns a redacted digest the agent can use', /^DIAG RESULT: \[TabHelm self-analysis/.test(diag) && /select|dropdown/i.test(diag) && !/ 0 tasks/.test(diag) && /host 0\.\d+/.test(diag) && !/CANARY_TYPED/.test(diag), diag);
+
+  // Report of all chats + copy preview: nothing personal in what can leave.
+  // These chats are test chats (TABHELM_TEST), which the report leaves out unless asked.
+  await panel.type('#input', '/report');
+  await panel.keyboard.press('Enter');
+  await panel.waitForFunction(() => !document.getElementById('report').hidden && !/Analysing/.test(document.getElementById('report-body').innerText), { timeout: 30000 }).catch(() => {});
+  await panel.click('#report-tests');
+  await panel.waitForFunction(() => /\d+ chats ·/.test(document.getElementById('report-body').innerText) && !/^0 chats/.test(document.getElementById('report-body').innerText), { timeout: 30000 }).catch(() => {});
+  const rep = await panel.$eval('#report-body', (e) => e.innerText.replace(/\s+/g, ' '));
+  if (process.env.FLAGS_DUMP) await panel.screenshot({ path: `${process.env.FLAGS_DUMP}.report.png`, fullPage: true });
+  check('/report opens the report with findings', /chats ·/.test(rep) && /select|dropdown/i.test(rep), rep.slice(0, 300));
+  await panel.click('#report-bug');
+  await panel.waitForFunction(() => document.getElementById('sa-preview').open, { timeout: 5000 }).catch(() => {});
+  const preview = await panel.$eval('#sa-text', (e) => e.value);
+  if (process.env.FLAGS_DUMP) (await import('node:fs')).writeFileSync(process.env.FLAGS_DUMP, [card, diag, rep, preview].join('\n\n=====\n\n'));
+  check('bug report preview has no typed values, titles or full URLs', preview.length > 50 && !/CANARY_TYPED|Signup test|https?:\/\/\S+\/\S/.test(preview), preview.slice(0, 300));
+  await panel.click('#sa-cancel');
+  await panel.click('#report-close');
+
+  // B1: a saved chat with permission/ask entries reopens and keeps saving.
+  const savedId = 'cb1test';
+  await setStorage({ [`chat:${savedId}`]: { id: savedId, created: Date.now() - 60000, tabId, url, journal: [
+    { ts: new Date(Date.now() - 50000).toISOString(), type: 'user', text: 'old message' },
+    { ts: new Date(Date.now() - 49000).toISOString(), type: 'permission', title: 'Run tool', answer: 'Allow once' },
+    { ts: new Date(Date.now() - 48000).toISOString(), type: 'ask', kind: 'human', message: 'Enter the code' },
+    { ts: new Date(Date.now() - 47000).toISOString(), type: 'agent', agent: 'X', text: 'done', failure: null },
+  ] } });
+  const { chatIndex = [] } = await sw.evaluate(() => chrome.storage.local.get('chatIndex'));
+  await setStorage({ chatIndex: [{ id: savedId, title: 'old message', updated: Date.now(), url, messages: 1 }, ...chatIndex] });
+  await panel.goto(`${panelUrl}&chat=${savedId}`);
+  await panel.waitForFunction(() => /old message/.test(document.getElementById('log').innerText), { timeout: 10000 }).catch(() => {});
+  await panel.waitForFunction(() => document.querySelector('#agent').value, { timeout: 20000 });
+  await panel.evaluate(() => window.tabhelmTest.connect());
+  await panel.waitForFunction(() => document.querySelector('#status').dataset.state === 'ready', { timeout: 60000 });
+  await ask('after reopen SCENARIO plainlist');
+  await idle();
+  await new Promise((r) => setTimeout(r, 1500));
+  const saved = await sw.evaluate((id) => chrome.storage.local.get(`chat:${id}`), savedId);
+  const texts = (saved[`chat:${savedId}`]?.journal || []).filter((e) => e.type === 'user').map((e) => e.text);
+  check('a reopened chat with permission/ask entries keeps saving (B1)', texts.includes('after reopen SCENARIO plainlist'), JSON.stringify(texts));
+}
 
 console.log(failures ? `\n${failures} check(s) failed` : '\nFLAG CHECKS PASSED');
 await browser.close();

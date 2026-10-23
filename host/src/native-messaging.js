@@ -123,7 +123,7 @@ export function createRelayChannel({ url, key, name, tokenFile, onMessage, onCli
       if (msg.code) {
         const banner = `\nTabHelm relay pairing code:  ${msg.code}\n(valid 10 minutes — enter it in the panel: Settings → Remote host, relay ${url})\n\n`;
         process.stderr.write(banner);
-        log(`relay: pairing code ${msg.code}`);
+        log('relay: pairing code issued (valid 10 minutes)'); // the code itself stays on the terminal only
       } else if (msg.paired) log('relay: paired, waiting for the panel');
     }
     if (msg.event === 'client_connected') {

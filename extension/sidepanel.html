@@ -42,9 +42,51 @@
       <div id="usage-body"></div>
     </div>
 
+    <section id="report" class="settings" hidden aria-label="Self-analysis report">
+      <div class="settings-head">
+        <h2>Report</h2>
+        <select id="report-scope" aria-label="Period">
+          <option value="7d">Last 7 days</option>
+          <option value="30d" selected>Last 30 days</option>
+          <option value="90d">Last 90 days</option>
+          <option value="all">All chats</option>
+        </select>
+        <button id="report-refresh" class="btn small" type="button" title="Analyse again">↻</button>
+        <button id="report-close" class="btn small" type="button">Done</button>
+      </div>
+      <div class="report-options">
+        <label class="check"><input id="report-tests" type="checkbox" /> Include test chats<span id="report-tests-n"></span></label>
+        <label class="check"><input id="report-log" type="checkbox" checked /> Include the host log</label>
+      </div>
+      <div id="report-body"></div>
+      <div class="options report-actions">
+        <button id="report-export-md" class="btn small" type="button">Export .md</button>
+        <button id="report-export-json" class="btn small" type="button">Export .json</button>
+        <button id="report-bug" class="btn small" type="button">Copy bug report</button>
+        <button id="report-task" class="btn small" type="button" title="The TabHelm bugs as a task for a coding agent">Copy as a fix task</button>
+        <button id="report-ask" class="btn small" type="button">Ask the agent…</button>
+      </div>
+    </section>
+
+    <dialog id="sa-preview" class="sa-preview">
+      <h3 id="sa-title">Preview</h3>
+      <textarea id="sa-text" readonly rows="14"></textarea>
+      <label class="check"><input id="sa-sites" type="checkbox" /> Include site and skill names</label>
+      <label class="check"><input id="sa-notes" type="checkbox" /> Include my description</label>
+      <label class="check"><input id="sa-log" type="checkbox" checked /> Include host log lines</label>
+      <p class="hint">Contains no messages, typed text, page content, titles or full URLs. Nothing is sent until you paste or send it.</p>
+      <div class="options">
+        <button id="sa-copy" class="btn small primary" type="button">Copy</button>
+        <button id="sa-issue" class="btn small" type="button">Copy &amp; open issue page</button>
+        <button id="sa-send" class="btn small primary" type="button" hidden>Attach and write the request</button>
+        <button id="sa-cancel" class="btn small" type="button">Cancel</button>
+      </div>
+    </dialog>
+
     <section id="history" class="settings" hidden aria-label="History">
       <div class="settings-head">
         <h2>History</h2>
+        <button id="report-open" class="btn small" type="button" hidden title="Self-analysis: what went wrong across your chats">Report</button>
         <button id="history-clear" class="btn small danger" type="button" title="Delete every saved chat">Clear all</button>
         <button id="history-close" class="btn small" type="button">Done</button>
       </div>
@@ -115,6 +157,8 @@
       </div>
     </main>
 
+    <div id="sa-status" class="sa-status" role="status" hidden></div>
+
     <footer class="composer">
       <div id="slash-menu" class="slash-menu" hidden></div>
       <div id="voice-live" class="voice-live" hidden><span class="rec-dot"></span><span id="voice-status"></span><div id="voice-text"></div></div>
@@ -129,6 +173,7 @@
             <button type="button" id="add-selection" title="Add the text selected on the page as a quote (also: right-click → TabHelm, or Alt+Shift+T)">Add page selection</button>
             <button type="button" id="pick-element" title="Click an element on the page to add it (selector, text, HTML, ref) to your message">Pick element</button>
             <button type="button" id="pick-area" title="Drag a rectangle on the page to add every element inside it">Select area</button>
+            <button type="button" id="diagnose-chat" hidden title="Self-analysis of this chat: what went wrong and why">Diagnose this chat</button>
             <button type="button" id="make-skill" title="Ask the agent to write a reusable skill from what was done in this chat">Make a skill from this chat</button>
             <button type="button" data-voice="mic" hidden>Voice message</button>
             <button type="button" data-voice="tab" hidden>Transcribe tab audio</button>

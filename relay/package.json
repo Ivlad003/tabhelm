@@ -1,6 +1,6 @@
 {
   "name": "tabhelm-relay",
-  "version": "0.30.0",
+  "version": "0.31.0",
   "private": true,
   "type": "module",
   "description": "Pairs a remote TabHelm host with the TabHelm Chrome extension over WebSockets",

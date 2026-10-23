@@ -65,6 +65,16 @@ export async function authoredSkills() {
   return list.filter((s) => s.enabled !== false).map(({ name, description, body }) => ({ name, description, body }));
 }
 
+// "Hidden findings: N" in the Self-analysis panel follows Hide / Show again in the report.
+let showHidden = null;
+chrome.storage.onChanged.addListener((changes, area) => area === 'local' && changes.selfAnalysisState && showHidden?.(changes.selfAnalysisState.newValue));
+
+let pendingSkillDraft = null;
+export function setSkillDraft(draft) {
+  pendingSkillDraft = draft;
+  render();
+}
+
 export function refreshExperimental() {
   return render();
 }
@@ -81,6 +91,7 @@ async function render() {
         onChange(f.id, box.checked);
       };
       const item = el('li', { className: 'feature' }, box, el('div', { className: 'feature-text' }, el('b', { textContent: f.name }), el('div', { className: 'skill-desc', textContent: f.desc })));
+      item.dataset.id = f.id; // Settings deep links (self-analysis remedies)
       const panel = el('div', { className: 'feature-panel' });
       if (features[f.id]) {
         const builder = PANELS[f.id];
@@ -259,6 +270,51 @@ const PANELS = {
     renderMemoryList();
   },
 
+  async selfAnalysis(panel) {
+    const s = await getSetting('selfAnalysis');
+    const save = (patch) => setSetting('selfAnalysis', Object.assign(s, patch));
+    const days = el('select');
+    for (const [v, n] of [[7, 'Last 7 days'], [30, 'Last 30 days'], [90, 'Last 90 days'], [0, 'All chats']]) days.append(new Option(n, v, false, Number(s.days ?? 30) === v));
+    days.onchange = () => save({ days: Number(days.value) });
+    const check = (key, label, after) => {
+      const box = el('input', { type: 'checkbox', checked: s[key] !== false });
+      box.onchange = async () => {
+        await save({ [key]: box.checked });
+        after?.();
+      };
+      return el('label', { className: 'check' }, box, document.createTextNode(` ${label}`));
+    };
+    const open = el('button', { className: 'btn small primary', type: 'button', textContent: 'Open report' });
+    open.onclick = () => document.getElementById('report-open').click();
+    const forget = el('button', { className: 'btn small', type: 'button', textContent: 'Forget report history' });
+    forget.onclick = async () => {
+      await chrome.storage.local.remove('selfAnalysisState');
+      forget.textContent = 'Forgotten';
+    };
+    // Brings back every finding hidden in the report, keeping New / Regressed history.
+    const hiddenN = el('span', { className: 'hint' });
+    const showAll = el('button', { className: 'btn small', type: 'button', textContent: 'Show all' });
+    showAll.onclick = async () => {
+      const { selfAnalysisState: state = {} } = await chrome.storage.local.get('selfAnalysisState');
+      await chrome.storage.local.set({ selfAnalysisState: { ...state, hidden: {} } });
+    };
+    showHidden = (state) => {
+      const n = Object.keys(state?.hidden || {}).length;
+      hiddenN.textContent = `Hidden findings: ${n} · `;
+      showAll.disabled = !n;
+    };
+    showHidden((await chrome.storage.local.get('selfAnalysisState')).selfAnalysisState);
+    panel.append(
+      hint('Reports stay on this computer. Exports, bug reports and what the agent sees never contain your messages, typed text, page content, titles or full URLs.'),
+      el('div', { className: 'options' }, open, forget),
+      el('div', { className: 'options' }, hiddenN, showAll),
+      field('Report window', days),
+      check('agentTool', 'Let the agent run a self-check (tabhelm_diagnose). Takes effect in new chats.', () => onChange('selfAnalysis')),
+      check('hideSites', 'Hide site and skill names in exports and in what the agent sees'),
+      check('includeHostLog', 'Include the host log'),
+    );
+  },
+
   async trimWaits(panel) {
     const s = await getSetting('trimWaits');
     const max = el('input', { type: 'number', min: '0.5', max: '10', step: '0.5', value: String(s.maxPause ?? 1.5), style: 'width: 5em' });
@@ -385,6 +441,14 @@ const PANELS = {
     const name = el('input', { placeholder: 'name (used as /name)' });
     const desc = el('input', { placeholder: 'When to use it (one sentence)' });
     const body = el('textarea', { rows: 6, placeholder: 'Instructions for the agent (Markdown)' });
+    // A draft from the self-analysis report: the user edits it, then adds it.
+    if (pendingSkillDraft) {
+      name.value = pendingSkillDraft.name || '';
+      desc.value = pendingSkillDraft.description || '';
+      body.value = pendingSkillDraft.body || '';
+      pendingSkillDraft = null;
+      setTimeout(() => name.scrollIntoView({ block: 'center' }), 0);
+    }
     const add = el('button', { className: 'btn small primary', type: 'button', textContent: 'Add skill' });
     add.onclick = () => {
       const n = name.value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');

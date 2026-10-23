@@ -4,11 +4,13 @@
 // Usage: node scripts/smoke.js [agentId]
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { createNativeChannel } from '../src/native-messaging.js';
 
 const agentId = process.argv[2] || 'claude';
 const tabId = 7;
-const host = spawn(process.execPath, [fileURLToPath(new URL('../src/native-host.js', import.meta.url))], { stdio: ['pipe', 'pipe', 'inherit'] });
+const host = spawn(process.execPath, [fileURLToPath(new URL('../src/native-host.js', import.meta.url))], { stdio: ['pipe', 'pipe', 'inherit'], env: { ...process.env, TABHELM_TEST: '1', TABHELM_LOG_FILE: join(tmpdir(), `tabhelm-smoke-${process.pid}.log`), TABHELM_STATE_FILE: join(tmpdir(), `tabhelm-smoke-${process.pid}.json`) } });
 
 const FAKE_PAGE = 'URL: https://shop.example/cart\nTitle: Cart — Example Shop\n\n# Your cart\n[e1] button "Checkout"\n[e2] link "Continue shopping" → /\nTotal: 42.00 USD';
 const toolsSeen = [];

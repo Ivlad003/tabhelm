@@ -1,6 +1,20 @@
 {
   "news": [
     {
+      "id": "2026-10-self-analysis",
+      "date": "2026-10-23",
+      "minVersion": "0.31.0",
+      "title": {
+        "en": "Self-analysis: why did it fail?",
+        "uk": "Самоаналіз: чому не вдалося?"
+      },
+      "text": {
+        "en": "Turn on Settings → Experimental → Self-analysis, then press Diagnose on a failed task or open History → Report: causes, missing skills, setup problems and TabHelm bugs, with a redacted bug report.",
+        "uk": "Увімкніть Settings → Experimental → Self-analysis і натисніть Diagnose на невдалому завданні або відкрийте History → Report: причини, яких скілів бракувало, проблеми налаштування і баги TabHelm, з відредагованим bug report."
+      },
+      "url": "https://github.com/Ivlad003/tabhelm#self-analysis-flag"
+    },
+    {
       "id": "2026-10-video-mp4",
       "date": "2026-10-21",
       "minVersion": "0.30.0",

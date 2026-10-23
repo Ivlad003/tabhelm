@@ -31,7 +31,7 @@ export async function loadChat(id) {
 
 // Saves the chat and updates the index shown in History.
 export async function saveChat(chat) {
-  const firstUser = chat.journal.find((e) => e.type === 'user');
+  const firstUser = chat.journal?.find((e) => e.type === 'user');
   if (!firstUser) return;
   const meta = {
     id: chat.id,
@@ -44,6 +44,9 @@ export async function saveChat(chat) {
     agent: chat.agent,
     folder: chat.folder,
     messages: chat.journal.filter((e) => e.type === 'user').length,
+    // Chats from automated tests and scheduled runs are told apart by the self-analysis.
+    ...(chat.test ? { test: true } : {}),
+    ...(chat.scheduled ? { scheduled: true } : {}),
   };
   const { chatIndex = [] } = await chrome.storage.local.get('chatIndex');
   const index = [meta, ...chatIndex.filter((c) => c.id !== chat.id)];
@@ -73,7 +76,8 @@ async function clearHistory() {
 
 function toggle(open) {
   $('history').hidden = !open;
-  $('log').hidden = open || !$('settings').hidden;
+  if (open) $('report').hidden = true;
+  $('log').hidden = open || !$('settings').hidden || !$('report').hidden;
   $('history-open').setAttribute('aria-pressed', String(open));
   if (open) {
     $('settings').hidden = true;

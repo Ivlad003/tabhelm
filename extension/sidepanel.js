@@ -1,10 +1,15 @@
 import { showNews } from './news.js';
 import { renderMarkdown } from './markdown.js';
+import { replayOp, exportMarkdown, contextText, statsText, fmtTokens, fmtCost, fmtTime, browserToolOf } from './journal-format.js';
+import { redactText, topFrame } from './redact.js';
 import { Recorder, webCodecsAvailable } from './recorder.js';
-import { initSettings, handleSettingsMessage, hostVersionMismatch, skillPayload, slashSkills, onFeaturesChanged, setAgents, skillsChanged } from './settings.js';
+import { initSettings, handleSettingsMessage, hostVersionMismatch, getHostVersion, skillPayload, slashSkills, onFeaturesChanged, setAgents, skillsChanged, openSettingsAt } from './settings.js';
+import { setSkillDraft } from './experimental.js';
+import { initSelfAnalysis, runDiagnose, openReport } from './selfanalysis-ui.js';
+import { COMPLAINT_RE } from './taxonomy.js';
 import { getFeatures, getSetting } from './features.js';
 import { initVoice, handleVoiceMessage, stop as stopVoice } from './voice.js';
-import { initAttachments, takeAttachments, hasAttachments, chip, addQuote, addImageUrl, addElements } from './attachments.js';
+import { initAttachments, takeAttachments, hasAttachments, chip, addQuote, addImageUrl, addElements, addFiles, removeTextAttachment } from './attachments.js';
 import { pickElements } from './page-scripts.js';
 import { scriptMatches } from './scripts-lib.js';
 import { initFolder, currentFolder, handleFolderMessage, updateFolderWarning, restoreFolder } from './folder.js';
@@ -45,37 +50,76 @@ let autoContinue = null; // message sent automatically once the next agent is re
 let connectedAgent = null;
 let currentModel = null;
 let agentsList = [];
+let nextAgent = null; // "Use <agent> for new chats" picked while this chat's agent is connected
 // The chat is saved to History after changes (debounced).
 let chatId = null;
 let chatCreated = null;
 let replaying = false; // true while a saved chat is rendered; nothing is recorded
 let saveTimer = null;
+// Every entry of a task carries its turn id, so the self-analysis can tell
+// which task an error belongs to and how the task ended.
+let turnSeq = 0;
+let pendingTurnId = null; // the turn of a message whose agent is still starting
+const saveState = { lastSavedLen: 0, lastSaveAt: 0, lastSaveError: null, lastRecordAt: 0 };
+let hostTest = false; // the host runs under an automated test (TABHELM_TEST=1)
 const record = (type, data = {}) => {
   if (replaying) return;
-  journal.push({ ts: new Date().toISOString(), type, ...data });
+  const t = data.turn ?? turn?.id ?? pendingTurnId ?? undefined;
+  journal.push({ ts: new Date().toISOString(), type, ...data, ...(t != null ? { turn: t } : {}) });
+  saveState.lastRecordAt = Date.now();
   clearTimeout(saveTimer);
   saveTimer = setTimeout(saveCurrentChat, 600);
 };
 
+// The chat id is made on the first save; flushes need it synchronously.
+function ensureChatId() {
+  if (chatId) return;
+  chatId = newChatId();
+  chatCreated = Date.now();
+  setCurrentChat(chatId);
+  chrome.storage.session.set({ [`activeChat:${tabId}`]: chatId });
+}
+
+// The chat's agent: the one answering now, else the last one in its journal.
+// connectedAgent outlives a disconnect and may belong to a chat left since.
+const chatAgentName = () => (connected && connectedAgent?.name) || journal.findLast((e) => e.agent)?.agent || null;
+
+// Saves the journal through the service worker right now: an async storage
+// write from a closing panel is not reliable (pagehide, New chat, reopening).
+function flushJournal() {
+  clearTimeout(saveTimer);
+  if (!journal.some((e) => e.type === 'user')) return;
+  ensureChatId();
+  try {
+    port.postMessage({ type: 'journal_flush', chat: { id: chatId, created: chatCreated, tabId, agent: chatAgentName(), folder: currentFolder(), ...(hostTest ? { test: true } : {}), journal } });
+  } catch {}
+}
+
 async function saveCurrentChat() {
   if (!journal.some((e) => e.type === 'user')) return;
-  if (!chatId) {
-    chatId = newChatId();
-    chatCreated = Date.now();
-    setCurrentChat(chatId);
-    chrome.storage.session.set({ [`activeChat:${tabId}`]: chatId });
-  }
+  ensureChatId();
   const tab = await chrome.tabs.get(tabId).catch(() => null);
+  const len = journal.length;
+  try {
+    await saveChatNow(tab, len);
+  } catch (err) {
+    saveState.lastSaveError = String(err?.message || err);
+  }
+}
+
+async function saveChatNow(tab, len) {
   await saveChat({
     id: chatId,
     created: chatCreated,
     tabId,
     url: tab?.url,
     pageTitle: tab?.title,
-    agent: connectedAgent?.name || journal.findLast?.((e) => e.agent)?.agent || null,
+    agent: chatAgentName(),
     folder: currentFolder(),
+    ...(hostTest ? { test: true } : {}),
     journal,
   });
+  Object.assign(saveState, { lastSavedLen: len, lastSaveAt: Date.now(), lastSaveError: null });
 }
 // Usage reported by the agent: running session cost and context window use.
 const usage = { cost: null, currency: 'USD', context: null, lastTurn: null };
@@ -132,6 +176,7 @@ function onMessage(msg) {
   if (handleVoiceMessage(msg) || handleSettingsMessage(msg) || handleFolderMessage(msg)) return;
   switch (msg.type) {
     case 'agents':
+      hostTest = Boolean(msg.test);
       fillAgents(msg.agents);
       if (!versionWarned && hostVersionMismatch()) {
         versionWarned = true;
@@ -178,6 +223,10 @@ function onMessage(msg) {
     case 'skills_changed':
       skillsChanged();
       break;
+    // The agent's tabhelm_diagnose: the chat as it is now (the saved copy lags).
+    case 'live_chat_request':
+      port.postMessage({ type: 'live_chat', requestId: msg.requestId, chat: liveChat(), hostVersion: hostVersionOf(), agents: installedAgents() });
+      break;
     case 'paused':
       setPaused(msg.paused);
       break;
@@ -223,23 +272,36 @@ function onMessage(msg) {
       break;
     case 'done':
       usage.lastTurn = msg.usage || null;
-      if (msg.stopReason === 'cancelled') endTurn(interrupting ? null : 'Stopped');
-      else if (msg.stopReason && msg.stopReason !== 'end_turn') endTurn(null, `stopped early (${msg.stopReason})`);
-      else endTurn();
+      if (msg.stopReason === 'cancelled') endTurn(interrupting ? null : 'Stopped', null, 'cancelled');
+      else if (msg.stopReason && msg.stopReason !== 'end_turn') endTurn(null, `stopped early (${msg.stopReason})`, msg.stopReason);
+      else endTurn(null, null, msg.stopReason || 'end_turn');
       break;
     case 'error':
       notice(msg.message, true);
       endTurn(null, busy ? msg.message : null);
       if (!connected) setStatus('error', 'Error');
+      // Most likely the agent failed to start: the next task starts a turn of its
+      // own. A queued message keeps its turn in case the agent still connects.
+      if (!connected && starting) {
+        starting = false;
+        pendingTurnId = null;
+      }
       break;
     case 'state_restored':
       if (msg.count) notice(`Restored ${msg.count} item(s) of chat history and settings from the host backup.`);
       break;
     case 'host_disconnected':
       connected = false;
-      endTurn();
+      record('host_disconnected', { message: redactText(String(msg.message || '')).slice(0, 200) });
+      endTurn(null, busy ? 'host disconnected' : null);
       setStatus('error', 'Host offline');
       notice(`Cannot reach the TabHelm host: ${msg.message}. Run "npm run install-host" in the host folder, then reopen this panel.`, true);
+      // An agent that was starting never will: its message was not sent.
+      if (starting) {
+        starting = false;
+        pendingTurnId = null;
+        autoContinue = null;
+      }
       syncControls();
       break;
   }
@@ -250,7 +312,9 @@ async function fillAgents(agents) {
   setAgents(agents);
   const { lastAgent } = await chrome.storage.local.get('lastAgent');
   const installed = agents.filter((a) => a.installed);
-  const preferred = installed.find((a) => a.id === lastAgent) || installed[0];
+  // The list is sent to every panel: one with an agent keeps showing that agent.
+  const current = connected || starting ? els.agent.value : null;
+  const preferred = installed.find((a) => a.id === current) || installed.find((a) => a.id === lastAgent) || installed[0];
   els.agent.replaceChildren(
     ...agents.map((a) => {
       const opt = new Option(a.installed ? a.name : `${a.name} — not installed`, a.id, false, a === preferred);
@@ -295,22 +359,31 @@ function onStatus(msg) {
     restorePrefs = true;
     // Any fresh agent session in a chat with history gets that history with its
     // first message (reconnects, restarts, chats reopened from History).
-    if (!pendingContext && journal.some((e) => e.type === 'user')) pendingContext = buildContext();
+    if (!pendingContext && journal.some((e) => e.type === 'user')) pendingContext = buildContext(autoContinue?.recorded ? autoContinue.turn : null);
     setStatus('ready', msg.agent.name);
-    record('agent_connected', { agent: msg.agent.name });
+    record('agent_connected', { agent: msg.agent.name, agentId: msg.agent.id, ext: chrome.runtime.getManifest().version, host: hostVersionOf(), features: Object.keys(featureCache).filter((k) => featureCache[k] && k !== 'singleTab'), singleTab: Boolean(featureCache.singleTab), autoApprove: els.auto.checked, skills: (msg.skills || []).map((s) => s.name).slice(0, 30) });
     notice(`${msg.agent.name} connected`);
     els.input.focus();
     if (autoContinue) {
       const q = autoContinue;
       autoContinue = null;
-      sendNow(q.text, q.attachments || []);
+      sendNow(q.text, q.attachments || [], { recorded: Boolean(q.recorded), turnId: q.recorded ? q.turn : null });
     }
   } else {
     connected = false;
+    if (msg.state === 'stopped') record('agent_exit', { agent: connectedAgent?.name, code: msg.code ?? null, signal: msg.signal ?? null, detail: msg.detail ? redactText(String(msg.detail)).slice(0, 200) : null });
     endTurn(null, busy ? msg.detail || 'the agent exited' : null);
+    // The agent stopped before it was ready: its message was never sent, and
+    // the next task must not join that turn.
+    const failedStart = starting;
+    starting = false;
     setStatus('idle', 'Not connected');
     showModelPlaceholder();
     if (msg.detail) notice(msg.detail, true);
+    if (failedStart) {
+      pendingTurnId = null;
+      autoContinue = null;
+    }
   }
   syncControls();
 }
@@ -433,7 +506,8 @@ async function showModelPlaceholder() {
   $('config-extra').replaceChildren(Object.assign(document.createElement('span'), { className: 'hint', textContent: `Model: ${name} (last used). Send a message or click the model next to the agent to connect and see all models and options.` }));
 }
 
-const prefsKey = () => `prefs:${els.agent.value}`;
+// The connected agent's choices are saved under its own id, whatever the dropdown shows.
+const prefsKey = () => `prefs:${connected && connectedAgent?.id ? connectedAgent.id : els.agent.value}`;
 
 async function renderConfig(options) {
   els.config.replaceChildren();
@@ -496,10 +570,17 @@ async function renderConfig(options) {
 // (tool_activity), so agent-side cards are only kept for other tools.
 function onToolCall(u) {
   let card = toolCards.get(u.toolCallId);
-  if (card?.hidden) return;
-  if (/browser_/.test(u.title || '')) {
-    card?.el.remove();
-    toolCards.set(u.toolCallId, { hidden: true });
+  if (card?.hidden || /browser_/.test(u.title || '')) {
+    if (!card?.hidden) {
+      card?.el.remove();
+      // The title names the tool; later updates may come without one.
+      card = { hidden: true, title: u.title };
+      toolCards.set(u.toolCallId, card);
+    }
+    if (u.status === 'failed' && !card.recorded) {
+      card.recorded = true;
+      browserToolFailed(card.title, u.text);
+    }
     return;
   }
   if (!card) {
@@ -521,6 +602,24 @@ function onToolCall(u) {
     pre.hidden = false;
     pre.textContent = u.text;
   }
+}
+
+// A browser tool call the agent saw fail before the extension ran it (its
+// arguments were rejected on the way): no failed action shows it, so it is
+// recorded here unless one turns up within a moment. Only the tool name and
+// the redacted error are kept.
+function browserToolFailed(title = '', text = '') {
+  const tool = browserToolOf(title);
+  if (!tool) return; // another MCP server's browser_* tool (Playwright's, say)
+  const t0 = Date.now();
+  const chat = journal;
+  const turnId = turn?.id ?? null;
+  const agent = connectedAgent?.name;
+  setTimeout(() => {
+    if (journal !== chat) return; // another chat is open now
+    if (journal.some((e) => e.type === 'action' && !e.ok && e.tool === tool && Date.parse(e.ts) >= t0 - 3000)) return;
+    record('agent_tool', { agent, title: tool, ok: false, browser: true, error: redactText(text || '').slice(0, 300), ...(turnId != null ? { turn: turnId } : {}) });
+  }, 1500);
 }
 
 // ---------- Activity block ----------
@@ -573,10 +672,10 @@ function actionRow(desc, ok, error) {
   return el;
 }
 
-function addAction({ tool, args, label: detail, ok, error }) {
+function addAction({ tool, args, label: detail, ok, error, ms, host, note, frame }) {
   agentBubble = null;
   const desc = describeAction(tool, args, detail) + (args?.tabId != null && tool !== 'browser_tabs' ? ` · tab ${args.tabId}` : '');
-  record('action', { agent: connectedAgent?.name, tool, args, desc, ok, error });
+  record('action', { agent: connectedAgent?.name, tool, args, desc, ok, error, ...(ms != null ? { ms } : {}), ...(host ? { host } : {}), ...(note ? { note } : {}), ...(frame ? { frame } : {}) });
   turn?.actions.push(`${ok ? '' : '✗ '}${desc}${error ? ` (${error})` : ''}`);
   addToActivity(actionRow(desc, ok, error));
 }
@@ -646,6 +745,8 @@ function describeAction(tool, a = {}, detail) {
       return `Request body ${truncate(a.url, 40)}`;
     case 'browser_request_human':
       return `Asked you: ${truncate(a.message, 50)}`;
+    case 'tabhelm_diagnose':
+      return `Self-analysis (${a.scope === 'recent' ? 'last 7 days' : 'this chat'})`;
     case 'browser_request_login':
       return 'Asked you to sign in';
     case 'memory_save':
@@ -722,13 +823,20 @@ function addPermission(msg) {
 
 // Starts (or switches to) an agent. If this chat already has history, the new
 // agent receives it with its first message so it can continue the work.
-// `queued` ({ text, attachments }) is sent as soon as the agent is ready.
+// `queued` ({ text, attachments }) is sent as soon as the agent is ready; with
+// `recorded` it is already in the journal under turn `turn`.
 let starting = false;
 async function startAgent(agentId, queued = null) {
   if (!agentId) return;
-  chrome.storage.local.set({ lastAgent: agentId });
+  chrome.storage.local.set({ lastAgent: nextAgent || agentId });
   els.agent.value = agentId;
-  pendingContext = await buildContext();
+  // A connect without a recorded message starts no task of its own. A message
+  // still waiting for the agent it replaces is not sent (it goes along as context).
+  if (!queued?.recorded) {
+    if (pendingTurnId != null) closeOpenTurn('cancelled', null);
+    pendingTurnId = null;
+  }
+  pendingContext = await buildContext(queued?.recorded ? queued.turn : null);
   autoContinue = queued && typeof queued === 'string' ? { text: queued, attachments: [] } : queued;
   starting = true;
   connected = false;
@@ -744,6 +852,7 @@ window.tabhelmTest = {
 };
 
 els.agent.onchange = () => {
+  nextAgent = null;
   chrome.storage.local.set({ lastAgent: els.agent.value });
   if (!connected) showModelPlaceholder();
   if (!connected || busy) return;
@@ -757,13 +866,19 @@ els.agent.onchange = () => {
 // Shown when a turn fails: hand the task to another agent in one click.
 function offerContinue(reason) {
   const others = agentsList.filter((a) => a.installed && a.id !== connectedAgent?.id);
-  if (!others.length) return;
+  if (!others.length && !featureCache.selfAnalysis) return;
   const card = add('div', 'card');
   const title = document.createElement('div');
   title.className = 'title';
-  title.textContent = `${connectedAgent?.name || 'The agent'} did not finish (${truncate(reason, 120)}). Continue with:`;
+  title.textContent = `${connectedAgent?.name || 'The agent'} did not finish (${truncate(reason, 120)}).${others.length ? ' Continue with:' : ''}`;
   const options = document.createElement('div');
   options.className = 'options';
+  if (featureCache.selfAnalysis) {
+    const d = Object.assign(document.createElement('button'), { className: 'btn primary', textContent: 'Diagnose' });
+    d.dataset.selfAnalysis = '';
+    d.onclick = () => runDiagnose({ source: 'failure' });
+    options.append(d);
+  }
   for (const a of others) {
     const b = Object.assign(document.createElement('button'), { className: 'btn', textContent: a.name });
     b.onclick = () => {
@@ -778,11 +893,23 @@ function offerContinue(reason) {
   scrollDown();
 }
 
+// Leaving a chat (New chat, another chat, closing the panel) ends its task:
+// record how, or the saved chat keeps a task that never got an outcome.
+function closeOpenTurn(stopReason, failure) {
+  if (busy && turn) record('agent', { agent: connectedAgent?.name, model: currentModel, text: turn.text.trim(), thought: turn.thought.trim(), failure, stopReason, stats: turnStats(turn) });
+  // A message whose agent is still starting was never sent.
+  if (pendingTurnId != null && !journal.some((e) => e.type === 'agent' && e.turn === pendingTurnId)) record('agent', { agent: null, text: '', failure, stopReason, turn: pendingTurnId });
+}
+
 els.newChat.onclick = () => {
+  closeOpenTurn('cancelled', null);
+  flushJournal();
   if (busy) stop();
   stopVoice(true);
   stopRecording(true);
   journal = [];
+  turnSeq = 0;
+  pendingTurnId = null;
   chatId = null;
   setCurrentChat(null);
   chrome.storage.session.remove(`activeChat:${tabId}`);
@@ -796,9 +923,16 @@ els.newChat.onclick = () => {
   els.log.replaceChildren(empty);
   els.empty = empty;
   port.postMessage({ type: 'list_agents' }); // re-adds install hints to the empty state
+  // An agent picked "for new chats" (self-analysis) while the old one was connected.
+  if (nextAgent && !starting) {
+    if ([...els.agent.options].some((o) => o.value === nextAgent && !o.disabled)) els.agent.value = nextAgent;
+    nextAgent = null;
+    if (!connected) showModelPlaceholder();
+  }
   // A fresh agent session forgets the previous conversation too.
   if (connected) {
     connected = false;
+    starting = true;
     els.config.hidden = true;
     skillPayload().then((p) => port.postMessage({ type: 'start', agentId: els.agent.value, autoApprove: els.auto.checked, ...p, folder: currentFolder() }));
   }
@@ -832,22 +966,24 @@ els.input.addEventListener('input', () => slashUpdate());
 
 const slash = { items: [], active: 0 };
 const BUILTIN_SLASH = [
-  { name: 'new', description: 'New chat', run: () => els.newChat.click() },
-  { name: 'export', description: 'Export this chat (History → ⬇)', run: () => $('history-open').click() },
-  { name: 'pause', description: 'Pause the agent (Take over)', run: () => $('pause').click() },
+  { name: 'new', description: 'New chat', run: () => els.newChat.click(), flag: 'skillAuthoring' },
+  { name: 'export', description: 'Export this chat (History → ⬇)', run: () => $('history-open').click(), flag: 'skillAuthoring' },
+  { name: 'pause', description: 'Pause the agent (Take over)', run: () => $('pause').click(), flag: 'skillAuthoring' },
+  { name: 'diagnose', description: 'What went wrong in this chat (add what you saw)', flag: 'selfAnalysis' },
+  { name: 'report', description: 'Self-analysis report of all chats', run: () => openReport(), flag: 'selfAnalysis' },
 ];
 
 async function slashUpdate() {
   const menu = $('slash-menu');
   const m = /^\/([\w-]*)$/.exec(els.input.value);
   const features = await getFeatures();
-  if (!m || !features.skillAuthoring) {
+  if (!m || !(features.skillAuthoring || features.selfAnalysis)) {
     menu.hidden = true;
     return;
   }
   const q = m[1].toLowerCase();
-  const skillsList = await slashSkills();
-  slash.items = [...skillsList.map((s) => ({ ...s, skill: true })), ...BUILTIN_SLASH].filter((s) => s.name.toLowerCase().startsWith(q)).slice(0, 8);
+  const skillsList = features.skillAuthoring ? await slashSkills() : [];
+  slash.items = [...skillsList.map((s) => ({ ...s, skill: true })), ...BUILTIN_SLASH.filter((s) => !s.flag || features[s.flag])].filter((s) => s.name.toLowerCase().startsWith(q)).slice(0, 8);
   slash.active = 0;
   menu.replaceChildren(
     ...slash.items.map((s, i) => {
@@ -969,6 +1105,17 @@ function clearQueued() {
 }
 
 async function send() {
+  // "/diagnose [what you saw]" is answered locally, even while the agent works.
+  // Not "/diagnose-…": that is a skill of the user's.
+  const diag = /^\/diagnose(?:\s+([\s\S]*))?$/.exec(els.input.value.trim());
+  if (diag && featureCache.selfAnalysis) {
+    const said = (diag[1] || '').trim();
+    els.input.value = '';
+    $('slash-menu').hidden = true;
+    if (said) record('user_report', { text: said.slice(0, 500) });
+    runDiagnose({ source: 'command', text: said });
+    return;
+  }
   if (busy) return queueMessage();
   const m = composeMessage();
   if (!m) return;
@@ -977,33 +1124,59 @@ async function send() {
   if (!connected) {
     if (!els.agent.value) return notice('No agent is installed. See Settings → Skills or the README to install one.', true);
     if (!starting) notice(`Starting ${els.agent.selectedOptions[0]?.text}…`);
-    await startAgent(els.agent.value, { text, attachments });
+    // Shown and saved now: if the agent fails to start, the message (and why it
+    // failed) stays in the chat instead of vanishing. A message still waiting
+    // for the agent is replaced by this one (it goes along as context).
+    closeOpenTurn('cancelled', null);
+    pendingTurnId = ++turnSeq;
+    breakActivity();
+    userBubble(text, attachments);
+    record('user', { text, attachments: attachments.map((a) => ({ name: a.name, kind: a.kind, size: a.size })), turn: pendingTurnId });
+    await startAgent(els.agent.value, { text, attachments, recorded: true, turn: pendingTurnId });
     return;
   }
   sendNow(text, attachments);
 }
 
-async function sendNow(text, attachments, { silent = false } = {}) {
+// "It does not work" after a failed or empty task: offer a diagnosis next to
+// the message. The message itself still goes to the agent as usual.
+function suggestDiagnose(bubble, text) {
+  if (!featureCache.selfAnalysis || !COMPLAINT_RE.test(text)) return;
+  const last = journal.findLast?.((e) => e.type === 'agent');
+  const lastTurnActions = last ? journal.filter((e) => e.type === 'action' && e.turn === last.turn) : [];
+  if (last && !last.failure && lastTurnActions.length && lastTurnActions.every((e) => e.ok)) return;
+  const b = Object.assign(document.createElement('button'), { type: 'button', className: 'chip diag-suggest', textContent: 'Diagnose this chat' });
+  b.dataset.selfAnalysis = '';
+  b.onclick = () => runDiagnose({ source: 'complaint', text });
+  bubble.after(b);
+}
+
+function userBubble(text, attachments) {
+  const bubble = add('div', 'msg user');
+  bubble.textContent = text;
+  if (attachments.length) {
+    const list = document.createElement('div');
+    list.className = 'attachments';
+    list.append(...attachments.map((a) => chip(a)));
+    bubble.append(list);
+  }
+  return bubble;
+}
+
+// `turnId`: the turn a `recorded` message was saved under while its agent started.
+async function sendNow(text, attachments, { silent = false, recorded = false, turnId = null } = {}) {
   const features = await getFeatures();
   awaitingPlan = Boolean(features.planPreview) && !text.startsWith('[plan approved]');
   breakActivity();
-  if (!silent) {
-    const bubble = add('div', 'msg user');
-    bubble.textContent = text;
-    if (attachments.length) {
-      const list = document.createElement('div');
-      list.className = 'attachments';
-      list.append(...attachments.map((a) => chip(a)));
-      bubble.append(list);
-    }
-  }
+  if (!silent && !recorded) suggestDiagnose(userBubble(text, attachments), text);
   agentBubble = null;
   thoughtEl = null;
   planEl = null;
   busy = true;
-  turn = { text: '', thought: '', actions: [], started: Date.now(), costStart: usage.cost };
+  turn = { id: (recorded ? turnId : null) ?? ++turnSeq, text: '', thought: '', actions: [], started: Date.now(), costStart: usage.cost };
+  pendingTurnId = null;
   usage.lastTurn = null;
-  if (!silent) record('user', { text, attachments: attachments.map((a) => ({ name: a.name, kind: a.kind, size: a.size })) });
+  if (!silent && !recorded) record('user', { text, attachments: attachments.map((a) => ({ name: a.name, kind: a.kind, size: a.size })) });
   setStatus('working', 'Working…');
   if (els.record.checked) startRecording();
   const context = pendingContext; // a string or a pending buildContext()
@@ -1023,13 +1196,23 @@ function stop() {
 }
 
 // `failure` is set when the turn ended without the agent finishing its work.
-function endTurn(note, failure = null) {
-  if (note) notice(note);
+function endTurn(note, failure = null, stopReason = null) {
+  // A task stopped by New chat or by opening another chat was closed already.
+  if (note && (busy || turn)) notice(note);
   lastTurnHadNoActions = !turn || turn.actions.length === 0;
   if (turn) {
     const stats = turnStats(turn);
     showStats(stats);
-    record('agent', { agent: connectedAgent?.name, model: currentModel, text: turn.text.trim(), thought: turn.thought.trim(), failure, stats });
+    record('agent', { agent: connectedAgent?.name, model: currentModel, text: turn.text.trim(), thought: turn.thought.trim(), failure, stopReason, stats });
+    // Several failed steps in a task that "finished": offer a look at why.
+    const failedSteps = journal.filter((e) => e.type === 'action' && e.turn === turn.id && !e.ok).length;
+    if (featureCache.selfAnalysis && !failure && failedSteps >= 3) {
+      const hint = add('div', 'stats-warn');
+      hint.dataset.selfAnalysis = '';
+      const b = Object.assign(document.createElement('button'), { type: 'button', className: 'linkish', textContent: `${failedSteps} steps failed · Diagnose` });
+      b.onclick = () => runDiagnose({ source: 'hint' });
+      hint.append(b);
+    }
     turn = null;
     renderUsageButton();
   }
@@ -1225,12 +1408,12 @@ async function addAsk(msg) {
 // One request/response pair with the host (password manager lookups).
 let nextHostReq = 1;
 const hostWaits = new Map();
-function hostRequest(type, data, replyType) {
+function hostRequest(type, data, replyType, timeoutMs = 30_000) {
   return new Promise((resolve) => {
     const requestId = nextHostReq++;
     hostWaits.set(`${replyType}:${requestId}`, resolve);
     port.postMessage({ type, requestId, ...data });
-    setTimeout(() => hostWaits.has(`${replyType}:${requestId}`) && (hostWaits.delete(`${replyType}:${requestId}`), resolve({ error: 'No answer from the host.' })), 30_000);
+    setTimeout(() => hostWaits.has(`${replyType}:${requestId}`) && (hostWaits.delete(`${replyType}:${requestId}`), resolve({ error: 'No answer from the host.' })), timeoutMs);
   });
 }
 
@@ -1392,18 +1575,6 @@ function turnStats(t) {
   };
 }
 
-const fmtTokens = (n) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1000 ? `${(n / 1000).toFixed(n >= 1e4 ? 0 : 1)}k` : String(n));
-const fmtCost = (c) => `${c.currency === 'USD' ? '$' : `${c.currency} `}${c.amount < 0.01 ? c.amount.toFixed(4) : c.amount.toFixed(2)}`;
-const fmtTime = (ms) => (ms < 60_000 ? `${(ms / 1000).toFixed(1)} s` : `${Math.floor(ms / 60_000)} min ${Math.round((ms % 60_000) / 1000)} s`);
-
-function statsText(s) {
-  const parts = [`⏱ ${fmtTime(s.ms)}`];
-  if (s.tokens) parts.push(`${fmtTokens(s.tokens.total)} tokens`);
-  if (s.cost) parts.push(fmtCost(s.cost));
-  if (s.context?.size) parts.push(`context ${fmtTokens(s.context.used)} / ${fmtTokens(s.context.size)}`);
-  return parts.join(' · ');
-}
-
 function showStats(s) {
   const el = add('div', 'stats');
   el.textContent = statsText(s);
@@ -1417,29 +1588,10 @@ function showStats(s) {
 
 // The conversation for the next agent: messages, the browser actions taken,
 // unfinished work and the current page. Keeps the most recent ~12k characters.
-async function buildContext() {
-  const blocks = [];
-  let actions = [];
-  const flush = (agent) => {
-    if (actions.length) blocks.push(`[${agent || 'Agent'} did in the browser] ${actions.join('; ')}`);
-    actions = [];
-  };
-  for (const e of journal) {
-    if (e.type === 'user') blocks.push(`User: ${e.text}${e.attachments?.length ? ` (attached: ${e.attachments.map((a) => a.name).join(', ')})` : ''}`);
-    else if (e.type === 'action') actions.push(`${e.ok ? '' : 'FAILED '}${e.desc}${e.error ? ` (${e.error})` : ''}`);
-    else if (e.type === 'agent') {
-      flush(e.agent);
-      if (e.text) blocks.push(`${e.agent}: ${e.text}`);
-      if (e.failure) blocks.push(`(${e.agent} stopped before finishing: ${e.failure})`);
-    }
-  }
-  flush(connectedAgent?.name);
-  if (!blocks.length) return null;
-  let out = '';
-  for (let i = blocks.length - 1; i >= 0; i--) {
-    if (out.length + blocks[i].length > 12_000) break;
-    out = `${blocks[i]}\n\n${out}`;
-  }
+// `pendingTurn`: the turn of the recorded message this agent gets as its prompt.
+async function buildContext(pendingTurn = null) {
+  let out = contextText(journal, connectedAgent?.name, { pendingTurn });
+  if (!out) return null;
   const tab = await chrome.tabs.get(targetTabId).catch(() => null);
   if (tab) out += `Current tab: ${tab.title} — ${tab.url}\n`;
   return out.trim();
@@ -1451,6 +1603,9 @@ function syncControls() {
   els.input.placeholder = busy ? 'Add a note for the agent — Enter hands it over with its next step (Stop cancels the task)' : els.input.dataset.placeholder;
   getFeatures().then((f) => {
     $('pause').hidden = !(f.takeOver && busy);
+    $('diagnose-chat').hidden = !f.selfAnalysis;
+    $('report-open').hidden = !f.selfAnalysis;
+    for (const el of document.querySelectorAll('[data-self-analysis]')) el.hidden = !f.selfAnalysis;
     for (const b of document.querySelectorAll('[data-voice]')) b.hidden = !f.voice;
   });
   for (const select of document.querySelectorAll('#config select, #config-extra select')) select.disabled = busy;
@@ -1472,117 +1627,6 @@ function download(filename, content, type) {
   const url = URL.createObjectURL(new Blob([content], { type }));
   Object.assign(document.createElement('a'), { href: url, download: filename }).click();
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
-}
-
-function totalsLine(entries = journal) {
-  const turns = entries.filter((e) => e.type === 'agent' && e.stats);
-  if (!turns.length) return null;
-  const ms = turns.reduce((a, e) => a + e.stats.ms, 0);
-  const tokens = turns.reduce((a, e) => a + (e.stats.tokens?.total || 0), 0);
-  const costs = turns.filter((e) => e.stats.cost);
-  const cost = costs.reduce((a, e) => a + e.stats.cost.amount, 0);
-  return `- Totals: ${turns.length} tasks · ${fmtTime(ms)}${tokens ? ` · ${fmtTokens(tokens)} tokens` : ''}${costs.length ? ` · ${fmtCost({ amount: cost, currency: costs[0].stats.cost.currency })}` : ''}`;
-}
-
-function exportMarkdown(tab, entries = journal) {
-  const time = (ts) => new Date(ts).toLocaleTimeString();
-  const agents = [...new Set(entries.filter((e) => e.type === 'agent_connected').map((e) => e.agent))];
-  const out = [
-    '# TabHelm chat',
-    '',
-    `- Exported: ${new Date().toLocaleString()}`,
-    tab ? `- Tab: ${tab.title} — ${tab.url}` : null,
-    agents.length ? `- Agents: ${agents.join(' → ')}` : null,
-    totalsLine(entries),
-    '',
-  ].filter((l) => l !== null);
-
-  let inActions = false;
-  const section = (heading) => {
-    inActions = false;
-    out.push('', `### ${heading}`, '');
-  };
-  for (const e of entries) {
-    const t = time(e.ts);
-    switch (e.type) {
-      case 'user':
-        section(`${t} · You`);
-        out.push(e.text);
-        if (e.attachments?.length) out.push('', ...e.attachments.map((a) => `- 📎 ${a.name} (${a.kind}, ${Math.round(a.size / 1024)} KB)`));
-        break;
-      case 'action':
-      case 'agent_tool':
-        if (!inActions) {
-          section(`${t} · ${e.agent || 'Agent'} — actions`);
-          inActions = true;
-        }
-        if (e.type === 'action') out.push(`- ${t} ${e.ok ? '✓' : '✗'} ${e.desc}${e.error ? ` — ${e.error}` : ''}`);
-        else out.push(`- ${t} ${e.ok ? '✓' : '✗'} (agent tool) ${e.title}`);
-        break;
-      case 'agent':
-        section(`${t} · ${e.agent || 'Agent'}${e.model ? ` (${e.model})` : ''}`);
-        if (e.thought) out.push('<details><summary>Thinking</summary>', '', e.thought, '', '</details>', '');
-        out.push(e.text || '_No answer._');
-        if (e.failure) out.push('', `> ⚠️ Stopped before finishing: ${e.failure}`);
-        if (e.stats) out.push('', `_${statsText(e.stats)}_`);
-        break;
-      case 'permission':
-        out.push(`- ${t} 🔐 ${e.title} → ${e.answer}`);
-        break;
-      case 'ask':
-      addAsk(msg);
-      break;
-    case 'paused':
-      setPaused(msg.paused);
-      break;
-    case 'page_context':
-      // Selection or image sent from the page (context menu, shortcut, + menu).
-      if (msg.kind === 'image') addImageUrl(msg.srcUrl, msg.pageUrl);
-      else addQuote({ text: msg.text, pageUrl: msg.pageUrl, pageTitle: msg.pageTitle });
-      els.input.focus();
-      break;
-    case 'confirm':
-        out.push(`- ${t} 🔐 ${e.title} → ${e.answer}${e.detail ? ` (${e.detail.replace(/\n/g, ', ')})` : ''}`);
-        break;
-      case 'video':
-        out.push(`- ${t} 🎥 Recording saved: \`${e.path}\``);
-        break;
-      case 'video_deleted':
-        out.push(`- ${t} 🗑 Recording deleted${e.path ? `: \`${e.path}\`` : ''}`);
-        break;
-      case 'model':
-        out.push('', `> ${t} · ${e.agent}: model ${e.model}`);
-        break;
-      case 'agent_connected':
-        out.push('', `> ${t} · ${e.agent} connected`);
-        inActions = false;
-        break;
-      case 'folder':
-        out.push('', `> ${t} · Working folder: ${e.path ? `\`${e.path}\`` : 'none'}`);
-        inActions = false;
-        break;
-      case 'ask':
-        out.push(`- ${t} 🙋 ${e.kind === 'login' ? 'Sign-in requested' : e.message ? `Agent asked: ${e.message}` : `Answered: ${e.answer}`}`);
-        break;
-      case 'pause':
-        out.push('', `> ${t} · Paused — user took over`);
-        break;
-      case 'resume':
-        out.push('', `> ${t} · Resumed`);
-        break;
-      case 'plan_offer':
-        out.push('', `> ${t} · Plan shown, waiting for Start`);
-        break;
-      case 'agent_switch':
-        out.push('', `> ${t} · Switched to ${e.to}${e.reason ? ` (previous agent stopped: ${e.reason})` : ''}`);
-        inActions = false;
-        break;
-      case 'notice':
-        if (e.error) out.push('', `> ⚠️ ${t} · ${e.text}`);
-        break;
-    }
-  }
-  return `${out.join('\n')}\n`;
 }
 
 // ---------- Video recording ----------
@@ -1813,7 +1857,108 @@ syncControls();
 
 showNews($('news'));
 initSettings(port);
-onFeaturesChanged(() => syncControls());
+function hostVersionOf() {
+  return getHostVersion() || null;
+}
+function installedAgents() {
+  return agentsList.filter((a) => a.installed !== false).map((a) => ({ id: a.id, name: a.name, installHint: a.installHint }));
+}
+function liveChat() {
+  return journal.length ? { id: chatId || 'current', created: chatCreated, updated: Date.now(), tabId, agent: chatAgentName(), folder: currentFolder(), test: hostTest, journal: [...journal] } : null;
+}
+initSelfAnalysis({
+  port,
+  tabId,
+  add,
+  scrollDown,
+  record,
+  hostRequest,
+  hostVersion: hostVersionOf,
+  agents: installedAgents,
+  stop,
+  // Never the chat open here: reopening it would stop its task and restart the agent.
+  openSavedChat: (id, { navigate = true } = {}) => id !== chatId && openSavedChat(id, { navigate }),
+  openSettingsAt,
+  setSkillDraft,
+  // An unsent draft stays: the text goes after it.
+  fillComposer: (text) => {
+    const draft = els.input.value.trim();
+    if (!draft.includes(text)) els.input.value = draft ? `${draft}\n\n${text}` : text;
+    els.input.focus();
+  },
+  attachText: (name, text) => {
+    removeTextAttachment(name);
+    return addFiles([new File([text], name, { type: 'text/markdown' })]);
+  },
+  // "Use <agent> for new chats": a connected agent keeps this chat, and the
+  // switch waits for New chat (the dropdown always shows who is answering).
+  useAgent: (id) => {
+    if (![...els.agent.options].some((o) => o.value === id && !o.disabled)) return false;
+    chrome.storage.local.set({ lastAgent: id });
+    if (connected || starting || busy) nextAgent = id;
+    else {
+      nextAgent = null; // an older pick from while an agent was connected
+      els.agent.value = id;
+      showModelPlaceholder();
+    }
+    return true;
+  },
+  // The chat as it is right now (the saved copy may lag behind).
+  liveChat,
+  // What is going on in this panel, for the "right now" checks.
+  liveState: () => ({
+    replaying,
+    busy,
+    connected,
+    turnAgeMs: busy && turn ? Date.now() - turn.started : 0,
+    lastEntryAgeMs: saveState.lastRecordAt ? Date.now() - saveState.lastRecordAt : 0,
+    journalLen: journal.length,
+    // A chat is saved from its first message on; before that nothing is lost.
+    saveable: journal.some((e) => e.type === 'user'),
+    lastSavedLen: saveState.lastSavedLen,
+    lastSaveError: saveState.lastSaveError,
+    openCards: [...document.querySelectorAll('#log .card.ask:not(.resolved)')].map((c) => ({ kind: 'confirm', title: (c.querySelector('.title')?.textContent || '').slice(0, 80) })),
+    hostOffline: $('status').textContent === 'Host offline',
+    versionMismatch: Boolean(hostVersionMismatch()),
+  }),
+});
+onFeaturesChanged(() => {
+  syncControls();
+  refreshFeatureCache();
+});
+
+// Flags as they are now, for the journal (which features were on in a session).
+let featureCache = {};
+async function refreshFeatureCache() {
+  featureCache = { ...(await getFeatures()), singleTab: Boolean((await chrome.storage.local.get('singleTab')).singleTab) };
+}
+refreshFeatureCache();
+// Flags switched in another panel (or its Settings) apply here too.
+chrome.storage.onChanged.addListener((ch, area) => {
+  if (area !== 'local' || !(ch.features || ch.singleTab)) return;
+  refreshFeatureCache();
+  syncControls();
+});
+
+// The panel closing mid-task: record how the task ended and save right away.
+addEventListener('pagehide', () => {
+  closeOpenTurn(null, 'panel closed');
+  flushJournal();
+});
+
+// Errors thrown by the panel itself go into the chat's journal (redacted, at
+// most 20 per chat) — the self-analysis reports them as TabHelm bugs.
+const seenPanelErrors = new Set();
+function recordPanelError(where, err) {
+  const message = redactText(String(err?.message || err || 'error')).slice(0, 200);
+  const frame = topFrame(err?.stack);
+  const key = `${message}|${frame}`;
+  if (seenPanelErrors.has(key) || seenPanelErrors.size >= 20) return;
+  seenPanelErrors.add(key);
+  record('panel_error', { where, message, frame });
+}
+addEventListener('error', (e) => recordPanelError('window', e.error || e.message));
+addEventListener('unhandledrejection', (e) => recordPanelError('promise', e.reason));
 // Voice: the transcript becomes one message in the box; the user edits and sends it.
 initVoice(port, {
   text(text, source) {
@@ -1857,6 +2002,14 @@ initHistory({
 });
 
 async function openSavedChat(id, { navigate = false } = {}) {
+  if (id !== chatId) {
+    closeOpenTurn('cancelled', null);
+    // A message still waiting for its agent, and the hand-over built for it,
+    // belong to the chat being left: the opened chat's own is built on 'ready'.
+    autoContinue = null;
+    pendingContext = null;
+    flushJournal();
+  }
   // Block sending until the agent has restarted with this chat's context.
   const wasConnected = connected;
   if (wasConnected) {
@@ -1881,10 +2034,62 @@ async function openSavedChat(id, { navigate = false } = {}) {
   }
 }
 
+// DOM for one replayed entry (journal-format.js decides what to show).
+function renderOp(op) {
+  if (!op) return;
+  switch (op.kind) {
+    case 'user': {
+      breakActivity();
+      const bubble = add('div', 'msg user');
+      bubble.textContent = op.text;
+      if (op.attachments?.length) {
+        const list = document.createElement('div');
+        list.className = 'attachments';
+        list.append(...op.attachments.map((a) => chip(a)));
+        bubble.append(list);
+      }
+      break;
+    }
+    case 'action':
+      addToActivity(actionRow(op.desc, op.ok, op.error));
+      break;
+    case 'tool': {
+      const el = document.createElement('div');
+      el.className = 'tool';
+      el.textContent = `${op.title} ${op.ok ? '✓' : '✗'}`;
+      addToActivity(el);
+      break;
+    }
+    case 'agent':
+      if (activity) {
+        activity.el.classList.add('done');
+        activity = null;
+      }
+      if (op.thought) {
+        const d = add('details', 'thought');
+        d.innerHTML = '<summary>Thinking</summary><div></div>';
+        d.querySelector('div').textContent = op.thought;
+      }
+      if (op.text) agentMessage(op.text);
+      if (op.failure) notice(`${op.agent} stopped before finishing: ${op.failure}`, true);
+      if (op.stats) {
+        showStats(op.stats);
+        if (op.stats.context) usage.context = op.stats.context;
+        renderUsageButton();
+      }
+      break;
+    case 'notice':
+      notice(op.text, Boolean(op.error));
+      break;
+  }
+}
+
 // Renders a saved journal without recording anything.
 function replayChat(chat) {
   replaying = true;
   journal = [...chat.journal];
+  turnSeq = Math.max(0, ...journal.map((e) => (Number.isFinite(e.turn) ? e.turn : 0)));
+  pendingTurnId = null;
   chatId = chat.id;
   chatCreated = chat.created;
   setCurrentChat(chatId);
@@ -1896,86 +2101,28 @@ function replayChat(chat) {
   toolCards.clear();
   els.log.replaceChildren();
   els.empty = null;
-  for (const e of journal) {
-    switch (e.type) {
-      case 'user': {
-        breakActivity();
-        const bubble = add('div', 'msg user');
-        bubble.textContent = e.text;
-        if (e.attachments?.length) {
-          const list = document.createElement('div');
-          list.className = 'attachments';
-          list.append(...e.attachments.map((a) => chip(a)));
-          bubble.append(list);
-        }
-        break;
+  // One broken entry must never stop the panel from saving the chat again:
+  // `replaying` is reset in finally, and failures are recorded afterwards.
+  const replayErrors = [];
+  try {
+    for (const [i, e] of journal.entries()) {
+      try {
+        renderOp(replayOp(e));
+      } catch (err) {
+        replayErrors.push({ i, type: e?.type, err });
       }
-      case 'action':
-        addToActivity(actionRow(e.desc, e.ok, e.error));
-        break;
-      case 'agent_tool': {
-        const el = document.createElement('div');
-        el.className = 'tool';
-        el.textContent = `${e.title} ${e.ok ? '✓' : '✗'}`;
-        addToActivity(el);
-        break;
-      }
-      case 'agent':
-        if (activity) {
-          activity.el.classList.add('done');
-          activity = null;
-        }
-        if (e.thought) {
-          const d = add('details', 'thought');
-          d.innerHTML = '<summary>Thinking</summary><div></div>';
-          d.querySelector('div').textContent = e.thought;
-        }
-        if (e.text) agentMessage(e.text);
-        if (e.failure) notice(`${e.agent || 'Agent'} stopped before finishing: ${e.failure}`, true);
-        if (e.stats) {
-          showStats(e.stats);
-          if (e.stats.context) usage.context = e.stats.context;
-          renderUsageButton();
-        }
-        break;
-      case 'permission':
-      case 'ask':
-      addAsk(msg);
-      break;
-    case 'paused':
-      setPaused(msg.paused);
-      break;
-    case 'page_context':
-      // Selection or image sent from the page (context menu, shortcut, + menu).
-      if (msg.kind === 'image') addImageUrl(msg.srcUrl, msg.pageUrl);
-      else addQuote({ text: msg.text, pageUrl: msg.pageUrl, pageTitle: msg.pageTitle });
-      els.input.focus();
-      break;
-    case 'confirm':
-        notice(`🔐 ${e.title} → ${e.answer}`);
-        break;
-      case 'notice':
-        if (e.error) notice(e.text, true);
-        break;
-      case 'video':
-        notice(`🎥 Recording saved: ${e.path}`);
-        break;
-      case 'agent_connected':
-        notice(`${e.agent} connected`);
-        break;
-      case 'agent_switch':
-        notice(`Switched to ${e.to}`);
-        break;
-      case 'folder':
-        notice(e.path ? `Working folder: ${e.path}` : 'Working folder removed');
-        break;
     }
+    if (activity) {
+      activity.el.classList.add('done');
+      activity = null;
+    }
+  } finally {
+    replaying = false;
   }
-  if (activity) {
-    activity.el.classList.add('done');
-    activity = null;
+  if (replayErrors.length) {
+    const { i, type, err } = replayErrors[0];
+    record('panel_error', { where: 'replay', idx: i, entryType: type, message: redactText(String(err?.message || err)).slice(0, 200), frame: topFrame(err?.stack), count: replayErrors.length });
   }
-  replaying = false;
   scrollDown();
 }
 

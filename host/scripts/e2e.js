@@ -97,7 +97,7 @@ const browser = await puppeteer.launch({
   // Inherited by the native host: keep test videos out of ~/Videos.
   // The host keeps its backup of the panel's storage in the test profile: tests
   // must never read or overwrite the user's ~/.tabhelm/state.json.
-  env: { ...process.env, TABHELM_RECORDINGS_DIR: join(profile, 'videos'), TABHELM_STATE_FILE: join(profile, 'state.json') },
+  env: { ...process.env, TABHELM_RECORDINGS_DIR: join(profile, 'videos'), TABHELM_STATE_FILE: join(profile, 'state.json'), TABHELM_LOG_FILE: join(profile, 'host.log'), TABHELM_TEST: '1' },
   protocolTimeout: 300_000,
 });
 const page = (await browser.pages())[0] || (await browser.newPage());
@@ -134,7 +134,7 @@ if (process.env.E2E_RELAY) {
   const relayPort = 18000 + Math.floor(Math.random() * 1000);
   const relay = spawn(process.execPath, [fileURLToPath(new URL('../../relay/server.js', import.meta.url))], { env: { ...process.env, PORT: String(relayPort), RELAY_KEY: 'test-relay-key-12345' }, stdio: ['ignore', 'pipe', 'inherit'] });
   await new Promise((r) => relay.stdout.on('data', (d) => /listening/.test(String(d)) && r()));
-  const hostProc = spawn(process.execPath, [fileURLToPath(new URL('../src/native-host.js', import.meta.url)), '--relay', `ws://127.0.0.1:${relayPort}`, '--key', 'test-relay-key-12345', '--name', 'testbox'], { env: { ...process.env, TABHELM_RECORDINGS_DIR: join(profile, 'videos'), TABHELM_STATE_FILE: join(profile, 'relay-state.json') }, stdio: ['ignore', 'ignore', 'pipe'] });
+  const hostProc = spawn(process.execPath, [fileURLToPath(new URL('../src/native-host.js', import.meta.url)), '--relay', `ws://127.0.0.1:${relayPort}`, '--key', 'test-relay-key-12345', '--name', 'testbox'], { env: { ...process.env, TABHELM_RECORDINGS_DIR: join(profile, 'videos'), TABHELM_STATE_FILE: join(profile, 'relay-state.json'), TABHELM_LOG_FILE: join(profile, 'relay-host.log'), TABHELM_TEST: '1' }, stdio: ['ignore', 'ignore', 'pipe'] });
   relayProcs = [relay, hostProc];
   const code = await new Promise((r) => hostProc.stderr.on('data', (d) => { const m = /pairing code:\s+([A-Z0-9]{4}-[A-Z0-9]{4})/.exec(String(d)); if (m) r(m[1]); }));
   console.log('relay pairing code:', code);

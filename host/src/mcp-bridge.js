@@ -10,7 +10,7 @@ import { z } from 'zod';
 const { TABHELM_URL, TABHELM_TOKEN, TABHELM_TAB } = process.env;
 const tabId = Number(TABHELM_TAB);
 
-const server = new McpServer({ name: 'tabhelm-browser', version: '0.30.0' });
+const server = new McpServer({ name: 'tabhelm-browser', version: '0.31.0' });
 
 async function call(tool, args = {}) {
   try {
@@ -260,6 +260,14 @@ const tools = {
     description: 'Search notes saved in earlier chats (Memory flag).',
     inputSchema: { query: z.string().optional() },
   },
+  tabhelm_diagnose: {
+    description:
+      "TabHelm self-analysis (Self-analysis flag). Call it when the user says TabHelm, a browser tool or this task does not work, or when browser tools keep failing without a clear reason — before guessing or retrying. Returns a redacted list of likely causes from TabHelm's own records (errors by category, failing tools, setup problems, site knowledge or skills that were missing, bugs in TabHelm itself) with suggested fixes. It never contains page content or typed text. scope \"recent\" also covers the user's other chats of the last 7 days and asks the user first.",
+    inputSchema: {
+      scope: z.enum(['chat', 'recent']).optional().describe('chat (default): this chat; recent: the last 7 days, the user is asked first'),
+      problem: z.string().max(200).optional().describe("The user's words about what is wrong; only used to rank the findings"),
+    },
+  },
   browser_evaluate: {
     description: 'Run a JavaScript expression in the page and return its JSON result (awaits promises). The user must approve every call.',
     inputSchema: { expression: z.string() },
@@ -275,7 +283,31 @@ for (const [name, def] of Object.entries(tools)) {
   if (name.startsWith('browser_') && !['browser_tabs', 'browser_search_tabs'].includes(name)) def.inputSchema = { ...def.inputSchema, tabId: tabIdParam };
 }
 
+// Tools behind a feature flag are offered only when it is on for this session
+// (TABHELM_FEATURES, set by the host at session start), so agents do not waste
+// calls on tools that would only answer "this feature is off". An older host
+// without the variable keeps offering everything except the newest tool.
+const FLAG_OF = {
+  browser_fill_form: 'devTools',
+  browser_network_body: 'devTools',
+  browser_storage: 'devTools',
+  browser_emulate: 'devTools',
+  browser_highlight: 'devTools',
+  browser_script_list: 'pageScripts',
+  browser_script_save: 'pageScripts',
+  browser_script_run: 'pageScripts',
+  browser_style: 'pageScripts',
+  browser_request_human: 'takeOver',
+  browser_request_login: 'passwordManager',
+  memory_save: 'memory',
+  memory_search: 'memory',
+  tabhelm_diagnose: 'selfAnalysisAgent',
+};
+const featuresEnv = process.env.TABHELM_FEATURES;
+const featuresOn = new Set((featuresEnv || '').split(',').filter(Boolean));
 for (const [name, def] of Object.entries(tools)) {
+  const flag = FLAG_OF[name];
+  if (flag && (featuresEnv === undefined ? flag === 'selfAnalysisAgent' : !featuresOn.has(flag))) continue;
   server.registerTool(name, def, (args) => call(name, args));
 }
 

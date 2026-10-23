@@ -1050,8 +1050,8 @@ input[type='checkbox'] {
 
 .history-item .history-delete:hover,
 .btn.danger:hover {
-  color: var(--th-error, #b42318);
-  border-color: var(--th-error, #b42318);
+  color: var(--th-err);
+  border-color: var(--th-err);
 }
 
 .tabs-row .tab-line {
@@ -1666,4 +1666,197 @@ button.chip:hover {
 
 .usage-fill {
   width: 0;
+}
+
+/* Self-analysis: Diagnose card, report, preview dialog */
+.card.diag {
+  border-color: var(--accent);
+}
+
+.diag-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.diag-live {
+  font-size: 12px;
+  margin: 4px 0;
+  padding: 4px 8px;
+  border-left: 3px solid var(--warn);
+}
+
+.finding {
+  border: 1px solid var(--border);
+  border-radius: var(--th-radius-m);
+  margin: 6px 0;
+  background: var(--panel);
+}
+
+.finding > summary {
+  cursor: pointer;
+  padding: 6px 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: baseline;
+}
+
+.finding-title {
+  font-weight: 600;
+}
+
+.finding-meta {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.finding-body {
+  padding: 0 8px 8px;
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+  /* Severity colours the badge and title only; the explanation stays readable. */
+  color: var(--text);
+}
+
+.finding-body .hint {
+  color: var(--muted);
+}
+
+.finding-body code {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: var(--code-bg);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.finding-body .fix {
+  font-weight: 500;
+}
+
+.sev {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--code-bg);
+  color: var(--muted);
+}
+
+.sev-1,
+.sev-2 {
+  color: var(--th-err);
+}
+
+.sev-3 {
+  color: var(--warn);
+}
+
+.finding .badge {
+  font-size: 10px;
+  padding: 0 5px;
+  border-radius: 8px;
+  background: var(--th-accent-soft);
+}
+
+.finding-group > summary {
+  cursor: pointer;
+  font-weight: 600;
+  margin: 10px 0 4px;
+}
+
+.evidence {
+  margin: 0;
+  padding-left: 16px;
+}
+
+.linkish {
+  font: inherit;
+  font-size: 12px;
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--accent);
+  cursor: pointer;
+  text-align: left;
+}
+
+.stats-warn {
+  font-size: 11px;
+  margin: -2px 0 4px;
+}
+
+.chip.diag-suggest {
+  align-self: flex-end;
+  font: inherit;
+  font-size: 11px;
+  border: 1px dashed var(--accent);
+  border-radius: 10px;
+  padding: 1px 8px;
+  background: var(--panel);
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.report-summary {
+  font-weight: 600;
+}
+
+.report-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.report-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.report-table th,
+.report-table td {
+  border-bottom: 1px solid var(--border);
+  padding: 3px 4px;
+  text-align: left;
+}
+
+dialog.sa-preview {
+  width: min(560px, 94vw);
+  border: 1px solid var(--border);
+  border-radius: var(--th-radius-m);
+  background: var(--panel);
+  color: var(--text);
+}
+
+dialog.sa-preview textarea {
+  width: 100%;
+  box-sizing: border-box;
+  font: 11px/1.4 var(--th-font-mono);
+}
+
+dialog.sa-preview::backdrop {
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.sa-status {
+  border-top: 1px solid var(--border);
+  background: var(--panel);
+  padding: 4px 12px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.sa-status.error {
+  color: var(--th-err);
+}
+
+.flash {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  transition: outline-color 1.5s;
 }

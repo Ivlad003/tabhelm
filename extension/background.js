@@ -3,6 +3,8 @@ import { listScripts, scriptMatches } from './scripts-lib.js';
 import { checkPolicy, pauseChat, resumeChat, isPaused, READ_ONLY } from './policy.js';
 import { getFeatures, getSetting, hostFeaturePayload } from './features.js';
 import { runScheduled, SCHEDULE_PREFIX } from './scheduler.js';
+import { saveChat, loadChat } from './history.js';
+import { hostOf, redactText, topFrame } from './redact.js';
 
 const HOST_NAME = 'com.tabhelm.host';
 const panels = new Map(); // chat tabId -> side panel port
@@ -19,7 +21,28 @@ let nativePort = null;
 // Dev hook for scripts/tools-test.js: lets the test call tools directly from the service worker.
 self.tabhelmDebug = { runTool, ensureGroup, chatDebugState, focusVisibleTab, runSchedule: (id) => runScheduled(id, scheduleDeps), sendPageContext, backupState, restoreState, startRecording, stopRecording, ui: () => ui };
 
+// The service worker's own errors, kept for the self-analysis (redacted, last 50).
+async function recordSwError(err) {
+  try {
+    const { swErrors = [] } = await chrome.storage.local.get('swErrors');
+    swErrors.push({ ts: new Date().toISOString(), message: redactText(String(err?.message || err || 'error')).slice(0, 200), frame: topFrame(err?.stack) });
+    await chrome.storage.local.set({ swErrors: swErrors.slice(-50) });
+  } catch {}
+}
+self.addEventListener('error', (e) => recordSwError(e.error || e.message));
+self.addEventListener('unhandledrejection', (e) => recordSwError(e.reason));
+
+// Which version ran when: lets the self-analysis say "probably fixed in 0.x".
+chrome.runtime.onInstalled.addListener(async () => {
+  const v = chrome.runtime.getManifest().version;
+  const { versionHistory = [] } = await chrome.storage.local.get('versionHistory');
+  if (versionHistory.at(-1)?.v !== v) await chrome.storage.local.set({ versionHistory: [...versionHistory, { v, at: new Date().toISOString() }].slice(-50) });
+});
+
 const autoApproveTabs = new Set(); // chats with Auto-approve on (panel checkbox)
+const logWaits = new Map(); // requestId -> resolve, for host.log digests asked by the service worker
+let nextLogReq = 1;
+const liveChatWaits = new Map(); // requestId -> resolve, for the panel's live chat
 
 // ---------- Page context: selection / image → chat ----------
 const pendingPageContext = new Map(); // tabId -> [payload]
@@ -104,7 +127,9 @@ const ui = {
   // answered by Auto-approve; uploads from disk and the opt-in safety gates
   // (sensitive actions, site rules, critic) always ask.
   confirm(chatTabId, title, detail, { routine = false } = {}) {
-    if (!panels.has(chatTabId)) return Promise.resolve(false); // scheduled runs never confirm
+    // Nobody can answer without a panel (scheduled runs, a closed panel). Say so,
+    // instead of pretending the user declined.
+    if (!panels.has(chatTabId)) return Promise.reject(new Error(`No one could approve "${title}": no panel is open (scheduled run or closed panel).`));
     if (routine && autoApproveTabs.has(chatTabId)) {
       deliver(chatTabId, { type: 'confirm_auto', title, detail });
       return Promise.resolve(true);
@@ -137,8 +162,33 @@ const ui = {
   guideDone(chatTabId, info) {
     deliver(chatTabId, { type: 'guide_done', ...info });
   },
+  // host.log digest for the agent's self-check (tabhelm_diagnose); null if the host is away.
+  logDigest({ chatTabId, since, until, tabIds }) {
+    return new Promise((resolve) => {
+      const requestId = `sw-${nextLogReq++}`;
+      logWaits.set(requestId, resolve);
+      try {
+        ensureNative().postMessage({ type: 'log_digest', tabId: chatTabId, requestId, since, until, tabIds });
+      } catch {
+        logWaits.delete(requestId);
+        return resolve(null);
+      }
+      setTimeout(() => logWaits.has(requestId) && (logWaits.delete(requestId), resolve(null)), 10_000);
+    });
+  },
   skillsChanged() {
     for (const port of panels.values()) port.postMessage({ type: 'skills_changed' });
+  },
+  // The panel's chat as it is now, with the host version and installed agents
+  // (tabhelm_diagnose). Null without a panel or when it does not answer.
+  liveChat(chatTabId) {
+    if (!panels.has(chatTabId)) return Promise.resolve(null);
+    return new Promise((resolve) => {
+      const requestId = nextLogReq++;
+      liveChatWaits.set(requestId, resolve);
+      deliver(chatTabId, { type: 'live_chat_request', requestId });
+      setTimeout(() => liveChatWaits.has(requestId) && (liveChatWaits.delete(requestId), resolve(null)), 2000);
+    });
   },
   onTarget(chatTabId, tab) {
     deliver(chatTabId, { type: 'target', tabId: tab.id, title: tab.title || tab.url, isChat: tab.id === chatTabId });
@@ -275,8 +325,12 @@ function broadcast(msg) {
 
 async function onHostMessage(msg) {
   if (msg.type === 'tool_call') {
+    const t0 = performance.now();
     let reply;
     let label;
+    let note = null;
+    let frame = null;
+    let targetTab = null;
     let args = msg.args;
     try {
       const info = chatInfo.get(msg.tabId) || { task: '', actions: [] };
@@ -297,15 +351,26 @@ async function onHostMessage(msg) {
       args = policy.args;
       const result = await runTool(msg.tabId, msg.tool, args, ui);
       label = result.label;
+      note = result.note;
+      targetTab = result.tabId;
       reply = { type: 'tool_result', id: msg.id, ok: true, content: result.content };
       if (!READ_ONLY.has(msg.tool)) info.actions.push(describe(msg.tool, msg.args));
       chatInfo.set(msg.tabId, info);
     } catch (err) {
       reply = { type: 'tool_result', id: msg.id, ok: false, error: err.message || String(err) };
+      frame = err?.frame || null;
     }
+    // For the journal: how long it took, on which site, soft notes and the code frame of internal errors.
+    const ms = Math.round(performance.now() - t0);
+    const host = hostOf((await chrome.tabs.get(targetTab ?? msg.tabId).catch(() => null))?.url);
     // The panel and logs get the original args (placeholders, not secrets).
-    deliver(msg.tabId, { type: 'tool_activity', tool: msg.tool, args: msg.args, label, ok: reply.ok, error: reply.error });
+    deliver(msg.tabId, { type: 'tool_activity', tool: msg.tool, args: msg.args, label, ok: reply.ok, error: reply.error, ms, host, note, frame });
     nativePort?.postMessage(reply);
+    return;
+  }
+  if (msg.type === 'log_digest' && logWaits.has(msg.requestId)) {
+    logWaits.get(msg.requestId)(msg.digest && !msg.digest.error ? msg.digest : null);
+    logWaits.delete(msg.requestId);
     return;
   }
   if (msg.type === 'state_item' || msg.type === 'state_done') {
@@ -336,6 +401,21 @@ function describe(tool, a = {}, labels = []) {
 // Messages from a panel (or a scheduled runner) to the host, with the bits the
 // service worker adds or handles itself.
 export async function fromPanel(tabId, msg, port) {
+  if (msg.type === 'live_chat') {
+    liveChatWaits.get(msg.requestId)?.(msg);
+    liveChatWaits.delete(msg.requestId);
+    return;
+  }
+  // The panel's last words (closing, New chat, opening another chat): saved here,
+  // because an async storage write from a closing page may never finish.
+  if (msg.type === 'journal_flush') {
+    const t = await chrome.tabs.get(tabId).catch(() => null);
+    // The tab may be gone already (its panel is closing): keep the saved page,
+    // so History can still bring the chat back to it.
+    const prev = t ? null : await loadChat(msg.chat.id).catch(() => null);
+    await saveChat({ ...msg.chat, url: t?.url ?? prev?.url ?? null, pageTitle: t?.title ?? prev?.pageTitle ?? null }).catch(() => {});
+    return;
+  }
   if (msg.type === 'confirm_response') {
     confirms.get(msg.id)?.resolve(Boolean(msg.allow));
     confirms.delete(msg.id);
