@@ -67,7 +67,7 @@ export class AgentSession {
     const { agent } = this;
     this.child = spawnAgent(agent.command, agent.args, {
       cwd: this.folder || this.workspace,
-      env: process.env,
+      env: agent.env ? { ...process.env, ...agent.env } : process.env,
       stdio: ['pipe', 'pipe', 'pipe'],
     });
     this.child.stderr.on('data', (d) => this.log(`[${agent.id}:${this.tabId}] ${d.toString().trimEnd()}`));

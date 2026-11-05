@@ -16,7 +16,8 @@
     "test:builtin": "node scripts/builtin-test.js",
     "test:flags": "node scripts/flags-test.js",
     "test:monkey": "node scripts/monkey.js",
-    "test:selfanalysis": "node --test scripts/selfanalysis/"
+    "test:selfanalysis": "node --test scripts/selfanalysis/",
+    "test:agents": "node --test scripts/agents.test.js scripts/windows-path.test.js"
   },
   "dependencies": {
     "@agentclientprotocol/claude-agent-acp": "^0.89.1",

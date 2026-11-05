@@ -261,7 +261,7 @@ Chrome стирає сховище розширення, коли його ви�
 |---|---|---|
 | Claude Code | `claude-agent-acp` (адаптер у комплекті) | [claude.com/claude-code](https://claude.com/claude-code) |
 | Codex | `codex-acp` (адаптер у комплекті) | `npm i -g @openai/codex` |
-| Cursor Agent CLI | `agent acp` (або `cursor-agent acp`) | `curl https://cursor.com/install -fsS \| bash` |
+| Cursor Agent CLI | `agent acp` (або `cursor-agent acp`); знаходиться й поза PATH — у теці встановлення або копія всередині Cursor IDE | macOS/Linux: `curl https://cursor.com/install -fsS \| bash`<br>Windows (PowerShell): `irm 'https://cursor.com/install?win32=true' \| iex` |
 | Google Antigravity | ACP-сервер Google `agy_acp_server.par` | `npm run install-agent -- antigravity` |
 | OpenCode | `opencode acp` | `curl -fsSL https://opencode.ai/install \| bash` |
 | Qoder CLI | `qodercli --acp` | `npm run install-agent -- qoder` або `curl -fsSL https://qoder.com/install \| bash` |

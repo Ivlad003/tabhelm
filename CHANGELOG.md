@@ -2,6 +2,12 @@
 
 All notable changes to TabHelm. The newest release is at the top; the panel's update banner links here.
 
+## [Unreleased]
+
+### Fixed
+- **Cursor Agent CLI showed as "not installed" although it was installed** (macOS and Windows). TabHelm only looked on the PATH saved when the host was set up, so a CLI installed later — on Windows the installer adds it to PATH only for new programs — was missed. It now also checks Cursor's install folder (`~/.local/bin`, `%LOCALAPPDATA%\cursor-agent`) and the copy of the CLI that Cursor IDE downloads for itself. The install hint on Windows shows the PowerShell command.
+- **Windows: any agent installed after TabHelm showed as "not installed"** until you ran the installer again. The host now reads the current user and system PATH from Windows, so a newly installed agent (OpenCode, Codex, Claude Code, …) appears the next time you open the panel. Folder names with non-English letters work too.
+
 ## [0.31.0] - 2026-10-23
 
 ### Added

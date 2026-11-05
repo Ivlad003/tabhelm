@@ -24,6 +24,38 @@ function installedManifest(id) {
 // Launch candidate for an agent installed with install-agent (read at lookup time).
 const installed = (id) => () => installedManifest(id);
 
+// Where the Cursor Agent CLI lives besides PATH. The PATH baked into the host
+// wrapper by install-host can predate the CLI install (on Windows the installer
+// only adds it to PATH for new processes), and Cursor IDE keeps its own copy.
+export function cursorLocations({ platform = process.platform, home = homedir(), env = process.env } = {}) {
+  const win = platform === 'win32';
+  const configDir =
+    platform === 'darwin' ? join(home, 'Library', 'Application Support') : win ? env.APPDATA || join(home, 'AppData', 'Roaming') : env.XDG_CONFIG_HOME || join(home, '.config');
+  return {
+    // Official installer: ~/.local/bin on macOS/Linux, %LOCALAPPDATA%\cursor-agent on Windows.
+    standalone: win ? join(env.LOCALAPPDATA || join(home, 'AppData', 'Local'), 'cursor-agent', 'cursor-agent') : join(home, '.local', 'bin', 'cursor-agent'),
+    // Cursor IDE's copy, downloaded for its agent worker.
+    ide: join(configDir, 'Cursor', 'User', 'globalStorage', 'anysphere.cursor-agent-worker', 'agent-cli'),
+  };
+}
+
+// Cursor IDE's copy: a cursor-agent link on macOS/Linux; on Windows the IDE runs
+// node.exe with index.js from the newest build, so TabHelm does the same.
+export function cursorIdeLaunch(ideDir, platform = process.platform) {
+  if (platform !== 'win32') return { command: join(ideDir, '.local', 'bin', 'cursor-agent'), args: ['acp'] };
+  const versions = join(ideDir, '.local', 'share', 'cursor-agent', 'versions');
+  let builds;
+  try {
+    builds = readdirSync(versions).filter((d) => !d.startsWith('.')).sort().reverse();
+  } catch {
+    return null;
+  }
+  const dir = builds.map((d) => join(versions, d)).find((d) => existsSync(join(d, 'node.exe')) && existsSync(join(d, 'index.js')));
+  return dir ? { command: join(dir, 'node.exe'), args: [join(dir, 'index.js'), 'acp'], env: { CURSOR_INVOKED_AS: 'cursor-agent' } } : null;
+}
+
+const cursor = cursorLocations();
+
 // Every agent is launched as an ACP server over stdio. `launch` lists
 // candidates in priority order; the first whose command exists is used.
 // `requires` (optional) must also be on PATH, e.g. the CLI an adapter drives;
@@ -58,8 +90,13 @@ export const AGENTS = [
       // `agent` is a generic name, so only accept it when it resolves into a Cursor install.
       { command: 'agent', args: ['acp'], pathIncludes: 'cursor' },
       { command: 'cursor-agent', args: ['acp'] },
+      { command: cursor.standalone, args: ['acp'] },
+      () => cursorIdeLaunch(cursor.ide),
     ],
-    installHint: 'Install Cursor CLI: curl https://cursor.com/install -fsS | bash',
+    installHint:
+      process.platform === 'win32'
+        ? "Install Cursor CLI (PowerShell): irm 'https://cursor.com/install?win32=true' | iex"
+        : 'Install Cursor CLI: curl https://cursor.com/install -fsS | bash',
   },
   {
     id: 'opencode',
@@ -151,7 +188,7 @@ function resolveLaunch(agent) {
     const path = findExecutable(candidate.command);
     if (!path) continue;
     if (candidate.pathIncludes && !realpathSync(path).toLowerCase().includes(candidate.pathIncludes)) continue;
-    return { command: path, args: candidate.args };
+    return { command: path, args: candidate.args, ...(candidate.env && { env: candidate.env }) };
   }
   return null;
 }

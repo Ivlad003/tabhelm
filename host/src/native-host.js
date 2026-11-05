@@ -20,7 +20,7 @@ import { homedir, hostname } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { createNativeChannel, createRelayChannel } from './native-messaging.js';
 import { listAgents, getAgent } from './agents.js';
-import { loadEnvFile } from './env.js';
+import { loadEnvFile, refreshWindowsPath, windowsPathReady } from './env.js';
 import { loadSkill, runSkillTool, listSkillCollection } from './skills.js';
 import { folderInfo, pickFolder, projectInstructions, projectSkills } from './folders.js';
 import { reviewAction } from './critic.js';
@@ -134,7 +134,17 @@ const toolServer = await startToolServer({
 });
 const hostVersion = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
 log(`host started v${hostVersion} node=${process.version} ${process.platform}${relayMode ? ' relay' : ''}, tool server ${toolServer.url}`);
-send({ type: 'agents', agents: listAgents(), hostVersion, test: process.env.TABHELM_TEST === '1', remote: relayMode ? { name: argValue('--name') || process.env.TABHELM_RELAY_NAME || hostname() } : null });
+function agentsMessage() {
+  return { type: 'agents', agents: listAgents(), hostVersion, test: process.env.TABHELM_TEST === '1', remote: relayMode ? { name: argValue('--name') || process.env.TABHELM_RELAY_NAME || hostname() } : null };
+}
+send(agentsMessage());
+// Windows: agents installed after setup are on the live PATH, not the saved one.
+// The lookup takes a moment, so the list is sent again if it found new folders.
+refreshWindowsPath().then((added) => {
+  if (!added.length) return;
+  log(`added ${added.length} folder(s) from the live Windows PATH`);
+  send(agentsMessage());
+});
 
 // Messages are handled concurrently, so a prompt sent right after `start` (New
 // chat, switching agents, the first message) could overtake the start and find
@@ -161,11 +171,14 @@ async function handleMessageNow(msg) {
       case 'ping':
         break;
       case 'list_agents':
-        send({ type: 'agents', agents: listAgents(), hostVersion, test: process.env.TABHELM_TEST === '1', remote: relayMode ? { name: argValue('--name') || process.env.TABHELM_RELAY_NAME || hostname() } : null });
+        send(agentsMessage());
+        // Windows: an agent installed since the last look appears once the live PATH is read.
+        if ((await refreshWindowsPath()).length) send(agentsMessage());
         break;
 
       case 'start': {
         await stopSession(tabId);
+        await windowsPathReady();
         const agent = getAgent(msg.agentId);
         if (!agent) throw new Error(`Unknown agent ${msg.agentId}`);
         send({ type: 'status', tabId, state: 'starting', agent: { id: agent.id, name: agent.name } });

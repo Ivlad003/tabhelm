@@ -261,7 +261,7 @@ Example: with a contact card in one tab and a form in the chat's tab, "copy the 
 |---|---|---|
 | Claude Code | `claude-agent-acp` (bundled adapter) | [claude.com/claude-code](https://claude.com/claude-code) |
 | Codex | `codex-acp` (bundled adapter) | `npm i -g @openai/codex` |
-| Cursor Agent CLI | `agent acp` (or `cursor-agent acp`) | `curl https://cursor.com/install -fsS \| bash` |
+| Cursor Agent CLI | `agent acp` (or `cursor-agent acp`); also found off PATH in its install folder or the copy inside Cursor IDE | macOS/Linux: `curl https://cursor.com/install -fsS \| bash`<br>Windows (PowerShell): `irm 'https://cursor.com/install?win32=true' \| iex` |
 | Google Antigravity | Google's ACP server `agy_acp_server.par` | `npm run install-agent -- antigravity` |
 | OpenCode | `opencode acp` | `curl -fsSL https://opencode.ai/install \| bash` |
 | Qoder CLI | `qodercli --acp` | `npm run install-agent -- qoder` or `curl -fsSL https://qoder.com/install \| bash` |
