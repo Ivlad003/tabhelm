@@ -64,7 +64,7 @@ const FAIL_SOURCES = new Set(['A', 'F', 'N', 'P', 'T']);
 const NAV_TOOLS = new Set(['browser_navigate', 'browser_go_back', 'browser_go_forward', 'browser_reload']);
 const REF_TOOLS = new Set(['browser_click', 'browser_type', 'browser_select_option', 'browser_hover', 'browser_drag', 'browser_fill_form']);
 const LOOK_TOOLS = new Set(['browser_snapshot', 'browser_find']);
-const HUMAN_TOOLS = new Set(['browser_request_human', 'browser_request_login', 'browser_guide']);
+const HUMAN_TOOLS = new Set(['browser_request_human', 'browser_request_login', 'browser_guide', 'browser_guide_wait']);
 // Reading the page again is not a loop by itself; the snapshot-share rule covers it.
 const SAME_CALL_EXEMPT = new Set(['browser_snapshot', 'browser_screenshot']);
 // Typing into one field after another is how forms are filled, not a loop.

@@ -229,6 +229,41 @@ await sw.evaluate(() => chrome.storage.local.set({ highlightFinds: true }));
   check('auto-play setting on: the guide plays by itself without any prompt', r.ok && /auto-clicked[\s\S]*auto-clicked/.test(r.text) && (after.pickA || 0) === (before.pickA || 0) + 1 && (after.pickB || 0) === (before.pickB || 0) + 1 && Date.now() - t0 >= 2000, `${r.text} ${JSON.stringify(after)} ${Date.now() - t0}ms`);
 }
 
+// --- A guide outlives its tool call: past waitSec (Cursor's MCP client ends a
+// call after about a minute) the agent hears where the guide is and collects the
+// result with browser_guide_wait; a newer guide replaces one still on the page.
+{
+  const guideButton = (re) => page.evaluate((src) => [...document.getElementById('tabhelm-guide').shadowRoot.querySelectorAll('button')].find((b) => new RegExp(src).test(b.textContent)).click(), re);
+  const guideText = () => page.evaluate(() => document.getElementById('tabhelm-guide')?.shadowRoot?.querySelector('.text')?.textContent || '');
+  await sw.evaluate(() => chrome.storage.local.set({ guideAutoPlay: false }));
+  snap = await tool('browser_snapshot');
+  const early = await tool('browser_guide', { auto: true, waitSec: 1, steps: [{ ref: refFor(snap.text, 'Pick A'), text: 'Press A' }, { ref: refFor(snap.text, 'Pick B'), text: 'Press B' }] });
+  const onPage = await page.evaluate(() => Boolean(document.getElementById('tabhelm-guide')));
+  check('guide answers within waitSec and stays on the page', early.ok && /still on the page, at step 1 of 2/.test(early.text) && /browser_guide_wait/.test(early.text) && onPage, `${early.text} | overlay ${onPage}`);
+  check('the early answer says auto-play is off in the settings', /auto-play is off in the user's settings/.test(early.text), early.text);
+  const pendingWait = await tool('browser_guide_wait', { waitSec: 1 });
+  check('browser_guide_wait says "still on the page" while the user is on it', pendingWait.ok && /still on the page/.test(pendingWait.text), pendingWait.text);
+  const waiting = tool('browser_guide_wait', {});
+  await guideButton('Next');
+  await page.waitForFunction(() => /Press B/.test(document.getElementById('tabhelm-guide')?.shadowRoot?.querySelector('.text')?.textContent || ''), { timeout: 5000 });
+  await guideButton('Finish');
+  const done = await waiting;
+  check('browser_guide_wait returns the result once the user finishes', done.ok && /1\. Press A → done/.test(done.text) && /2\. Press B → done/.test(done.text), done.text);
+  const none = await tool('browser_guide_wait', {});
+  check('browser_guide_wait after the result: no guide running', none.ok && /No guide is running/.test(none.text), none.text);
+
+  const first = await tool('browser_guide', { waitSec: 1, steps: [{ ref: refFor(snap.text, 'Pick A'), text: 'Old guide step' }] });
+  const second = tool('browser_guide', { steps: [{ ref: refFor(snap.text, 'Pick B'), text: 'New guide step' }] });
+  await page.waitForFunction(() => /New guide step/.test(document.getElementById('tabhelm-guide')?.shadowRoot?.querySelector('.text')?.textContent || ''), { timeout: 5000 });
+  const overlays = await page.evaluate(() => document.querySelectorAll('#tabhelm-guide').length);
+  const shownText = await guideText();
+  await guideButton('Finish');
+  const sr = await second;
+  check('a newer guide replaces the one still on the page', /still on the page/.test(first.text) && overlays === 1 && /New guide step/.test(shownText) && sr.ok && /New guide step → done/.test(sr.text), `${first.text} | overlays ${overlays} | ${sr.text}`);
+  const gone = await tool('browser_guide_wait', {});
+  check('the replaced guide leaves nothing to wait for', /No guide is running/.test(gone.text), gone.text);
+}
+
 // --- Element picker: one element by click, several by dragging a rectangle
 {
   await page.evaluate(() => document.getElementById('pickZone').scrollIntoView({ block: 'center' }));
@@ -548,6 +583,69 @@ r = await tool('browser_reload');
 check('reload', r.ok && r.text.includes('page2'), r.text);
 r = await tool('browser_wait', { text: 'Second page' });
 check('wait for text', r.ok && r.text.includes('is on the page'), r.text);
+
+// --- Settings: a switch changed while the panel is still loading keeps its value
+// (the value read at startup used to turn Auto-play guides back off), and every
+// open panel (one per chat tab) follows a change made in another one.
+{
+  const extId = new URL(swTarget.url()).host;
+  const chatTab = await sw.evaluate(async () => (await chrome.tabs.create({ url: 'about:blank', active: false })).id);
+  const panelUrl = `chrome-extension://${extId}/sidepanel.html?tabId=${chatTab}`;
+  const autoPlayBox = (p) => p.evaluate(() => document.getElementById('guide-autoplay').checked);
+  const storedAutoPlay = async () => (await sw.evaluate(() => chrome.storage.local.get('guideAutoPlay'))).guideAutoPlay;
+  await sw.evaluate(() => chrome.storage.local.set({ guideAutoPlay: false }));
+  const slow = await browser.newPage();
+  // The startup read of the settings answers late, as on a busy browser.
+  await slow.evaluateOnNewDocument(() => {
+    const area = chrome.storage.local;
+    const get = area.get.bind(area);
+    area.get = (keys, ...rest) => {
+      const read = get(keys, ...rest);
+      if (!(Array.isArray(keys) && keys.includes('guideAutoPlay'))) return read;
+      window.slowSettingsRead = true;
+      return read.then((v) => new Promise((done) => setTimeout(() => done(v), 1500)));
+    };
+  });
+  await slow.goto(panelUrl, { waitUntil: 'domcontentloaded' });
+  await slow.waitForFunction(() => window.slowSettingsRead && document.getElementById('guide-autoplay').onchange, { timeout: 5000 });
+  await slow.evaluate(() => document.getElementById('guide-autoplay').click());
+  await new Promise((x) => setTimeout(x, 2500));
+  let box = await autoPlayBox(slow);
+  let stored = await storedAutoPlay();
+  check('Auto-play guides switched on while Settings loads stays on', box === true && stored === true, `checkbox ${box}, stored ${stored}`);
+
+  // Two quick clicks while loading: the last one wins.
+  await sw.evaluate(() => chrome.storage.local.set({ guideAutoPlay: false }));
+  await slow.reload({ waitUntil: 'domcontentloaded' });
+  await slow.waitForFunction(() => window.slowSettingsRead && document.getElementById('guide-autoplay').onchange, { timeout: 5000 });
+  await slow.evaluate(() => {
+    const b = document.getElementById('guide-autoplay');
+    b.click();
+    b.click();
+    b.click();
+  });
+  await new Promise((x) => setTimeout(x, 2500));
+  box = await autoPlayBox(slow);
+  stored = await storedAutoPlay();
+  check('quick toggles while Settings loads keep the last click', box === true && stored === true, `checkbox ${box}, stored ${stored}`);
+
+  // Another panel (or the service worker) changes it: this panel follows.
+  await sw.evaluate(() => chrome.storage.local.set({ guideAutoPlay: false }));
+  const followedOff = await slow.waitForFunction(() => !document.getElementById('guide-autoplay').checked, { timeout: 3000 }).then(() => true, () => false);
+  await sw.evaluate(() => chrome.storage.local.set({ guideAutoPlay: true, guidePause: 7 }));
+  const followedOn = await slow.waitForFunction(() => document.getElementById('guide-autoplay').checked && document.getElementById('guide-pause').value === '7', { timeout: 3000 }).then(() => true, () => false);
+  check('an open Settings follows changes made in another panel', followedOff && followedOn, `off ${followedOff}, on ${followedOn}`);
+  await slow.close();
+
+  // Reopening Settings shows the saved value.
+  const again = await browser.newPage();
+  await again.goto(panelUrl, { waitUntil: 'domcontentloaded' });
+  const reopened = await again.waitForFunction(() => document.getElementById('guide-autoplay').checked && document.getElementById('guide-pause').value === '7', { timeout: 5000 }).then(() => true, () => false);
+  check('reopened Settings shows Auto-play guides on', reopened, String(await autoPlayBox(again)));
+  await again.close();
+  await sw.evaluate((id) => chrome.tabs.remove(id), chatTab);
+  await sw.evaluate(() => chrome.storage.local.set({ guideAutoPlay: false, guidePause: 1 }));
+}
 
 console.log(failures ? `\n${failures} check(s) failed` : '\nALL TOOL CHECKS PASSED');
 await browser.close();

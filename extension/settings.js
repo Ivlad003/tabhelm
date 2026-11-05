@@ -15,6 +15,63 @@ let skills = []; // { url, name, title, description, enabled }
 let hostVersion = null;
 let nextRequest = 1;
 const pending = new Map(); // requestId -> resolve
+let skillsEdited = false; // the user changed the skill list in this panel
+let skillWrites = 0; // saves of the skill list still in flight
+
+// Every chat tab has its own side panel, each with its own copy of Settings.
+// A bound control saves to its storage key on change, follows changes made in
+// other panels, and is never reset by the value read while the panel loads
+// once the user has changed it (that reset used to turn Auto-play guides off).
+const settingBindings = new Map(); // storage key -> { loaded(value), external(value) }
+
+function bindSetting(key, els, { show, value, changed }) {
+  let newer = false; // the control already has a newer value than the startup read
+  let writes = 0;
+  let current; // the value this panel last loaded, saved or was told about
+  // A number field the user is typing in is left alone.
+  const showAll = (v) => els.forEach((el) => (el.type === 'checkbox' || el !== document.activeElement) && show(el, v));
+  for (const el of els) {
+    el.onchange = async () => {
+      newer = true;
+      current = value(el);
+      showAll(current); // the twin switch (singleTab) and a clamped number follow at once
+      writes++;
+      try {
+        await chrome.storage.local.set({ [key]: current });
+      } finally {
+        writes--;
+      }
+      changed?.();
+    };
+  }
+  settingBindings.set(key, {
+    loaded(v) {
+      if (newer) return;
+      current = v;
+      showAll(v);
+    },
+    // Our own saves come back here too: while one is in flight the control
+    // already shows the newest value, so an older echo must not undo a click.
+    external(v) {
+      if (writes || Object.is(v, current)) return;
+      newer = true;
+      current = v;
+      showAll(v);
+      changed?.();
+    },
+  });
+}
+
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'local') return;
+  for (const [key, change] of Object.entries(changes)) settingBindings.get(key)?.external(change.newValue);
+  // A skill added or removed in another panel: a later save here must not drop it.
+  if (changes.skills && !skillWrites && port && JSON.stringify(changes.skills.newValue || []) !== JSON.stringify(skills)) {
+    skills = changes.skills.newValue || [];
+    render();
+    pushSkills();
+  }
+});
 
 export async function initSettings(panelPort) {
   port = panelPort;
@@ -27,29 +84,16 @@ export async function initSettings(panelPort) {
   };
   $('check-updates').onclick = checkUpdates;
   initRemote();
-  const hl = $('highlight-finds');
-  hl.onchange = () => chrome.storage.local.set({ highlightFinds: hl.checked });
+  const tellAgent = () => port.postMessage({ type: 'set_features' }); // the running agent's prompt mentions these
+  const checkbox = (fallback) => ({ show: (el, v) => (el.checked = v === undefined ? fallback : Boolean(v)), value: (el) => el.checked });
+  bindSetting('highlightFinds', [$('highlight-finds')], checkbox(true));
   // One-tab mode: two switches (Settings → Page and the ＋ menu), one setting.
-  const singles = [$('single-tab'), $('single-tab-menu')];
-  const setSingle = async (on) => {
-    await chrome.storage.local.set({ singleTab: on });
-    for (const b of singles) b.checked = on;
-    port.postMessage({ type: 'set_features' }); // tells the running agent
-  };
-  for (const b of singles) b.onchange = () => setSingle(b.checked);
-  chrome.storage.local.get('singleTab').then((s) => singles.forEach((b) => (b.checked = Boolean(s.singleTab))));
-  const gp = $('guide-pause');
-  gp.onchange = () => chrome.storage.local.set({ guidePause: Math.min(30, Math.max(1, Number(gp.value) || 3)) });
-  const ga = $('guide-autoplay');
-  ga.onchange = async () => {
-    await chrome.storage.local.set({ guideAutoPlay: ga.checked });
-    port.postMessage({ type: 'set_features' }); // tells the running agent
-  };
-  const stored = await chrome.storage.local.get(['skills', 'highlightFinds', 'guidePause', 'guideAutoPlay']);
-  ga.checked = Boolean(stored.guideAutoPlay);
-  skills = stored.skills || [];
-  hl.checked = stored.highlightFinds !== false;
-  gp.value = stored.guidePause || 3;
+  bindSetting('singleTab', [$('single-tab'), $('single-tab-menu')], { ...checkbox(false), changed: tellAgent });
+  bindSetting('guidePause', [$('guide-pause')], { show: (el, v) => (el.value = v || 3), value: (el) => Math.min(30, Math.max(1, Number(el.value) || 3)) });
+  bindSetting('guideAutoPlay', [$('guide-autoplay')], { ...checkbox(false), changed: tellAgent });
+  const stored = await chrome.storage.local.get(['skills', ...settingBindings.keys()]);
+  for (const [key, binding] of settingBindings) binding.loaded(stored[key]);
+  if (!skillsEdited) skills = stored.skills || [];
   const examples = $('skill-examples');
   for (const ex of EXAMPLES) {
     const a = Object.assign(document.createElement('a'), { href: ex.url, textContent: ex.label });
@@ -319,7 +363,13 @@ function showPicker(source, items) {
 }
 
 async function save() {
-  await chrome.storage.local.set({ skills });
+  skillsEdited = true;
+  skillWrites++;
+  try {
+    await chrome.storage.local.set({ skills });
+  } finally {
+    skillWrites--;
+  }
   render();
   // Applies to the running agent from its next message.
   pushSkills();

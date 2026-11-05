@@ -264,7 +264,7 @@ async function monkeyBrowser() {
   if (ONLY.includes('tools')) {
     console.log('\n[tools] random tool calls');
     const bridge = readFileSync(fileURLToPath(new URL('../src/mcp-bridge.js', import.meta.url)), 'utf8');
-    const TOOLS = [...bridge.matchAll(/^\s{2}(browser_[a-z_]+): \{/gm)].map((m) => m[1]).filter((t) => !['browser_guide', 'browser_wait', 'browser_request_human', 'browser_request_login'].includes(t));
+    const TOOLS = [...bridge.matchAll(/^\s{2}(browser_[a-z_]+): \{/gm)].map((m) => m[1]).filter((t) => !['browser_guide', 'browser_guide_wait', 'browser_wait', 'browser_request_human', 'browser_request_login'].includes(t));
     let hangs = 0;
     let calls = 0;
     for (let i = 0; i < STEPS; i++) {

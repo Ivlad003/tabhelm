@@ -65,6 +65,9 @@ export const AGENTS = [
     id: 'claude',
     name: 'Claude Code',
     requires: 'claude',
+    // Its MCP client waits for long tool calls (a guide the user takes minutes
+    // over); other clients give up after about a minute (see TOOL_WAIT_SEC).
+    longToolCalls: true,
     launch: [{ command: localBin('claude-agent-acp'), args: [] }],
     installHint: 'Install Claude Code: https://claude.com/claude-code',
   },
@@ -216,5 +219,5 @@ export function getAgent(id) {
   if (!agent) return null;
   const launch = resolveLaunch(agent);
   if (!launch) throw new Error(`${agent.name} is not installed. ${agent.installHint}`);
-  return { id: agent.id, name: agent.name, defaultModel: agent.defaultModel, builtin: agent.launch.some((l) => l.args?.[0]?.endsWith('builtin-agent.js')), ...launch };
+  return { id: agent.id, name: agent.name, defaultModel: agent.defaultModel, longToolCalls: Boolean(agent.longToolCalls), builtin: agent.launch.some((l) => l.args?.[0]?.endsWith('builtin-agent.js')), ...launch };
 }

@@ -24,6 +24,7 @@ function chatState(chatTabId) {
 export function releaseChat(chatTabId) {
   stopRecording(chatTabId);
   const c = chats.get(chatTabId);
+  if (c?.guideRun) c.guideRun.cancelled = true; // takes its overlay off the page
   chats.delete(chatTabId);
   const stillUsed = new Set([...chats.values()].flatMap((o) => [...o.owned]));
   for (const t of c?.owned || [chatTabId]) if (!stillUsed.has(t)) detach(t);
@@ -57,7 +58,8 @@ async function foldPopupIntoChatTab(c, tab) {
 
 chrome.tabs.onCreated.addListener((tab) => {
   for (const c of chats.values()) {
-    if (tab.openerTabId != null && c.owned.has(tab.openerTabId) && Date.now() < (c.actingUntil || 0)) {
+    // A guide still on the page counts as acting: its clicks may open tabs.
+    if (tab.openerTabId != null && c.owned.has(tab.openerTabId) && (Date.now() < (c.actingUntil || 0) || c.guideRun?.running)) {
       if (singleTab) {
         foldPopupIntoChatTab(c, tab);
         continue;
@@ -653,6 +655,7 @@ async function runToolInner(chatTabId, tool, args, ui) {
     await rememberVisit(c, c.current);
   } else if (tool === 'skill_save') result = await saveSkill(args, ui);
   else if (tool === 'tabhelm_diagnose') result = await diagnoseTool(chatTabId, args, ui);
+  else if (tool === 'browser_guide_wait') result = await waitForGuide(c, args);
   else if (tool === 'browser_search_tabs') result = await searchTabs(c, args);
   else if (tool === 'browser_handle_dialog') result = await handleDialog(await targetTab(c, args.tabId, ui), args);
   else {
@@ -686,7 +689,51 @@ async function runToolInner(chatTabId, tool, args, ui) {
 // page gets a numbered badge; Next/Back move the active step — scrolling to it and
 // switching tabs when a step lives on another tab — and a click on the active
 // element counts as done. The panel mirrors the step and its buttons.
-async function guideTour(chatTabId, defaultTab, args, ui) {
+//
+// The guide stays on the page after its tool call answers. MCP clients such as
+// Cursor's, Codex and the built-in agents give up on a call after about a
+// minute, so their bridge passes waitSec: past it the agent hears where the
+// guide is and collects the result with browser_guide_wait.
+async function startGuide(chatTabId, defaultTab, args, ui) {
+  const c = chatState(chatTabId);
+  const old = c.guideRun;
+  if (old) {
+    // A newer guide replaces one still on the page (say, after the agent's call timed out).
+    old.cancelled = true;
+    await old.settled;
+  }
+  const run = { cancelled: false, running: true, index: 0, total: 0, auto: false, autoOff: false };
+  c.guideRun = run;
+  run.settled = guideTour(chatTabId, defaultTab, args, ui, run)
+    .then((result) => ({ result }), (error) => ({ error }))
+    .finally(() => {
+      run.running = false;
+      c.actingUntil = Math.max(c.actingUntil || 0, Date.now() + 3000); // popups a moment after the last click
+    });
+  return collectGuide(c, run, args.waitSec);
+}
+
+async function waitForGuide(c, args) {
+  if (!c.guideRun) return { content: text('No guide is running: its result was already returned, or no guide was started.'), label: 'no guide' };
+  return collectGuide(c, c.guideRun, args.waitSec);
+}
+
+async function collectGuide(c, run, waitSec) {
+  const limit = Number(waitSec) * 1000;
+  const outcome = await (limit > 0 ? Promise.race([run.settled, sleep(limit).then(() => null)]) : run.settled);
+  if (!outcome) {
+    const where = run.total > 1 ? `step ${run.index + 1} of ${run.total}` : 'its step';
+    const how = run.auto
+      ? 'It is playing automatically: TabHelm performs each step after a pause.'
+      : `It waits for the user to do each step${run.autoOff ? " — auto-play is off in the user's settings (Settings → Page → Auto-play guides); they can press ▶ Auto in the guide to play it" : ''}.`;
+    return { content: text(`The guide is still on the page, at ${where}. ${how} Call browser_guide_wait to get the result when it ends; do not start another guide or act on the page until then.`), label: `${where} → still running` };
+  }
+  if (c.guideRun === run) c.guideRun = null;
+  if (outcome.error) throw outcome.error;
+  return outcome.result;
+}
+
+async function guideTour(chatTabId, defaultTab, args, ui, run) {
   const c = chatState(chatTabId);
   const steps = (args.steps?.length ? args.steps : [{ ref: args.ref, text: args.text }]).map((st, i) => ({
     index: i,
@@ -698,6 +745,7 @@ async function guideTour(chatTabId, defaultTab, args, ui) {
   }));
   const single = !args.steps?.length;
   const startNumber = args.step || 1;
+  run.total = steps.length;
   const results = steps.map(() => null);
   let i = 0;
   let shownTab = null;
@@ -710,11 +758,14 @@ async function guideTour(chatTabId, defaultTab, args, ui) {
   const { guidePause = 3, guideAutoPlay = false } = await chrome.storage.local.get(['guidePause', 'guideAutoPlay']);
   const pauseMs = Math.max(1, Number(args.pause || guidePause) || 3) * 1000;
   let auto = Boolean(guideAutoPlay);
+  run.autoOff = Boolean(args.auto) && !auto;
   const autoNote = args.auto && !auto ? ' Auto-play is off in the user\'s settings (Settings → Page → Auto-play guides), so the guide ran manually; the user can press ▶ Auto in a guide to play it.' : '';
 
-  while (i < steps.length && Date.now() - started < 30 * 60_000) {
+  while (i < steps.length && !run.cancelled && Date.now() - started < 30 * 60_000) {
     const step = steps[i];
     const tabId = step.tabId;
+    run.index = i;
+    run.auto = auto;
     if (!c.owned.has(tabId) && !(await inGroup(c, tabId))) throw new Error(`Step ${i + 1} points at tab ${tabId}, which this chat cannot use.`);
     // Steps on another tab bring that tab to the front.
     const tab = await chrome.tabs.get(tabId).catch(() => null);
@@ -741,6 +792,10 @@ async function guideTour(chatTabId, defaultTab, args, ui) {
     const shownAt = Date.now();
     while (status === 'waiting' && Date.now() - started < 30 * 60_000) {
       await sleep(auto ? 200 : 400);
+      if (run.cancelled) {
+        status = 'replaced';
+        break;
+      }
       if (auto && Date.now() - shownAt >= pauseMs && !c.guideAction) {
         status = 'autoplay';
         break;
@@ -754,6 +809,7 @@ async function guideTour(chatTabId, defaultTab, args, ui) {
       status = st?.status === 'gone' || st?.index !== i ? 'navigated' : st?.status || 'navigated';
     }
     await hide();
+    if (status === 'replaced') break;
     if (status === 'auto' || status === 'pause') {
       auto = status === 'auto';
       continue; // show the same step again in the new mode
@@ -797,6 +853,10 @@ async function guideTour(chatTabId, defaultTab, args, ui) {
     }
     results[i] = status === 'skipped' ? 'skipped' : status === 'navigated' ? 'clicked (page changed)' : status === 'clicked' ? 'clicked' : 'done';
     i++;
+  }
+  if (run.cancelled) {
+    ui.guideDone?.(chatTabId, { replaced: true });
+    return { content: text('This guide was replaced by a newer browser_guide before the user finished it.'), label: 'guide → replaced' };
   }
   ui.guideDone?.(chatTabId, { results });
   if (i < steps.length) throw new Error('The guide timed out after 30 minutes.');
@@ -1246,7 +1306,7 @@ async function runPageTool(tabId, tab, tool, args, ui, chatTabId) {
     // ---- Take over / password manager flags: the panel does the work ----
     // Guide mode: an arrow and instruction on the page, then wait for the user's click.
     case 'browser_guide':
-      return guideTour(chatTabId, tabId, args, ui);
+      return startGuide(chatTabId, tabId, args, ui);
 
     // ---- Page scripts & styles flag: presets library ----
     case 'browser_script_list': {

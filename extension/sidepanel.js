@@ -759,6 +759,8 @@ function describeAction(tool, a = {}, detail) {
       return `Read skill “${a.name}”`;
     case 'skill_read_file':
       return `Read skill file ${a.name}/${a.path}`;
+    case 'browser_guide_wait':
+      return 'Wait for the guide';
     default:
       return tool;
   }
@@ -1327,7 +1329,7 @@ function finishGuideCard(msg) {
   const g = guideCard;
   guideCard = null;
   g.el.classList.add('resolved');
-  const label = msg.stopped ? 'Stopped' : msg.back ? 'Back to the agent' : `Finished${msg.results ? ` (${msg.results.filter((r) => r === 'skipped').length} skipped)` : ''}`;
+  const label = msg.stopped ? 'Stopped' : msg.replaced ? 'Replaced by a new guide' : msg.back ? 'Back to the agent' : `Finished${msg.results ? ` (${msg.results.filter((r) => r === 'skipped').length} skipped)` : ''}`;
   g.options.replaceChildren(Object.assign(document.createElement('span'), { textContent: `→ ${label}` }));
   record('ask', { kind: 'guide', answer: label });
 }

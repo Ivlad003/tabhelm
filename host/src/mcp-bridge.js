@@ -161,7 +161,7 @@ const tools = {
   },
   browser_guide: {
     description:
-      'Guide mode: show the user what to do instead of doing it — or, with auto:true, demonstrate it step by step with pauses. Give each step its action (click / type with value / select with value / check). Pass ALL steps you can see at once (steps[]): every step gets a numbered badge on the page, the active one an arrow and your instruction; Next/Back move between steps (scrolling to them, switching tabs for steps on other tabs) and a click on the element counts as done. The call returns when the user finishes, with what they did or skipped. Steps on pages that only appear after a click cannot have refs yet: give them text only, or start a new browser_guide after a snapshot. Single-step form (ref, text, step) still works.',
+      'Guide mode: show the user what to do instead of doing it — or, with auto:true, demonstrate it step by step with pauses. Give each step its action (click / type with value / select with value / check). Pass ALL steps you can see at once (steps[]): every step gets a numbered badge on the page, the active one an arrow and your instruction; Next/Back move between steps (scrolling to them, switching tabs for steps on other tabs) and a click on the element counts as done. The call returns when the guide ends, with what the user did or skipped; if that takes long it answers that the guide is still on the page — then call browser_guide_wait for the result. Steps on pages that only appear after a click cannot have refs yet: give them text only, or start a new browser_guide after a snapshot. Single-step form (ref, text, step) still works.',
     inputSchema: {
       steps: z
         .array(
@@ -180,6 +180,10 @@ const tools = {
       text: z.string().optional().describe('Single-step form: instruction'),
       step: z.number().optional().describe('Single-step form: step number shown on the page'),
     },
+  },
+  browser_guide_wait: {
+    description: 'Wait for the guide started by browser_guide to end and get its result (what the user did or skipped). Call it when browser_guide answered that the guide is still on the page, and again while it says so.',
+    inputSchema: {},
   },
   skill_save: {
     description:
@@ -280,7 +284,7 @@ const tabIdParam = z
   .optional()
   .describe('Act on this tab instead of the current one (ids from browser_tabs list or browser_search_tabs)');
 for (const [name, def] of Object.entries(tools)) {
-  if (name.startsWith('browser_') && !['browser_tabs', 'browser_search_tabs'].includes(name)) def.inputSchema = { ...def.inputSchema, tabId: tabIdParam };
+  if (name.startsWith('browser_') && !['browser_tabs', 'browser_search_tabs', 'browser_guide_wait'].includes(name)) def.inputSchema = { ...def.inputSchema, tabId: tabIdParam };
 }
 
 // Tools behind a feature flag are offered only when it is on for this session
@@ -303,12 +307,16 @@ const FLAG_OF = {
   memory_search: 'memory',
   tabhelm_diagnose: 'selfAnalysisAgent',
 };
+// Calls that wait for the user answer within TABHELM_TOOL_WAIT seconds (set by
+// the host when the agent's MCP client gives up on long calls; 0 = no limit).
+const toolWait = Number(process.env.TABHELM_TOOL_WAIT) || 0;
+const WAITS_FOR_USER = new Set(['browser_guide', 'browser_guide_wait']);
 const featuresEnv = process.env.TABHELM_FEATURES;
 const featuresOn = new Set((featuresEnv || '').split(',').filter(Boolean));
 for (const [name, def] of Object.entries(tools)) {
   const flag = FLAG_OF[name];
   if (flag && (featuresEnv === undefined ? flag === 'selfAnalysisAgent' : !featuresOn.has(flag))) continue;
-  server.registerTool(name, def, (args) => call(name, args));
+  server.registerTool(name, def, (args) => call(name, toolWait && WAITS_FOR_USER.has(name) ? { ...args, waitSec: toolWait } : args));
 }
 
 await server.connect(new StdioServerTransport());
