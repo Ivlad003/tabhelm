@@ -2,7 +2,7 @@
 
 All notable changes to TabHelm. The newest release is at the top; the panel's update banner links here.
 
-## [Unreleased]
+## [0.31.2] - 2026-11-05
 
 ### Fixed
 - **Auto-play guides kept switching itself off.** Settings → Page read the saved value while the panel was still loading and then put it over a click you had already made, so the switch flipped back and guides waited for you even when the agent asked for auto-play. A switch you change now keeps its value. Every chat tab has its own panel, and the Settings in each one now follow changes made in the others. That covers Auto-play guides, the pause before automatic steps, Highlight finds, Work in one tab and the skills list. Before, a panel opened earlier kept showing the old value, and saving the skills list from it could drop skills added in another panel.
