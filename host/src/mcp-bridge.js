@@ -161,7 +161,7 @@ const tools = {
   },
   browser_guide: {
     description:
-      'Guide mode: show the user what to do instead of doing it — or, with auto:true, demonstrate it step by step with pauses. Give each step its action (click / type with value / select with value / check). Pass ALL steps you can see at once (steps[]): every step gets a numbered badge on the page, the active one an arrow and your instruction; Next/Back move between steps (scrolling to them, switching tabs for steps on other tabs) and a click on the element counts as done. The call returns when the guide ends, with what the user did or skipped; if that takes long it answers that the guide is still on the page — then call browser_guide_wait for the result. Steps on pages that only appear after a click cannot have refs yet: give them text only, or start a new browser_guide after a snapshot. Single-step form (ref, text, step) still works.',
+      'Guide mode: show the user what to do instead of doing it — or, with auto:true, demonstrate it step by step with pauses. Give each step its action (click / type with value / select with value / check). Pass ALL steps you can see at once (steps[]): every step gets a numbered badge on the page, the active one an arrow and your instruction; Next/Back move between steps (scrolling to them, switching tabs for steps on other tabs) and a click on the element counts as done. The call returns when the guide ends, with what the user did or skipped; if that takes long it answers that the guide is still on the page — then call browser_wait_for_user for the result. Steps on pages that only appear after a click cannot have refs yet: give them text only, or start a new browser_guide after a snapshot. Single-step form (ref, text, step) still works.',
     inputSchema: {
       steps: z
         .array(
@@ -181,8 +181,8 @@ const tools = {
       step: z.number().optional().describe('Single-step form: step number shown on the page'),
     },
   },
-  browser_guide_wait: {
-    description: 'Wait for the guide started by browser_guide to end and get its result (what the user did or skipped). Call it when browser_guide answered that the guide is still on the page, and again while it says so.',
+  browser_wait_for_user: {
+    description: 'Get the result of a browser_guide, browser_request_human or browser_request_login that answered it is still waiting for the user (the guide is still on the page, the request is still open). Call it again while it says so.',
     inputSchema: {},
   },
   skill_save: {
@@ -249,11 +249,11 @@ const tools = {
     inputSchema: { css: z.string().optional(), id: z.string().optional(), remove: z.boolean().optional(), tabId: z.number().optional() },
   },
   browser_request_human: {
-    description: 'Ask the user to do something themselves in the browser (2FA code, captcha, payment choice) and wait until they say they are done (Take over flag). Explain exactly what you need.',
+    description: 'Ask the user to do something themselves in the browser (2FA code, captcha, payment choice) and wait until they say they are done (Take over flag). Explain exactly what you need. If that takes long it answers that the request is still open — then call browser_wait_for_user.',
     inputSchema: { message: z.string() },
   },
   browser_request_login: {
-    description: 'Ask the user to sign in on the current page (Password manager flag). Give the refs of the username/email and password fields if visible; the user picks an account from their password manager or signs in themselves. Returns when done.',
+    description: 'Ask the user to sign in on the current page (Password manager flag). Give the refs of the username/email and password fields if visible; the user picks an account from their password manager or signs in themselves. Returns when done; if that takes long it answers that the request is still open — then call browser_wait_for_user.',
     inputSchema: { usernameRef: z.string().optional(), passwordRef: z.string().optional(), note: z.string().optional() },
   },
   memory_save: {
@@ -284,7 +284,7 @@ const tabIdParam = z
   .optional()
   .describe('Act on this tab instead of the current one (ids from browser_tabs list or browser_search_tabs)');
 for (const [name, def] of Object.entries(tools)) {
-  if (name.startsWith('browser_') && !['browser_tabs', 'browser_search_tabs', 'browser_guide_wait'].includes(name)) def.inputSchema = { ...def.inputSchema, tabId: tabIdParam };
+  if (name.startsWith('browser_') && !['browser_tabs', 'browser_search_tabs', 'browser_wait_for_user'].includes(name)) def.inputSchema = { ...def.inputSchema, tabId: tabIdParam };
 }
 
 // Tools behind a feature flag are offered only when it is on for this session
@@ -310,7 +310,7 @@ const FLAG_OF = {
 // Calls that wait for the user answer within TABHELM_TOOL_WAIT seconds (set by
 // the host when the agent's MCP client gives up on long calls; 0 = no limit).
 const toolWait = Number(process.env.TABHELM_TOOL_WAIT) || 0;
-const WAITS_FOR_USER = new Set(['browser_guide', 'browser_guide_wait']);
+const WAITS_FOR_USER = new Set(['browser_guide', 'browser_request_human', 'browser_request_login', 'browser_wait_for_user']);
 const featuresEnv = process.env.TABHELM_FEATURES;
 const featuresOn = new Set((featuresEnv || '').split(',').filter(Boolean));
 for (const [name, def] of Object.entries(tools)) {

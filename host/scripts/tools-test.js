@@ -231,7 +231,7 @@ await sw.evaluate(() => chrome.storage.local.set({ highlightFinds: true }));
 
 // --- A guide outlives its tool call: past waitSec (Cursor's MCP client ends a
 // call after about a minute) the agent hears where the guide is and collects the
-// result with browser_guide_wait; a newer guide replaces one still on the page.
+// result with browser_wait_for_user; a newer guide replaces one still on the page.
 {
   const guideButton = (re) => page.evaluate((src) => [...document.getElementById('tabhelm-guide').shadowRoot.querySelectorAll('button')].find((b) => new RegExp(src).test(b.textContent)).click(), re);
   const guideText = () => page.evaluate(() => document.getElementById('tabhelm-guide')?.shadowRoot?.querySelector('.text')?.textContent || '');
@@ -239,18 +239,18 @@ await sw.evaluate(() => chrome.storage.local.set({ highlightFinds: true }));
   snap = await tool('browser_snapshot');
   const early = await tool('browser_guide', { auto: true, waitSec: 1, steps: [{ ref: refFor(snap.text, 'Pick A'), text: 'Press A' }, { ref: refFor(snap.text, 'Pick B'), text: 'Press B' }] });
   const onPage = await page.evaluate(() => Boolean(document.getElementById('tabhelm-guide')));
-  check('guide answers within waitSec and stays on the page', early.ok && /still on the page, at step 1 of 2/.test(early.text) && /browser_guide_wait/.test(early.text) && onPage, `${early.text} | overlay ${onPage}`);
+  check('guide answers within waitSec and stays on the page', early.ok && /still on the page, at step 1 of 2/.test(early.text) && /browser_wait_for_user/.test(early.text) && onPage, `${early.text} | overlay ${onPage}`);
   check('the early answer says auto-play is off in the settings', /auto-play is off in the user's settings/.test(early.text), early.text);
-  const pendingWait = await tool('browser_guide_wait', { waitSec: 1 });
-  check('browser_guide_wait says "still on the page" while the user is on it', pendingWait.ok && /still on the page/.test(pendingWait.text), pendingWait.text);
-  const waiting = tool('browser_guide_wait', {});
+  const pendingWait = await tool('browser_wait_for_user', { waitSec: 1 });
+  check('browser_wait_for_user says "still on the page" while the user is on it', pendingWait.ok && /still on the page/.test(pendingWait.text), pendingWait.text);
+  const waiting = tool('browser_wait_for_user', {});
   await guideButton('Next');
   await page.waitForFunction(() => /Press B/.test(document.getElementById('tabhelm-guide')?.shadowRoot?.querySelector('.text')?.textContent || ''), { timeout: 5000 });
   await guideButton('Finish');
   const done = await waiting;
-  check('browser_guide_wait returns the result once the user finishes', done.ok && /1\. Press A → done/.test(done.text) && /2\. Press B → done/.test(done.text), done.text);
-  const none = await tool('browser_guide_wait', {});
-  check('browser_guide_wait after the result: no guide running', none.ok && /No guide is running/.test(none.text), none.text);
+  check('browser_wait_for_user returns the result once the user finishes', done.ok && /1\. Press A → done/.test(done.text) && /2\. Press B → done/.test(done.text), done.text);
+  const none = await tool('browser_wait_for_user', {});
+  check('browser_wait_for_user after the result: nothing waiting', none.ok && /Nothing is waiting for the user/.test(none.text), none.text);
 
   const first = await tool('browser_guide', { waitSec: 1, steps: [{ ref: refFor(snap.text, 'Pick A'), text: 'Old guide step' }] });
   const second = tool('browser_guide', { steps: [{ ref: refFor(snap.text, 'Pick B'), text: 'New guide step' }] });
@@ -260,8 +260,59 @@ await sw.evaluate(() => chrome.storage.local.set({ highlightFinds: true }));
   await guideButton('Finish');
   const sr = await second;
   check('a newer guide replaces the one still on the page', /still on the page/.test(first.text) && overlays === 1 && /New guide step/.test(shownText) && sr.ok && /New guide step → done/.test(sr.text), `${first.text} | overlays ${overlays} | ${sr.text}`);
-  const gone = await tool('browser_guide_wait', {});
-  check('the replaced guide leaves nothing to wait for', /No guide is running/.test(gone.text), gone.text);
+  const gone = await tool('browser_wait_for_user', {});
+  check('the replaced guide leaves nothing to wait for', /Nothing is waiting for the user/.test(gone.text), gone.text);
+}
+
+// --- Take-over help and sign-in wait for the user the same way: an early answer
+// past waitSec, the result through browser_wait_for_user, and a newer request
+// closes the card of one still open.
+{
+  const { features: savedFeatures = {} } = await sw.evaluate(() => chrome.storage.local.get('features'));
+  await sw.evaluate((f) => chrome.storage.local.set({ features: { ...f, takeOver: true, passwordManager: true } }), savedFeatures);
+  // The panel's cards: each ask waits in self.testAsks until the test answers it.
+  const askTool = (name, args) =>
+    sw.evaluate(
+      async (tabId, name, args) => {
+        self.testAsks ||= [];
+        const ui = {
+          confirm: async () => true,
+          onTarget() {},
+          ask: (chat, kind, payload) => new Promise((resolve) => self.testAsks.push({ kind, payload, resolve })),
+          resolveAsks: (chat, reply) => self.testAsks.splice(0).forEach((a) => a.resolve(reply)),
+          skillsChanged() {},
+          guideProgress() {},
+          guideDone() {},
+        };
+        try {
+          const r = await self.tabhelmDebug.runTool(tabId, name, args, ui);
+          return { ok: true, text: r.content.filter((c) => c.type === 'text').map((c) => c.text).join('\n') };
+        } catch (err) {
+          return { ok: false, text: err.message };
+        }
+      },
+      tabId,
+      name,
+      args,
+    );
+  const answerAsk = (reply) => sw.evaluate((r) => self.testAsks.shift()?.resolve(r), reply);
+  const early = await askTool('browser_request_human', { message: 'Enter the 2FA code', waitSec: 1 });
+  check('request_human answers within waitSec while the user is busy', early.ok && /has not answered your request yet \("Enter the 2FA code"\)/.test(early.text) && /browser_wait_for_user/.test(early.text), early.text);
+  const waitingHuman = tool('browser_wait_for_user', {});
+  await answerAsk({ done: true, note: 'code entered' });
+  const human = await waitingHuman;
+  check("browser_wait_for_user returns the user's answer to request_human", human.ok && /done: code entered/.test(human.text), human.text);
+
+  const login = await askTool('browser_request_login', { note: 'account required', waitSec: 1 });
+  check('request_login answers within waitSec while the user signs in', login.ok && /has not signed in yet/.test(login.text), login.text);
+  const replacing = askTool('browser_request_human', { message: 'Solve the captcha' });
+  await sw.evaluate(() => new Promise((ok) => { const t = setInterval(() => self.testAsks.some((a) => a.payload.message === 'Solve the captcha') && (clearInterval(t), ok()), 50); }));
+  const open = await sw.evaluate(() => self.testAsks.map((a) => a.kind));
+  await answerAsk({ done: true });
+  const replaced = await replacing;
+  const afterReplace = await tool('browser_wait_for_user', {});
+  check('a newer request closes the sign-in card still open', open.join(',') === 'human' && replaced.ok && /The user says they are done/.test(replaced.text) && /Nothing is waiting/.test(afterReplace.text), `${open} | ${replaced.text} | ${afterReplace.text}`);
+  await sw.evaluate((f) => chrome.storage.local.set({ features: f }), savedFeatures);
 }
 
 // --- Element picker: one element by click, several by dragging a rectangle

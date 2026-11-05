@@ -24,7 +24,7 @@ function chatState(chatTabId) {
 export function releaseChat(chatTabId) {
   stopRecording(chatTabId);
   const c = chats.get(chatTabId);
-  if (c?.guideRun) c.guideRun.cancelled = true; // takes its overlay off the page
+  if (c?.userWait) c.userWait.cancelled = true; // a guide left on the page takes its overlay off
   chats.delete(chatTabId);
   const stillUsed = new Set([...chats.values()].flatMap((o) => [...o.owned]));
   for (const t of c?.owned || [chatTabId]) if (!stillUsed.has(t)) detach(t);
@@ -58,8 +58,8 @@ async function foldPopupIntoChatTab(c, tab) {
 
 chrome.tabs.onCreated.addListener((tab) => {
   for (const c of chats.values()) {
-    // A guide still on the page counts as acting: its clicks may open tabs.
-    if (tab.openerTabId != null && c.owned.has(tab.openerTabId) && (Date.now() < (c.actingUntil || 0) || c.guideRun?.running)) {
+    // Waiting for the user (a guide, take-over help) counts as acting: their clicks may open tabs.
+    if (tab.openerTabId != null && c.owned.has(tab.openerTabId) && (Date.now() < (c.actingUntil || 0) || c.userWait?.running)) {
       if (singleTab) {
         foldPopupIntoChatTab(c, tab);
         continue;
@@ -655,7 +655,7 @@ async function runToolInner(chatTabId, tool, args, ui) {
     await rememberVisit(c, c.current);
   } else if (tool === 'skill_save') result = await saveSkill(args, ui);
   else if (tool === 'tabhelm_diagnose') result = await diagnoseTool(chatTabId, args, ui);
-  else if (tool === 'browser_guide_wait') result = await waitForGuide(c, args);
+  else if (tool === 'browser_wait_for_user') result = await waitForUser(c, args);
   else if (tool === 'browser_search_tabs') result = await searchTabs(c, args);
   else if (tool === 'browser_handle_dialog') result = await handleDialog(await targetTab(c, args.tabId, ui), args);
   else {
@@ -690,45 +690,41 @@ async function runToolInner(chatTabId, tool, args, ui) {
 // switching tabs when a step lives on another tab — and a click on the active
 // element counts as done. The panel mirrors the step and its buttons.
 //
-// The guide stays on the page after its tool call answers. MCP clients such as
-// Cursor's, Codex and the built-in agents give up on a call after about a
-// minute, so their bridge passes waitSec: past it the agent hears where the
-// guide is and collects the result with browser_guide_wait.
-async function startGuide(chatTabId, defaultTab, args, ui) {
+// Calls that wait for the user — a guide, take-over help, sign-in — keep going
+// after their tool call answers. MCP clients such as Cursor's, Codex and the
+// built-in agents give up on a call after about a minute, so their bridge passes
+// waitSec: past it the agent hears what is still open and collects the result
+// with browser_wait_for_user. One per chat: a new one replaces one still open
+// (its guide leaves the page, its card in the panel closes).
+async function waitingForUser(chatTabId, kind, waitSec, ui, work) {
   const c = chatState(chatTabId);
-  const old = c.guideRun;
-  if (old) {
-    // A newer guide replaces one still on the page (say, after the agent's call timed out).
+  const old = c.userWait;
+  if (old?.running) {
     old.cancelled = true;
-    await old.settled;
+    if (old.kind !== 'guide') ui.resolveAsks?.(chatTabId, { done: false, replaced: true });
+    await Promise.race([old.settled, sleep(5000)]);
   }
-  const run = { cancelled: false, running: true, index: 0, total: 0, auto: false, autoOff: false };
-  c.guideRun = run;
-  run.settled = guideTour(chatTabId, defaultTab, args, ui, run)
+  const run = { kind, cancelled: false, running: true, describe: () => 'TabHelm is still waiting for the user.' };
+  c.userWait = run;
+  run.settled = work(run)
     .then((result) => ({ result }), (error) => ({ error }))
     .finally(() => {
       run.running = false;
       c.actingUntil = Math.max(c.actingUntil || 0, Date.now() + 3000); // popups a moment after the last click
     });
-  return collectGuide(c, run, args.waitSec);
+  return collectUserWait(c, run, waitSec);
 }
 
-async function waitForGuide(c, args) {
-  if (!c.guideRun) return { content: text('No guide is running: its result was already returned, or no guide was started.'), label: 'no guide' };
-  return collectGuide(c, c.guideRun, args.waitSec);
+async function waitForUser(c, args) {
+  if (!c.userWait) return { content: text('Nothing is waiting for the user: the result was already returned, or no guide or request was started.'), label: 'nothing waiting' };
+  return collectUserWait(c, c.userWait, args.waitSec);
 }
 
-async function collectGuide(c, run, waitSec) {
+async function collectUserWait(c, run, waitSec) {
   const limit = Number(waitSec) * 1000;
   const outcome = await (limit > 0 ? Promise.race([run.settled, sleep(limit).then(() => null)]) : run.settled);
-  if (!outcome) {
-    const where = run.total > 1 ? `step ${run.index + 1} of ${run.total}` : 'its step';
-    const how = run.auto
-      ? 'It is playing automatically: TabHelm performs each step after a pause.'
-      : `It waits for the user to do each step${run.autoOff ? " — auto-play is off in the user's settings (Settings → Page → Auto-play guides); they can press ▶ Auto in the guide to play it" : ''}.`;
-    return { content: text(`The guide is still on the page, at ${where}. ${how} Call browser_guide_wait to get the result when it ends; do not start another guide or act on the page until then.`), label: `${where} → still running` };
-  }
-  if (c.guideRun === run) c.guideRun = null;
+  if (!outcome) return { content: text(`${run.describe()} Call browser_wait_for_user to get the result when the user is done; do not start another request or act on the page until then.`), label: 'still waiting for you' };
+  if (c.userWait === run) c.userWait = null;
   if (outcome.error) throw outcome.error;
   return outcome.result;
 }
@@ -745,7 +741,6 @@ async function guideTour(chatTabId, defaultTab, args, ui, run) {
   }));
   const single = !args.steps?.length;
   const startNumber = args.step || 1;
-  run.total = steps.length;
   const results = steps.map(() => null);
   let i = 0;
   let shownTab = null;
@@ -758,14 +753,18 @@ async function guideTour(chatTabId, defaultTab, args, ui, run) {
   const { guidePause = 3, guideAutoPlay = false } = await chrome.storage.local.get(['guidePause', 'guideAutoPlay']);
   const pauseMs = Math.max(1, Number(args.pause || guidePause) || 3) * 1000;
   let auto = Boolean(guideAutoPlay);
-  run.autoOff = Boolean(args.auto) && !auto;
+  run.describe = () => {
+    const where = steps.length > 1 ? `step ${i + 1} of ${steps.length}` : 'its step';
+    const how = auto
+      ? 'It is playing automatically: TabHelm performs each step after a pause.'
+      : `It waits for the user to do each step${args.auto && !guideAutoPlay ? " — auto-play is off in the user's settings (Settings → Page → Auto-play guides); they can press ▶ Auto in the guide to play it" : ''}.`;
+    return `The guide is still on the page, at ${where}. ${how}`;
+  };
   const autoNote = args.auto && !auto ? ' Auto-play is off in the user\'s settings (Settings → Page → Auto-play guides), so the guide ran manually; the user can press ▶ Auto in a guide to play it.' : '';
 
   while (i < steps.length && !run.cancelled && Date.now() - started < 30 * 60_000) {
     const step = steps[i];
     const tabId = step.tabId;
-    run.index = i;
-    run.auto = auto;
     if (!c.owned.has(tabId) && !(await inGroup(c, tabId))) throw new Error(`Step ${i + 1} points at tab ${tabId}, which this chat cannot use.`);
     // Steps on another tab bring that tab to the front.
     const tab = await chrome.tabs.get(tabId).catch(() => null);
@@ -856,7 +855,7 @@ async function guideTour(chatTabId, defaultTab, args, ui, run) {
   }
   if (run.cancelled) {
     ui.guideDone?.(chatTabId, { replaced: true });
-    return { content: text('This guide was replaced by a newer browser_guide before the user finished it.'), label: 'guide → replaced' };
+    return { content: text('This guide was replaced by a newer request before the user finished it.'), label: 'guide → replaced' };
   }
   ui.guideDone?.(chatTabId, { results });
   if (i < steps.length) throw new Error('The guide timed out after 30 minutes.');
@@ -1306,7 +1305,7 @@ async function runPageTool(tabId, tab, tool, args, ui, chatTabId) {
     // ---- Take over / password manager flags: the panel does the work ----
     // Guide mode: an arrow and instruction on the page, then wait for the user's click.
     case 'browser_guide':
-      return startGuide(chatTabId, tabId, args, ui);
+      return waitingForUser(chatTabId, 'guide', args.waitSec, ui, (run) => guideTour(chatTabId, tabId, args, ui, run));
 
     // ---- Page scripts & styles flag: presets library ----
     case 'browser_script_list': {
@@ -1358,32 +1357,40 @@ async function runPageTool(tabId, tab, tool, args, ui, chatTabId) {
 
     case 'browser_request_human': {
       await requireFlag('takeOver', 'Take over');
-      const reply = await ui.ask(chatTabId, 'human', { message: args.message, tab: { title: tab.title, url: tab.url } });
-      if (!reply?.done) throw new Error('The user cancelled the task.');
-      return { content: text(`The user says they are done${reply.note ? `: ${reply.note}` : '.'} Take a new snapshot to see the page.`), label: args.message.slice(0, 60) };
+      const message = String(args.message || '');
+      return waitingForUser(chatTabId, 'human', args.waitSec, ui, async (run) => {
+        run.describe = () => `The user has not answered your request yet ("${message.slice(0, 80)}"); it is still open in the TabHelm panel.`;
+        const reply = await ui.ask(chatTabId, 'human', { message, tab: { title: tab.title, url: tab.url } });
+        if (reply?.replaced) return { content: text('This request was replaced by a newer one.'), label: 'replaced' };
+        if (!reply?.done) throw new Error('The user cancelled the task.');
+        return { content: text(`The user says they are done${reply.note ? `: ${reply.note}` : '.'} Take a new snapshot to see the page.`), label: message.slice(0, 60) };
+      });
     }
 
-    case 'browser_request_login': {
+    case 'browser_request_login':
       await requireFlag('passwordManager', 'Password manager hand-off');
-      const reply = await ui.ask(chatTabId, 'login', { usernameRef: args.usernameRef, passwordRef: args.passwordRef, note: args.note, tab: { title: tab.title, url: tab.url } });
-      if (!reply?.done) throw new Error('The user cancelled signing in.');
-      if (reply.credential) {
-        // Typed here, straight from the password manager; the model only gets "done".
-        const fill = async (ref, value) => {
-          const loc = await locate(tabId, ref);
-          await pointer(tabId, loc.x, loc.y, 'click');
-          await mouseClick(tabId, loc.x, loc.y);
-          checked(await inject(tabId, P.prepareTyping, [loc.ref, true], loc.frameId));
-          await cdp(tabId, 'Input.insertText', { text: value });
-        };
-        if (args.usernameRef && reply.credential.username) await fill(args.usernameRef, reply.credential.username);
-        if (args.passwordRef && reply.credential.password) await fill(args.passwordRef, reply.credential.password);
-        if (reply.submit) await pressKey(tabId, 'Enter');
-        const nav = await settle(tabId, urlBefore);
-        return { content: text(`Credentials filled from the password manager${reply.submit ? ' and submitted' : ''}.${nav} Take a new snapshot.`), label: 'password manager' };
-      }
-      return { content: text('The user signed in themselves. Take a new snapshot to see the page.'), label: 'user signed in' };
-    }
+      return waitingForUser(chatTabId, 'login', args.waitSec, ui, async (run) => {
+        run.describe = () => 'The user has not signed in yet; the sign-in request is still open in the TabHelm panel.';
+        const reply = await ui.ask(chatTabId, 'login', { usernameRef: args.usernameRef, passwordRef: args.passwordRef, note: args.note, tab: { title: tab.title, url: tab.url } });
+        if (reply?.replaced) return { content: text('This sign-in request was replaced by a newer request.'), label: 'replaced' };
+        if (!reply?.done) throw new Error('The user cancelled signing in.');
+        if (reply.credential) {
+          // Typed here, straight from the password manager; the model only gets "done".
+          const fill = async (ref, value) => {
+            const loc = await locate(tabId, ref);
+            await pointer(tabId, loc.x, loc.y, 'click');
+            await mouseClick(tabId, loc.x, loc.y);
+            checked(await inject(tabId, P.prepareTyping, [loc.ref, true], loc.frameId));
+            await cdp(tabId, 'Input.insertText', { text: value });
+          };
+          if (args.usernameRef && reply.credential.username) await fill(args.usernameRef, reply.credential.username);
+          if (args.passwordRef && reply.credential.password) await fill(args.passwordRef, reply.credential.password);
+          if (reply.submit) await pressKey(tabId, 'Enter');
+          const nav = await settle(tabId, urlBefore);
+          return { content: text(`Credentials filled from the password manager${reply.submit ? ' and submitted' : ''}.${nav} Take a new snapshot.`), label: 'password manager' };
+        }
+        return { content: text('The user signed in themselves. Take a new snapshot to see the page.'), label: 'user signed in' };
+      });
 
     case 'browser_evaluate': {
       const host = new URL(tab.url).host;

@@ -327,7 +327,7 @@ const VERBS = {
   browser_request_human: 'Ask you for help',
   browser_request_login: 'Ask you to sign in',
   browser_guide: 'Guide you',
-  browser_guide_wait: 'Wait for the guide',
+  browser_wait_for_user: 'Wait for you',
   memory_save: 'Remember a note',
   memory_search: 'Search memory',
   skill_list: 'List skills',

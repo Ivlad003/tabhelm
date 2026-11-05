@@ -217,7 +217,7 @@ function onMessage(msg) {
       record('page_script', { name: msg.name, ok: msg.ok, error: msg.error });
       break;
     case 'ask_resolved':
-      askCards.get(msg.id)?.(msg.reply?.done ? 'Clicked on the page' : 'Closed');
+      askCards.get(msg.id)?.(msg.reply?.replaced ? 'Replaced by a newer request' : msg.reply?.done ? 'Clicked on the page' : 'Closed');
       askCards.delete(msg.id);
       break;
     case 'skills_changed':
@@ -759,8 +759,8 @@ function describeAction(tool, a = {}, detail) {
       return `Read skill “${a.name}”`;
     case 'skill_read_file':
       return `Read skill file ${a.name}/${a.path}`;
-    case 'browser_guide_wait':
-      return 'Wait for the guide';
+    case 'browser_wait_for_user':
+      return 'Wait for you';
     default:
       return tool;
   }
@@ -1329,7 +1329,7 @@ function finishGuideCard(msg) {
   const g = guideCard;
   guideCard = null;
   g.el.classList.add('resolved');
-  const label = msg.stopped ? 'Stopped' : msg.replaced ? 'Replaced by a new guide' : msg.back ? 'Back to the agent' : `Finished${msg.results ? ` (${msg.results.filter((r) => r === 'skipped').length} skipped)` : ''}`;
+  const label = msg.stopped ? 'Stopped' : msg.replaced ? 'Replaced by a newer request' : msg.back ? 'Back to the agent' : `Finished${msg.results ? ` (${msg.results.filter((r) => r === 'skipped').length} skipped)` : ''}`;
   g.options.replaceChildren(Object.assign(document.createElement('span'), { textContent: `→ ${label}` }));
   record('ask', { kind: 'guide', answer: label });
 }
@@ -1343,12 +1343,17 @@ async function addAsk(msg) {
   const title = Object.assign(document.createElement('div'), { className: 'title' });
   const options = document.createElement('div');
   options.className = 'options';
-  const reply = (r, label) => {
-    port.postMessage({ type: 'ask_response', id: msg.id, reply: r });
+  const settled = (label) => {
+    askCards.delete(msg.id);
     card.classList.add('resolved');
     options.replaceChildren(Object.assign(document.createElement('span'), { textContent: `→ ${label}` }));
     record('ask', { kind: msg.kind, answer: label });
   };
+  const reply = (r, label) => {
+    port.postMessage({ type: 'ask_response', id: msg.id, reply: r });
+    settled(label);
+  };
+  askCards.set(msg.id, settled); // settled from the extension side (e.g. replaced by a newer request)
 
   if (msg.kind === 'human') {
     title.textContent = `${connectedAgent?.name || 'The agent'} needs you: ${msg.message}`;
