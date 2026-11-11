@@ -2,6 +2,11 @@
 
 All notable changes to TabHelm. The newest release is at the top; the panel's update banner links here.
 
+## [0.31.4] - 2026-11-11
+
+### Fixed
+- **Recordings could not be opened in QuickTime Player** ("The file isn't compatible with QuickTime Player") on Retina displays. The first picture of a recording is a full-resolution screenshot, twice the size of the rest. That is too large for H.264, so Chrome encoded the whole video as VP9, which QuickTime and most messengers cannot play. Recordings are now at most 1600×1000 and always H.264 when Chrome supports it.
+
 ## [0.31.3] - 2026-11-11
 
 ### Fixed
