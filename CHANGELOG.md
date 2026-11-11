@@ -2,6 +2,12 @@
 
 All notable changes to TabHelm. The newest release is at the top; the panel's update banner links here.
 
+## [0.31.3] - 2026-11-11
+
+### Fixed
+- **Recordings failed with "Could not encode the video: Cannot read properties of null (reading 'colorSpace')"** after Chrome updated to version 157. Chrome stopped reporting how long each encoded frame lasts, and the MP4 writer refused every frame, so the video stayed empty and saving it crashed. Recordings work again, in Chrome 157 and in older versions.
+- If a recording cannot be encoded, the message now names the real cause.
+
 ## [0.31.2] - 2026-11-05
 
 ### Fixed
