@@ -15,6 +15,7 @@ import { Muxer, ArrayBufferTarget } from './vendor/mp4-muxer.mjs';
 
 const KEYFRAME_EVERY_US = 2_000_000;
 const LABEL_MS = 1500;
+const LAST_FRAME_US = 66_667; // one frame at 15 fps
 
 export function webCodecsAvailable() {
   return typeof VideoEncoder === 'function' && typeof VideoFrame === 'function' && typeof OffscreenCanvas === 'function';
@@ -36,6 +37,7 @@ export class Recorder {
     this.error = null;
     this.bitmap = null;
     this.frames = 0;
+    this.muxed = 0; // chunks the muxer accepted
     this.skippedTotal = 0;
     this.thumb = null; // tiny grayscale copy of the last frame, to tell still pages apart
   }
@@ -129,9 +131,25 @@ export class Recorder {
     }
     if (!chosen) throw new Error('This Chrome cannot encode H.264 or VP9 video.');
     this.muxer = new Muxer({ target: new ArrayBufferTarget(), video: { codec: chosen.mux, width: this.width, height: this.height }, fastStart: 'in-memory', firstTimestampBehavior: 'offset' });
-    this.encoder = new VideoEncoder({ output: (chunk, meta) => this.muxer.addVideoChunk(chunk, meta), error: (err) => (this.error ||= err) });
+    this.encoder = new VideoEncoder({ output: (chunk, meta) => this.#mux(chunk, meta), error: (err) => (this.error ||= err) });
     this.encoder.configure({ ...base, codec: chosen.codec, ...(chosen.avc ? { avc: chosen.avc } : {}), latencyMode: 'quality' });
     this.codec = chosen.codec;
+  }
+
+  // Hands an encoded chunk to the muxer. Chrome 157+ reports no duration for
+  // frames that were given none (earlier versions filled one in), and the muxer
+  // rejects that; it only uses the value for the last frame anyway, the others
+  // last until the next timestamp. An error here would otherwise be lost as an
+  // uncaught exception and leave an empty video.
+  #mux(chunk, meta) {
+    try {
+      const data = new Uint8Array(chunk.byteLength);
+      chunk.copyTo(data);
+      this.muxer.addVideoChunkRaw(data, chunk.type, chunk.timestamp, chunk.duration ?? LAST_FRAME_US, meta);
+      this.muxed++;
+    } catch (err) {
+      this.error ||= err;
+    }
   }
 
   // Draws the current picture (letterboxed if a tab of another size is shown)
@@ -195,6 +213,11 @@ export class Recorder {
     this.lastKey = -Infinity; // a keyframe at the very end helps players show it
     this.#encode(this.clock);
     await this.encoder.flush();
+    if (this.error || !this.muxed) {
+      const err = this.error || new Error('the encoder produced no video data.');
+      this.#close();
+      throw err;
+    }
     this.muxer.finalize();
     const blob = new Blob([this.muxer.target.buffer], { type: 'video/mp4' });
     const durationMs = this.clock;
