@@ -15,6 +15,8 @@ import { Muxer, ArrayBufferTarget } from './vendor/mp4-muxer.mjs';
 
 const KEYFRAME_EVERY_US = 2_000_000;
 const LABEL_MS = 1500;
+const MAX_W = 1600;
+const MAX_H = 1000;
 const LAST_FRAME_US = 66_667; // one frame at 15 fps
 
 export function webCodecsAvailable() {
@@ -109,9 +111,13 @@ export class Recorder {
   }
 
   async #open(w, h) {
-    // Even sizes for H.264; the screencast already caps them at 1600×1000.
-    this.width = Math.max(2, w & ~1);
-    this.height = Math.max(2, h & ~1);
+    // Even sizes for H.264, at most 1600×1000. The screencast already caps its
+    // frames, but the first picture may be a full-resolution screenshot (twice
+    // the size on a Retina display). That is more than H.264 level 4 allows, so
+    // Chrome would fall back to VP9, which QuickTime and messengers cannot play.
+    const fit = Math.min(1, MAX_W / w, MAX_H / h);
+    this.width = Math.max(2, Math.round(w * fit) & ~1);
+    this.height = Math.max(2, Math.round(h * fit) & ~1);
     this.canvas = new OffscreenCanvas(this.width, this.height);
     this.ctx = this.canvas.getContext('2d');
     const base = { width: this.width, height: this.height, bitrate: 4_000_000, framerate: 15 };
