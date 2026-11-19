@@ -2,6 +2,18 @@
 
 All notable changes to TabHelm. The newest release is at the top; the panel's update banner links here.
 
+## [0.33.2] - 2026-11-19
+
+### Fixed
+- **Live conversation went deaf after headphones were unplugged or plugged in.** Chrome kept the old audio stream, which delivered silence, so nothing you said was heard — and on some systems the voice went quiet too. When the audio devices change, TabHelm now takes the microphone again on the devices that are there, and a reply that is being read aloud is started again on the new output. The chat says *Audio devices changed — the microphone was connected again*.
+- A microphone that stops delivering sound for any other reason (exact silence for six seconds, or the stream ending) is opened again by itself. If it does not come back after three tries, Live stops and says so instead of pretending to listen.
+- If the microphone stayed ignored although TabHelm had finished speaking, it now starts listening again after a moment.
+- The first syllable of a sentence could be cut off, which hurt short commands such as "stop".
+
+### Added
+- A level meter in the Live bar shows whether the microphone hears anything.
+- The chat's journal and its export record what happened to the microphone: on, off, reconnected, devices changed.
+
 ## [0.33.1] - 2026-11-19
 
 ### Fixed
