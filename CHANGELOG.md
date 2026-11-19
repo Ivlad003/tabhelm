@@ -2,6 +2,17 @@
 
 All notable changes to TabHelm. The newest release is at the top; the panel's update banner links here.
 
+## [0.33.0] - 2026-11-19
+
+### Added
+- **Files from a task.** Ask for a result as a file — a table as CSV, a summary as Markdown, a script — and when the task ends the chat shows a card with every file the agent created or changed, its size and a **Download** button that saves it through Chrome like any download. The agent's folder (`~/.tabhelm/workspace`, or your working folder) is compared before and after the task, so files written by a script the agent ran count too; files the agent reports editing elsewhere are listed as well. Up to 40 files per task, 200 MB per download. With a remote host this is how the files reach your computer.
+- **`file_save` tool** for every agent, also the built-in one (OpenRouter, Ollama), which has no file tools of its own: it writes text into the agent's folder, ignores any path in the name and never overwrites a file that was already there.
+- Only files offered on a card can be downloaded: the panel asks the host for them by id, never by path, and one chat cannot read another chat's files.
+- `npm run test:files` (7 unit tests).
+
+### Fixed
+- The built-in agent asked for permission before showing a question card (`browser_ask_user`). Asking you a question no longer needs your approval first.
+
 ## [0.32.0] - 2026-11-19
 
 ### Added
