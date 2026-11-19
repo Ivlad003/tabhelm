@@ -159,6 +159,10 @@ export function mdEntry(e, st, time = (ts) => new Date(ts).toLocaleTimeString())
     case 'notice':
       if (e.error) out.push('', `> ⚠️ ${t} · ${e.text || ''}`);
       break;
+    // Live conversation: the microphone's own story (on, off, reconnected, un-muted).
+    case 'live':
+      out.push(`- ${t} 🎙 Live: ${{ on: 'microphone on', off: 'microphone off', mic_reopened: 'microphone reconnected', unmuted: 'listening again', devices_changed: 'audio devices changed' }[e.event] || e.event || ''}${e.detail ? ` (${e.detail})` : ''}`);
+      break;
     case 'files':
       out.push(`- ${t} 📄 Files from the task${e.root ? ` in \`${e.root}\`` : ''}: ${(e.files || []).map((f) => `\`${f.path || f.name}\` (${f.created ? 'new' : 'changed'}, ${f.size ?? 0} bytes)`).join(', ')}${e.more ? ` and ${e.more} more` : ''}`);
       break;

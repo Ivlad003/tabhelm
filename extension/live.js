@@ -107,6 +107,10 @@ export function createSegmenter({ silenceMs = 900, minSpeechMs = 250, maxMs = 30
     get speaking() {
       return state === 'speech';
     },
+    // Something has started (also the first moments, before it counts as speech).
+    get active() {
+      return state !== 'idle';
+    },
     feed(level, now) {
       const dt = last ? Math.min(200, now - last) : 0;
       last = now;
@@ -142,6 +146,26 @@ export function createSegmenter({ silenceMs = 900, minSpeechMs = 250, maxMs = 30
   };
 }
 
+// A working microphone always delivers some noise. Exact digital silence for
+// deadMs means the stream is dead — the device was unplugged, a headset switched
+// its profile, the system took the input away. feed(peak, now) says when.
+export function createSignalWatch({ deadMs = 6000, epsilon = 1e-6 } = {}) {
+  let silentSince = 0;
+  return {
+    reset() {
+      silentSince = 0;
+    },
+    feed(peak, now) {
+      if (peak > epsilon) {
+        silentSince = 0;
+        return false;
+      }
+      if (!silentSince) silentSince = now;
+      return now - silentSince >= deadMs;
+    },
+  };
+}
+
 // Whisper answers silence and clicks with stock phrases; those are not something the user said.
 const PHANTOMS = /^(?:дякую за перегляд|дякую за увагу|субтитр\S* .*|thanks? for watching|thank you for watching|thank you|you|subtitles? by .*|\[.*\]|\(.*\))[.!… ]*$/i;
 export const isPhantom = (text) => !normalizeSpeech(text) || PHANTOMS.test(String(text).trim());
@@ -149,14 +173,16 @@ export const isPhantom = (text) => !normalizeSpeech(text) || PHANTOMS.test(Strin
 // ---------- The microphone ----------
 
 let port;
-let handlers = { utterance: () => {}, state: () => {}, error: () => {} };
-let session = null; // { engine, stream, ctx, timer, recorder, recognition, muted, settings }
+let handlers = { utterance: () => {}, state: () => {}, error: () => {}, level: () => {}, event: () => {}, speaking: () => false };
+let session = null; // { engine, stream, ctx, analyser, timer, guard, recorder, recognition, muted, settings }
 let nextRequest = 1;
 const waits = new Map();
 
-export function initLive(panelPort, { utterance, state, error } = {}) {
+// level(0..1): how loud the microphone is right now (for a meter). event(name, detail):
+// things worth keeping in the chat's journal. speaking(): is TabHelm's voice playing?
+export function initLive(panelPort, { utterance, state, error, level, event, speaking } = {}) {
   port = panelPort;
-  handlers = { utterance: utterance || handlers.utterance, state: state || handlers.state, error: error || handlers.error };
+  handlers = { utterance: utterance || handlers.utterance, state: state || handlers.state, error: error || handlers.error, level: level || handlers.level, event: event || handlers.event, speaking: speaking || handlers.speaking };
 }
 
 // Our own transcriptions carry "live-N" ids, so the Voice feature's replies are left alone.
@@ -173,6 +199,7 @@ export const liveOn = () => Boolean(session);
 export function setLiveMuted(muted) {
   if (!session || session.muted === muted) return;
   session.muted = muted;
+  session.mutedIdleSince = 0;
   session.segmenter?.reset();
   if (session.engine === 'host' && session.stream) restartRecorder(session, false);
   setState(muted ? 'speaking' : 'listening');
@@ -201,7 +228,39 @@ export async function startLive() {
   try {
     if (me.engine === 'browser') startRecognition(me);
     else await startHostEngine(me);
-    if (session === me) setState('listening');
+    if (session !== me) return;
+    // Being deaf for good is the worst failure of a conversation: if the microphone
+    // is still ignored although TabHelm's voice stopped a while ago, listen again.
+    me.guard = setInterval(() => {
+      if (session !== me || !me.muted) return;
+      const now = Date.now();
+      if (handlers.speaking()) me.mutedIdleSince = 0;
+      else if (!me.mutedIdleSince) me.mutedIdleSince = now;
+      else if (now - me.mutedIdleSince > 1500) {
+        handlers.event('unmuted', 'the voice had stopped');
+        setLiveMuted(false);
+      }
+    }, 300);
+    // Headphones plugged in or out, a headset connecting: Chrome keeps the old stream,
+    // which goes silent — and on some systems takes the sound output with it. Take the
+    // microphone again on the devices that are there now. Several events come in a burst.
+    me.onDevices = () => {
+      clearTimeout(me.devicesTimer);
+      me.devicesTimer = setTimeout(() => {
+        if (session !== me) return;
+        handlers.event('devices_changed', '');
+        if (me.engine === 'host') reopenMic(me, 'the audio devices changed', { counted: false });
+        else {
+          // Chrome's recognition: ending it makes onend start it again on the new device.
+          try {
+            me.recognition?.abort();
+          } catch {}
+        }
+      }, 700);
+    };
+    navigator.mediaDevices?.addEventListener?.('devicechange', me.onDevices);
+    handlers.event('on', me.engine);
+    setState('listening');
   } catch (err) {
     if (session === me) stopLive();
     throw micError(err);
@@ -213,18 +272,18 @@ export function stopLive() {
   if (!s) return;
   session = null;
   clearInterval(s.timer);
+  clearInterval(s.guard);
+  clearTimeout(s.devicesTimer);
+  if (s.onDevices) navigator.mediaDevices?.removeEventListener?.('devicechange', s.onDevices);
+  handlers.event('off', '');
+  handlers.level(0);
   if (s.recognition) {
     s.recognition.onend = null;
     try {
       s.recognition.stop();
     } catch {}
   }
-  if (s.recorder?.state === 'recording') {
-    s.recorder.keep = false;
-    s.recorder.stop();
-  }
-  s.stream?.getTracks().forEach((t) => t.stop());
-  s.ctx?.close().catch(() => {});
+  closeMic(s);
   handlers.state('off', '');
 }
 
@@ -281,35 +340,113 @@ function startRecognition(me) {
 
 // Engine "host": loudness decides where an utterance starts and ends; the
 // recording of it goes to the host for transcription.
-async function startHostEngine(me) {
+async function openMic(me) {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
   if (session !== me) return stream.getTracks().forEach((t) => t.stop());
-  me.stream = stream;
-  me.ctx = new AudioContext();
-  const analyser = me.ctx.createAnalyser();
+  const ctx = new AudioContext();
+  const analyser = ctx.createAnalyser();
   analyser.fftSize = 1024;
-  me.ctx.createMediaStreamSource(stream).connect(analyser);
-  const samples = new Float32Array(analyser.fftSize);
+  ctx.createMediaStreamSource(stream).connect(analyser);
+  // A microphone that goes away (unplugged, a headset switching its profile) is opened again.
+  for (const track of stream.getAudioTracks()) track.onended = () => session === me && me.stream === stream && reopenMic(me, 'the microphone was disconnected');
+  // Chrome may suspend or interrupt the audio graph (another app, a device change): wake it.
+  ctx.onstatechange = () => session === me && me.ctx === ctx && ctx.state !== 'running' && ctx.state !== 'closed' && ctx.resume().catch(() => {});
+  Object.assign(me, { stream, ctx, analyser, samples: new Float32Array(analyser.fftSize) });
+}
+
+function closeMic(me) {
+  if (me.recorder?.state === 'recording') {
+    me.recorder.keep = false;
+    try {
+      me.recorder.stop();
+    } catch {}
+  }
+  me.recorder = null;
+  me.stream?.getTracks().forEach((t) => {
+    t.onended = null;
+    t.stop();
+  });
+  me.ctx?.close().catch(() => {});
+  me.stream = me.ctx = me.analyser = null;
+}
+
+// The microphone stopped delivering sound: take it again. Three times in a row
+// without ever hearing anything means it is not coming back by itself.
+// `counted: false` for a reopen the user caused (plugging headphones in or out): that
+// is not a sign of a broken microphone.
+async function reopenMic(me, why, { counted = true } = {}) {
+  if (session !== me || me.reopening) return;
+  me.reopening = true;
+  if (counted) me.reopens = (me.reopens || 0) + 1;
+  try {
+    if (me.reopens > 3) throw new Error(`the microphone gives no sound (${why})`);
+    closeMic(me);
+    await openMic(me);
+    if (session !== me) return;
+    me.segmenter.reset();
+    me.signal.reset();
+    restartRecorder(me, false);
+    handlers.event('mic_reopened', why);
+    setState(me.muted ? 'speaking' : 'listening');
+  } catch (err) {
+    if (session === me) {
+      stopLive();
+      handlers.error(`Live conversation stopped: ${micError(err).message}. Check the input device in Chrome and in the system settings, then turn Live on again.`);
+    }
+  } finally {
+    me.reopening = false;
+  }
+}
+
+async function startHostEngine(me) {
+  await openMic(me);
+  if (session !== me) return;
   me.segmenter = createSegmenter({ silenceMs: Math.min(3000, Math.max(400, Number(me.settings.silenceMs) || 900)) });
+  me.signal = createSignalWatch();
   restartRecorder(me, false);
   let quietSince = Date.now();
+  let meterAt = 0;
+  let resumeAt = 0;
   me.timer = setInterval(() => {
-    if (session !== me || me.muted) return;
-    analyser.getFloatTimeDomainData(samples);
-    let sum = 0;
-    for (const x of samples) sum += x * x;
+    if (session !== me || me.reopening || !me.analyser) return;
     const now = Date.now();
-    const event = me.segmenter.feed(Math.sqrt(sum / samples.length), now);
-    if (event === 'start') setState('hearing');
-    else if (event === 'end') {
+    if (me.ctx.state !== 'running' && now - resumeAt > 1000) {
+      resumeAt = now;
+      me.ctx.resume().catch(() => {});
+    }
+    me.analyser.getFloatTimeDomainData(me.samples);
+    let sum = 0;
+    let peak = 0;
+    for (const x of me.samples) {
+      sum += x * x;
+      if (x > peak) peak = x;
+      else if (-x > peak) peak = -x;
+    }
+    const level = Math.sqrt(sum / me.samples.length);
+    // Checked also while TabHelm speaks: a dead microphone is found before the user talks to it.
+    if (me.signal.feed(peak, now)) {
+      me.signal.reset();
+      return void reopenMic(me, 'no sound came from it');
+    }
+    if (now - meterAt > 100) {
+      meterAt = now;
+      handlers.level(me.muted ? 0 : level);
+    }
+    if (me.muted) return;
+    const event = me.segmenter.feed(level, now);
+    if (event === 'start') {
+      me.reopens = 0; // it hears something: the microphone is alive
+      setState('hearing');
+    } else if (event === 'end') {
       restartRecorder(me, true); // the recording so far is the utterance
       quietSince = now;
     } else if (event === 'drop') {
       restartRecorder(me, false);
       quietSince = now;
       setState(me.pending ? 'thinking' : 'listening');
-    } else if (!me.segmenter.speaking && now - quietSince > 3000) {
-      // Nothing said: start the recording afresh, so an utterance never begins with long silence.
+    } else if (!me.segmenter.active && now - quietSince > 3000) {
+      // Nothing said: start the recording afresh, so an utterance never begins with long
+      // silence. Never while something has just started — that would cut off its first syllable.
       restartRecorder(me, false);
       quietSince = now;
     }
@@ -321,16 +458,24 @@ function restartRecorder(me, keep) {
   const old = me.recorder;
   if (old?.state === 'recording') {
     old.keep = keep;
-    old.stop();
+    try {
+      old.stop();
+    } catch {}
   }
   if (session !== me || !me.stream) return;
-  const mime = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus'].find((t) => MediaRecorder.isTypeSupported(t)) || '';
-  const recorder = new MediaRecorder(me.stream, mime ? { mimeType: mime } : {});
-  const parts = [];
-  recorder.ondataavailable = (e) => e.data.size && parts.push(e.data);
-  recorder.onstop = () => recorder.keep && sendUtterance(me, new Blob(parts, { type: recorder.mimeType }));
-  recorder.start();
-  me.recorder = recorder;
+  try {
+    const mime = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus'].find((t) => MediaRecorder.isTypeSupported(t)) || '';
+    const recorder = new MediaRecorder(me.stream, mime ? { mimeType: mime } : {});
+    const parts = [];
+    recorder.ondataavailable = (e) => e.data.size && parts.push(e.data);
+    recorder.onstop = () => recorder.keep && sendUtterance(me, new Blob(parts, { type: recorder.mimeType }));
+    recorder.start();
+    me.recorder = recorder;
+  } catch (err) {
+    // The stream cannot be recorded any more (its track ended): take the microphone again.
+    me.recorder = null;
+    reopenMic(me, `recording could not start (${err.name || err.message})`);
+  }
 }
 
 async function sendUtterance(me, blob) {

@@ -3,7 +3,7 @@
 // Usage: node --test scripts/live.test.js
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseCommand, matchAnswer, createSegmenter, isPhantom, normalizeSpeech } from '../../extension/live.js';
+import { parseCommand, matchAnswer, createSegmenter, createSignalWatch, isPhantom, normalizeSpeech } from '../../extension/live.js';
 import { normalizeQuestions } from '../../extension/questions.js';
 import { plainSpeech } from '../../extension/narration.js';
 
@@ -92,6 +92,35 @@ test('a click is dropped, steady noise is not speech, and a monologue is cut', (
   assert.deepEqual(run(fan, [[0.008, 6000]]), []);
   assert.deepEqual(run(fan, [[0.2, 1000], [0.008, 1200]]), ['start', 'end']);
   assert.deepEqual(run(createSegmenter({ maxMs: 3000 }), [[0.2, 4000]]).slice(0, 2), ['start', 'end']);
+});
+
+test('the first moments of an utterance already count as "something started"', () => {
+  const seg = createSegmenter();
+  seg.feed(0.002, 1000);
+  assert.equal(seg.active, false);
+  assert.equal(seg.feed(0.3, 1050), 'start');
+  // Not yet "speech" (it could be a click), but the recording must not be restarted now.
+  assert.deepEqual([seg.active, seg.speaking], [true, false]);
+  for (let t = 1100; t <= 1400; t += 50) seg.feed(0.3, t);
+  assert.deepEqual([seg.active, seg.speaking], [true, true]);
+  seg.reset();
+  assert.equal(seg.active, false);
+});
+
+test('a microphone that delivers exact silence for long is dead; a quiet room is not', () => {
+  const watch = createSignalWatch({ deadMs: 6000 });
+  // A quiet room: tiny noise, never dead.
+  for (let t = 0; t <= 20_000; t += 50) assert.equal(watch.feed(0.0004, t), false);
+  // Digital silence: dead after six seconds, not before.
+  let deadAt = null;
+  for (let t = 20_050; t <= 30_000 && deadAt === null; t += 50) if (watch.feed(0, t)) deadAt = t;
+  assert.equal(deadAt, 26_050);
+  // Any sound in between starts the count again.
+  watch.reset();
+  for (let t = 0; t < 5000; t += 50) assert.equal(watch.feed(0, t), false);
+  assert.equal(watch.feed(0.2, 5000), false);
+  for (let t = 5050; t < 10_900; t += 50) assert.equal(watch.feed(0, t), false);
+  assert.equal(watch.feed(0, 11_050), true);
 });
 
 test('Whisper\'s stock phrases for silence are not something the user said', () => {

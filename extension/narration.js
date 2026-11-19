@@ -37,6 +37,13 @@ export function initNarration(panelPort, { spoken, error, state } = {}) {
   onError = error || onError;
   onState = state || onState;
   getFeatures().then((f) => f.narration && port.postMessage({ type: 'speech_status' }));
+  // Headphones plugged in or out: what is being spoken moves to the new output. The
+  // events come in a burst, and Live conversation takes the microphone again first.
+  let devicesTimer = null;
+  globalThis.navigator?.mediaDevices?.addEventListener?.('devicechange', () => {
+    clearTimeout(devicesTimer);
+    devicesTimer = setTimeout(replayOnNewDevice, 1200);
+  });
 }
 
 // 'speech' answers a request of ours; 'speech_status' is also read by Settings, so it is not consumed.
@@ -130,6 +137,23 @@ export function hush(kind) {
   u.audio?.pause();
   u.stopPlaying?.();
   onState(false, u.kind);
+}
+
+// The audio devices changed (headphones plugged in or out) while something is being
+// spoken: the clip may be left playing into a device that is gone. It is started
+// again on the output that is the default now, a moment before where it was.
+// Returns whether there was something to restart.
+export function replayOnNewDevice() {
+  const audio = current?.audio;
+  if (!audio || audio.ended) return false;
+  try {
+    audio.pause();
+    audio.currentTime = Math.max(0, (audio.currentTime || 0) - 0.5);
+  } catch {}
+  // Naming the default output again makes Chrome open it afresh.
+  const rebound = typeof audio.setSinkId === 'function' ? audio.setSinkId('default').catch(() => {}) : Promise.resolve();
+  rebound.then(() => current?.audio === audio && audio.play().catch(() => {}));
+  return true;
 }
 
 function request(message) {

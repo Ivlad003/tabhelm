@@ -2402,6 +2402,17 @@ initLive(port, {
     if (text) onHeard(text);
   },
   error: (text) => notice(text, true),
+  // How loud the microphone is: shows at a glance whether TabHelm hears anything at all.
+  level(value) {
+    $('live-level-fill').style.width = `${Math.min(100, Math.round(Math.sqrt(value) * 220))}%`;
+  },
+  // What happened to the microphone goes into the chat's journal (and its export), so
+  // "it stopped listening" can be told apart from "it heard nothing".
+  event(name, detail) {
+    record('live', { event: name, ...(detail ? { detail } : {}) });
+    if (name === 'mic_reopened') liveLine(detail === 'the audio devices changed' ? '🎙 Audio devices changed — the microphone was connected again.' : `🎙 The microphone stopped delivering sound (${detail}) — connected to it again.`);
+  },
+  speaking: () => speaking(),
 });
 // Changing the folder restarts the agent there; the conversation is handed over.
 initFolder(port, tabId, {
