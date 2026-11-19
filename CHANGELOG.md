@@ -2,6 +2,14 @@
 
 All notable changes to TabHelm. The newest release is at the top; the panel's update banner links here.
 
+## [0.33.1] - 2026-11-19
+
+### Fixed
+- **An agent's error said only "Internal error".** Agents often send the real cause next to that message — not signed in, over its usage limit, a model it does not have — and TabHelm kept it in the host log only. The chat now shows it after the message. When the agent gives no cause, the chat says what to check: send the message again, try the agent in a terminal, look at `~/.tabhelm/host.log`.
+
+### Changed
+- The Narration and Live conversation settings now say that only speech goes through OpenRouter. The task is done by whichever agent you pick in the agent list (Claude Code, Codex, OpenCode…); the built-in OpenRouter agent is not needed for the voice.
+
 ## [0.33.0] - 2026-11-19
 
 ### Added
