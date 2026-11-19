@@ -7,6 +7,7 @@ import * as acp from '@agentclientprotocol/sdk';
 import { skillsPreamble } from './skills.js';
 import { memoryPreamble } from './memory.js';
 import { snapshotDir, changedFiles, editedPaths, describeFiles } from './files.js';
+import { customPrompt } from './prompts.js';
 
 const bridgePath = fileURLToPath(new URL('./mcp-bridge.js', import.meta.url));
 // MCP clients of Cursor, Codex and the built-in agents end a tool call after
@@ -40,6 +41,17 @@ const BROWSER_PREAMBLE = `[TabHelm] You are running inside a Chrome side panel a
 
 User request:
 `;
+
+// What Settings → System prompts shows and lets the user change: the preamble
+// without its last line, which marks where the user's request begins.
+const REQUEST_MARKER = 'User request:\n';
+export const DEFAULT_PREAMBLE = BROWSER_PREAMBLE.slice(0, BROWSER_PREAMBLE.lastIndexOf(REQUEST_MARKER)).trimEnd();
+
+// The preamble in force, always ending with the marker (the request is put after it).
+export function preambleText(custom) {
+  const own = customPrompt(custom, DEFAULT_PREAMBLE);
+  return own ? `${own}\n\n${REQUEST_MARKER}` : BROWSER_PREAMBLE;
+}
 
 const MAX_TEXT = 4000;
 
@@ -89,7 +101,8 @@ export class AgentSession {
     const { agent } = this;
     this.child = spawnAgent(agent.command, agent.args, {
       cwd: this.folder || this.workspace,
-      env: agent.env ? { ...process.env, ...agent.env } : process.env,
+      // The built-in agent takes its system prompt from the environment when the user changed it.
+      env: { ...process.env, ...(agent.env || {}), ...(agent.builtin && this.prompts?.builtin ? { TABHELM_BUILTIN_PROMPT: this.prompts.builtin } : {}) },
       stdio: ['pipe', 'pipe', 'pipe'],
     });
     this.child.stderr.on('data', (d) => this.log(`[${agent.id}:${this.tabId}] ${d.toString().trimEnd()}`));
@@ -322,7 +335,9 @@ export class AgentSession {
     const { blocks, notes } = this.attachmentBlocks(attachments);
     const listed = attachments.length ? `\n\n[Attached: ${attachments.map((a) => a.name).join(', ')}]` : '';
     const body = text + listed + (notes.length ? `\n\n${notes.join('\n\n')}` : '');
-    const fullText = this.firstPrompt ? BROWSER_PREAMBLE.replace('User request:\n', `${skills}${history}User request:\n`) + body : skills + history + body;
+    // The first message carries the preamble — TabHelm's own, or the user's from Settings → System prompts.
+    const preamble = preambleText(this.prompts?.preamble);
+    const fullText = this.firstPrompt ? `${preamble.slice(0, preamble.lastIndexOf(REQUEST_MARKER))}${skills}${history}${REQUEST_MARKER}${body}` : skills + history + body;
     this.firstPrompt = false;
     // The agent's folder as it is now: what is new or different afterwards is what it produced.
     const root = this.folder || this.workspace;

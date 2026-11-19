@@ -39,7 +39,12 @@ async function firstOllamaModel(p) {
 }
 
 // One non-streaming completion; returns the text.
-export async function complete({ provider = 'openrouter', model, system, user, maxTokens = 400, timeoutMs = 45_000 }) {
+export async function complete(options) {
+  return (await completeDetailed(options)).text;
+}
+
+// The same, with the model that answered and — where the provider reports it — the cost in USD.
+export async function completeDetailed({ provider = 'openrouter', model, system, user, maxTokens = 400, timeoutMs = 45_000 }) {
   const p = PROVIDERS[provider];
   if (!p) throw new Error(`Unknown provider ${provider}`);
   if (!providerReady(provider)) throw new Error(`${provider} is not configured (key missing in ~/.tabhelm/env)`);
@@ -49,10 +54,11 @@ export async function complete({ provider = 'openrouter', model, system, user, m
   const res = await fetch(`${p.baseUrl()}/chat/completions`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', ...p.headers, ...(key ? { authorization: `Bearer ${key}` } : {}) },
-    body: JSON.stringify({ model: chosen, messages: [{ role: 'system', content: system }, { role: 'user', content: user }], temperature: 0, max_tokens: maxTokens }),
+    body: JSON.stringify({ model: chosen, messages: [{ role: 'system', content: system }, { role: 'user', content: user }], temperature: 0, max_tokens: maxTokens, ...(provider === 'openrouter' ? { usage: { include: true } } : {}) }),
     signal: AbortSignal.timeout(timeoutMs),
   });
   if (!res.ok) throw new Error(`${provider} HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);
   const data = await res.json();
-  return data.choices?.[0]?.message?.content || '';
+  const cost = Number(data.usage?.cost);
+  return { text: data.choices?.[0]?.message?.content || '', model: chosen, cost: Number.isFinite(cost) ? cost : null };
 }

@@ -10,6 +10,8 @@ import { COMPLAINT_RE } from './taxonomy.js';
 import { getFeatures, getSetting } from './features.js';
 import { initVoice, handleVoiceMessage, stop as stopVoice } from './voice.js';
 import { formatAnswers } from './questions.js';
+import { suggestionContext, suggestionPlaceholder } from './suggest.js';
+import { customPrompts } from './prompts.js';
 import { initNarration, handleNarrationMessage, narrationSettings, say, hush, speaking, phrase, estimateCost, forceNarration, plainSpeech } from './narration.js';
 import { initLive, handleLiveMessage, startLive, stopLive, liveOn, setLiveMuted, parseCommand, matchAnswer } from './live.js';
 import { initAttachments, takeAttachments, hasAttachments, chip, addQuote, addImageUrl, addElements, addFiles, removeTextAttachment } from './attachments.js';
@@ -931,6 +933,7 @@ els.newChat.onclick = () => {
   closeOpenTurn('cancelled', null);
   flushJournal();
   if (busy) stop();
+  clearSuggestion();
   stopVoice(true);
   hush();
   stopRecording(true);
@@ -982,6 +985,13 @@ els.record.onchange = () => {
 els.send.onclick = () => (busy ? stop() : send());
 els.input.addEventListener('keydown', (e) => {
   if (slashKey(e)) return;
+  if (e.key === 'Tab' && !e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey && !e.isComposing && suggestion && !els.input.value) {
+    e.preventDefault();
+    els.input.value = suggestion;
+    clearSuggestion();
+    els.input.dispatchEvent(new Event('input')); // the slash menu and anything else that follows the text
+    return;
+  }
   if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
     e.preventDefault();
     send(); // while the agent works this queues the message
@@ -1091,6 +1101,7 @@ let interrupting = false;
 function queueMessage() {
   const m = composeMessage();
   if (!m) return;
+  clearSuggestion();
   breakActivity();
   const el = add('div', 'msg user queued');
   el.textContent = m.text;
@@ -1192,6 +1203,7 @@ function userBubble(text, attachments) {
 
 // `turnId`: the turn a `recorded` message was saved under while its agent started.
 async function sendNow(text, attachments, { silent = false, recorded = false, turnId = null } = {}) {
+  clearSuggestion();
   const features = await getFeatures();
   awaitingPlan = Boolean(features.planPreview) && !text.startsWith('[plan approved]');
   breakActivity();
@@ -1245,7 +1257,6 @@ function endTurn(note, failure = null, stopReason = null) {
     turn = null;
     renderUsageButton();
   }
-  stopRecording();
   // The turn's steps block stops pulsing but stays open.
   if (activity) {
     activity.el.classList.add('done');
@@ -1259,10 +1270,12 @@ function endTurn(note, failure = null, stopReason = null) {
   syncControls();
   // Narration: how the task ended (a task you stopped yourself needs no announcement).
   // In a live conversation the answer itself is read aloud.
+  let lastWords = null;
   if (wasBusy && stopReason !== 'cancelled') {
-    if (liveOn() && replyText && !failure) speakReply(replyText);
-    else announce(failure ? 'failed' : awaitingPlan && lastTurnHadNoActions ? 'needsYou' : 'done');
+    lastWords = liveOn() && replyText && !failure ? speakReply(replyText) : announce(failure ? 'failed' : awaitingPlan && lastTurnHadNoActions ? 'needsYou' : 'done');
   }
+  stopRecordingAfter(lastWords);
+  if (wasBusy && !failure && stopReason !== 'cancelled') requestSuggestion();
   if (failure && wasBusy) offerContinue(failure);
   else if (awaitingPlan && wasBusy && !failure && lastTurnHadNoActions) offerPlanStart();
   awaitingPlan = false;
@@ -1601,13 +1614,16 @@ function renderUsageButton() {
   const btn = $('usage-open');
   const ctx = usage.context;
   const totals = sessionTotals();
-  const known = Boolean(ctx?.size) || totals.tokens > 0 || usage.cost != null;
+  // What TabHelm itself spent through OpenRouter (voice, voice input, suggestions) counts too:
+  // with an agent that reports nothing, it is the only cost there is to show.
+  const own = journal.filter((e) => ['speech', 'voice', 'suggest'].includes(e.type) && e.cost != null);
+  const known = Boolean(ctx?.size) || totals.tokens > 0 || usage.cost != null || own.length > 0;
   btn.hidden = !known;
   if (!known) return;
   const pct = ctx?.size ? Math.min(100, Math.round((ctx.used / ctx.size) * 100)) : null;
   $('usage-fill').style.width = `${pct ?? 0}%`;
   btn.classList.toggle('warn', pct != null && pct >= 80);
-  $('usage-label').textContent = pct != null ? `${pct}%` : totals.tokens ? fmtTokens(totals.tokens) : fmtCost({ amount: usage.cost, currency: usage.currency });
+  $('usage-label').textContent = pct != null ? `${pct}%` : totals.tokens ? fmtTokens(totals.tokens) : fmtCost({ amount: usage.cost ?? own.reduce((a, e) => a + e.cost, 0), currency: usage.currency });
   btn.title = pct != null ? `Context window ${fmtTokens(ctx.used)} of ${fmtTokens(ctx.size)} used (${pct}%) — click for details` : 'Token usage — click for details';
   if (!$('usage-popup').hidden) renderUsagePopup();
 }
@@ -1648,6 +1664,8 @@ function renderUsagePopup() {
   const speech = speechTotals();
   if (speech.narration.chars) items.push(row('Narration', `${speech.narration.chars.toLocaleString()} characters${speech.narration.priced ? ` · ${fmtCost({ amount: speech.narration.cost, currency: 'USD' })}` : ''}`, 'Text sent to OpenRouter to be spoken; repeats come from a cache and are not counted'));
   if (speech.voice.priced) items.push(row('Voice input', fmtCost({ amount: speech.voice.cost, currency: 'USD' }), 'Audio transcribed through OpenRouter'));
+  const suggested = journal.filter((e) => e.type === 'suggest');
+  if (suggested.length) items.push(row('Suggestions', `${suggested.length} · ${fmtCost({ amount: suggested.reduce((a, e) => a + (e.cost || 0), 0), currency: 'USD' })}`, 'Suggested next messages, written by a model through OpenRouter'));
   const last = journal.filter((e) => e.type === 'agent' && e.stats).pop();
   if (last) {
     items.push(section('Last task'));
@@ -1741,7 +1759,49 @@ async function announce(id, text = '') {
   if (!settings.on || settings.events === false) return;
   // A reply you asked to hear is not cut off by "Done."
   if (speaking('reply')) return;
-  say(text || phrase(id, settings.language), { kind: 'event', settings });
+  return say(text || phrase(id, settings.language), { kind: 'event', settings }); // resolves when it has been said
+}
+
+// ---------- Message suggestions (flag) ----------
+// After a reply, the empty message box shows what the user would probably send
+// next; Tab puts it into the box. It is written by a model (OpenRouter) from the
+// last exchanges of the chat. A suggestion that arrives late — a new message was
+// sent, another chat opened — is dropped.
+
+let suggestion = '';
+let suggestTicket = 0;
+let suggestErrorAt = 0;
+
+function clearSuggestion() {
+  suggestTicket++;
+  if (!suggestion) return;
+  suggestion = '';
+  syncControls();
+}
+
+async function requestSuggestion() {
+  if (replaying || !(await getFeatures()).suggest) return;
+  const context = suggestionContext(journal);
+  if (!context) return;
+  const ticket = ++suggestTicket;
+  const [settings, prompts] = await Promise.all([getSetting('suggest'), customPrompts()]);
+  const reply = await hostRequest('suggest', { context, model: settings.model || '', prompt: prompts.suggest || '' }, 'suggestion', 25_000);
+  // What it cost is recorded even when the suggestion comes too late to be shown.
+  if (reply.cost != null) {
+    record('suggest', { cost: reply.cost, model: reply.model });
+    renderUsageButton();
+  }
+  if (reply.error) {
+    // A model that is out of its limit fails after every task: say it once in a while, not every time.
+    if (Date.now() - suggestErrorAt > 600_000) {
+      suggestErrorAt = Date.now();
+      notice(`No message suggestion: ${reply.error}`, true);
+    }
+    return;
+  }
+  if (ticket !== suggestTicket || busy || !reply.text || els.input.value) return;
+  suggestion = reply.text;
+  syncControls();
 }
 
 // Speech sent to OpenRouter in this chat: narration and voice input.
@@ -1818,7 +1878,8 @@ async function buildContext(pendingTurn = null) {
 function syncControls() {
   els.agent.disabled = busy;
   els.send.textContent = busy ? 'Stop' : 'Send';
-  els.input.placeholder = busy ? 'Add a note for the agent — Enter hands it over with its next step (Stop cancels the task)' : els.input.dataset.placeholder;
+  els.input.placeholder = busy ? 'Add a note for the agent — Enter hands it over with its next step (Stop cancels the task)' : suggestion ? suggestionPlaceholder(suggestion) : els.input.dataset.placeholder;
+  els.input.classList.toggle('suggested', Boolean(suggestion) && !busy);
   getFeatures().then((f) => {
     $('pause').hidden = !(f.takeOver && busy);
     $('diagnose-chat').hidden = !f.selfAnalysis;
@@ -1857,16 +1918,29 @@ function download(filename, content, type) {
 // seekable MP4; Chrome without WebCodecs falls back to MediaRecorder. Each
 // finished video is shown in the chat and saved by the host to ~/Videos/TabHelm.
 
+// A recording ends with its task — after the task's last spoken words, so the video has
+// them. Anything that starts or stops a recording in between makes that wait void.
+let recStopTicket = 0;
+function stopRecordingAfter(voice) {
+  if (!rec.active) return;
+  const ticket = ++recStopTicket;
+  const spoken = Promise.resolve(voice).catch(() => {});
+  // At most a minute and a half of voice after the task.
+  Promise.race([spoken, new Promise((resolve) => setTimeout(resolve, 90_000))]).then(() => ticket === recStopTicket && stopRecording());
+}
+
 const rec = { active: false, encoder: null, recorder: null, canvas: null, ctx: null, img: null, chunks: [], mime: '', started: 0, heartbeat: null, frames: 0 };
 
 async function startRecording() {
+  recStopTicket++; // a recording still waiting for the last words goes on into this task
   if (rec.active) return;
   Object.assign(rec, { active: true, encoder: null, recorder: null, chunks: [], img: null, requested: Date.now(), frames: 0, startedAt: new Date().toISOString() });
   els.recIndicator.hidden = false;
   if (webCodecsAvailable()) {
     const features = await getFeatures();
     const trim = features.trimWaits ? await getSetting('trimWaits') : null;
-    rec.encoder = new Recorder({ trimWaits: Boolean(trim), maxPauseMs: (trim?.maxPause ?? 1.5) * 1000 });
+    // What TabHelm says aloud goes into the video when it can speak at all.
+    rec.encoder = new Recorder({ trimWaits: Boolean(trim), maxPauseMs: (trim?.maxPause ?? 1.5) * 1000, audio: Boolean(features.narration) || liveOn() });
   }
   port.postMessage({ type: 'record_start' });
 }
@@ -1910,6 +1984,7 @@ function paintFrame() {
 }
 
 async function stopRecording(discard = false) {
+  recStopTicket++;
   if (!rec.active) return;
   rec.active = false;
   els.recIndicator.hidden = true;
@@ -1927,7 +2002,7 @@ async function stopRecording(discard = false) {
     try {
       const out = await encoder.finish();
       if (!out) return noFrames();
-      addVideo(out.blob, out.durationMs, out.timeAt, out.skippedMs);
+      addVideo(out.blob, out.durationMs, out.timeAt, out.skippedMs, out.audio);
     } catch (err) {
       notice(`Could not encode the video: ${err.message}`, true);
     }
@@ -1946,7 +2021,7 @@ async function stopRecording(discard = false) {
 
 const videoCards = new Map(); // recording id -> { saved, card, url, path }
 
-async function addVideo(blob, durationMs, timeAt = (ms) => ms - Date.parse(rec.startedAt), skippedMs = 0) {
+async function addVideo(blob, durationMs, timeAt = (ms) => ms - Date.parse(rec.startedAt), skippedMs = 0, withVoice = false) {
   if (!blob.size) return;
   const url = URL.createObjectURL(blob);
   const ext = blob.type.includes('mp4') ? 'mp4' : 'webm';
@@ -1955,12 +2030,12 @@ async function addVideo(blob, durationMs, timeAt = (ms) => ms - Date.parse(rec.s
   const id = crypto.randomUUID();
 
   const card = add('div', 'video');
-  const video = Object.assign(document.createElement('video'), { src: url, controls: true, muted: true, playsInline: true });
+  const video = Object.assign(document.createElement('video'), { src: url, controls: true, muted: !withVoice, playsInline: true });
   const row = document.createElement('div');
   row.className = 'row';
   const info = document.createElement('span');
   const secs = Math.round(durationMs / 1000);
-  info.textContent = `Recording · ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')} · ${(blob.size / 1048576).toFixed(1)} MB${skippedMs >= 1000 ? ` · ${Math.round(skippedMs / 1000)} s of waiting skipped` : ''}`;
+  info.textContent = `Recording · ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')} · ${(blob.size / 1048576).toFixed(1)} MB${skippedMs >= 1000 ? ` · ${Math.round(skippedMs / 1000)} s of waiting skipped` : ''}${withVoice ? ' · with voice' : ''}`;
   const download = Object.assign(document.createElement('a'), { className: 'btn small', href: url, download: filename, textContent: 'Download' });
   const remove = Object.assign(document.createElement('button'), { className: 'btn small', type: 'button', textContent: 'Delete', title: 'Delete this recording from the chat and from disk' });
   const buttons = document.createElement('span');
@@ -2276,7 +2351,7 @@ initNarration(port, {
       scrollDown();
     }
     if (chars) record('speech', { kind, chars, model, ...(cost != null ? { cost } : {}) });
-    if (!$('usage-popup').hidden) renderUsagePopup();
+    renderUsageButton(); // also refreshes the open details
   },
   error: (text) => notice(text, true),
   state(on) {
@@ -2287,6 +2362,9 @@ initNarration(port, {
     if (on) setLiveMuted(true);
     else unmuteTimer = setTimeout(() => setLiveMuted(false), 350);
   },
+  // Video recording: what is said aloud becomes the video's sound.
+  played: ({ url, at }) => rec.active && rec.encoder?.speech({ url, at }),
+  stopped: ({ at }) => rec.active && rec.encoder?.speechStopped(at),
 });
 $('narration-stop').onclick = () => hush();
 
@@ -2304,7 +2382,7 @@ let unmuteTimer = null;
 function speakReply(markdown) {
   const text = plainSpeech(markdown);
   if (!text) return announce('done');
-  say(text.slice(0, LIVE_REPLY_MAX), { kind: 'reply' });
+  return say(text.slice(0, LIVE_REPLY_MAX), { kind: 'reply' });
 }
 
 async function setLive(on) {
@@ -2445,6 +2523,7 @@ initHistory({
 });
 
 async function openSavedChat(id, { navigate = false } = {}) {
+  clearSuggestion();
   if (id !== chatId) {
     closeOpenTurn('cancelled', null);
     // A message still waiting for its agent, and the hand-over built for it,

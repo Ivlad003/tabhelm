@@ -2,6 +2,7 @@
 // installed) and version / update checks.
 
 import { showNews } from './news.js';
+import { initPrompts, handlePromptsMessage } from './prompts.js';
 import { initExperimental, handleExperimentalMessage, authoredSkills, setAgentsForSchedules, refreshExperimental } from './experimental.js';
 
 const $ = (id) => document.getElementById(id);
@@ -84,6 +85,7 @@ export async function initSettings(panelPort) {
   };
   $('check-updates').onclick = checkUpdates;
   initRemote();
+  initPrompts(port);
   const tellAgent = () => port.postMessage({ type: 'set_features' }); // the running agent's prompt mentions these
   const checkbox = (fallback) => ({ show: (el, v) => (el.checked = v === undefined ? fallback : Boolean(v)), value: (el) => el.checked });
   bindSetting('highlightFinds', [$('highlight-finds')], checkbox(true));
@@ -156,7 +158,7 @@ export function enabledSkillCount() {
 
 // Messages from the host that belong to the settings view.
 export function handleSettingsMessage(msg) {
-  if (handleExperimentalMessage(msg)) return true;
+  if (handleExperimentalMessage(msg) || handlePromptsMessage(msg)) return true;
   if (msg.type === 'skill_info') {
     pending.get(msg.requestId)?.(msg);
     pending.delete(msg.requestId);

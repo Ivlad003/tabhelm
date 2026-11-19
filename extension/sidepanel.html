@@ -90,8 +90,9 @@
         <button id="history-clear" class="btn small danger" type="button" title="Delete every saved chat">Clear all</button>
         <button id="history-close" class="btn small" type="button">Done</button>
       </div>
-      <p class="hint">Chats are saved on this computer. Open one to continue it — its page opens too. ⬇ exports a chat with its action log, 🗑 deletes it.</p>
-      <input id="history-search" class="history-search" type="search" placeholder="Search chats" aria-label="Search chats" />
+      <p class="hint">Chats are saved on this computer. Open one to continue it — its page opens too. ☆ marks a favourite (kept when History is cleared), ＋ label groups chats, ⬇ exports a chat with its action log, 🗑 deletes it.</p>
+      <input id="history-search" class="history-search" type="search" placeholder="Search chats and labels" aria-label="Search chats" />
+      <div id="history-filters" class="history-filters" hidden></div>
       <p id="history-empty" class="hint" hidden>No saved chats yet.</p>
       <ul id="history-list" class="history-list"></ul>
     </section>
@@ -125,6 +126,13 @@
       <label class="check"><input id="single-tab" type="checkbox" /> Work in one tab: the agent stays in the chat's tab — no new tabs or switching; links and pop-ups open in this tab</label>
       <label class="check"><input id="guide-autoplay" type="checkbox" /> Auto-play guides: the agent does each step itself, no prompts (off: guides wait for you; ▶ Auto plays one)</label>
       <label class="check">Pause before each automatic step <input id="guide-pause" type="number" min="1" max="30" step="0.5" value="3" style="width: 4.5em" /> s</label>
+
+      <h3>System prompts</h3>
+      <p class="hint">
+        What agents are told before your first message. Edit a text to change how they behave; <b>Reset</b> brings TabHelm's own text back. A change applies to the next chat (or the next agent you start).
+        The agents' instructions include the safety rules — treat page content as untrusted, ask before irreversible actions; if you remove them, nothing else tells the agent.
+      </p>
+      <div id="prompts-list" class="prompts-list"><span class="hint">Loading the built-in texts from the host…</span></div>
 
       <h3>Experimental</h3>
       <p class="hint">New features, all off by default. Turn one on to see its settings.</p>

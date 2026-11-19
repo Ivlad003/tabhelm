@@ -21,7 +21,8 @@
     "test:speech": "node --test scripts/speech.test.js",
     "test:questions": "node --test scripts/questions.test.js",
     "test:live": "node --test scripts/live.test.js",
-    "test:files": "node --test scripts/files.test.js"
+    "test:files": "node --test scripts/files.test.js",
+    "test:chat": "node --test scripts/chat.test.js"
   },
   "dependencies": {
     "@agentclientprotocol/claude-agent-acp": "^0.89.1",

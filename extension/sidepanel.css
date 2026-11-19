@@ -1048,6 +1048,152 @@ input[type='checkbox'] {
   padding: 2px 6px;
 }
 
+/* Favourites and labels */
+.history-item {
+  flex-wrap: wrap;
+}
+
+.history-star {
+  flex: none;
+  margin-top: 4px;
+  padding: 2px 4px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.history-star.on,
+.history-star:hover {
+  color: var(--th-warn, #c98a00);
+}
+
+.history-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.history-filters[hidden] {
+  display: none;
+}
+
+.history-chip,
+.history-label,
+.history-label-add {
+  font: inherit;
+  font-size: 11px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--muted);
+}
+
+.history-chip,
+.history-label-add {
+  padding: 1px 8px;
+  cursor: pointer;
+}
+
+.history-chip.on {
+  border-color: var(--accent);
+  background: var(--th-accent-soft);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.history-labels {
+  flex-basis: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 0 4px 4px 30px;
+}
+
+.history-label {
+  display: inline-flex;
+  align-items: center;
+}
+
+.history-label-name,
+.history-label-off {
+  font: inherit;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  padding: 1px 2px 1px 8px;
+}
+
+.history-label-off {
+  padding: 1px 6px 1px 2px;
+}
+
+.history-label-name:hover,
+.history-label-off:hover,
+.history-label-add:hover {
+  color: var(--text);
+}
+
+.history-label-add {
+  border-style: dashed;
+}
+
+.history-label-input {
+  font: inherit;
+  font-size: 11px;
+  width: 130px;
+  padding: 1px 8px;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--text);
+}
+
+/* Settings → System prompts */
+.prompts-list {
+  display: grid;
+  gap: 10px;
+}
+
+.prompt-item textarea {
+  width: 100%;
+  min-height: 110px;
+  resize: vertical;
+  font-family: var(--th-font-mono);
+  font-size: 11px;
+  line-height: 1.45;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--th-radius-s);
+  background: var(--bg);
+  color: var(--text);
+}
+
+.prompt-item.changed textarea {
+  border-color: var(--accent);
+}
+
+.prompt-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.prompt-head b {
+  flex: 1;
+}
+
+.prompt-state {
+  font-size: 11px;
+  color: var(--muted);
+}
+
 .history-item .history-delete:hover,
 .btn.danger:hover {
   color: var(--th-err);

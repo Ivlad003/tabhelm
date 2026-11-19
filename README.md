@@ -110,6 +110,8 @@ Turn on **Record video** and every message you send is recorded until the agent 
 
 **Skip waiting in recordings** (Experimental flag): while the page stays still — loading, the agent thinking — the video keeps only a moment of the wait (1.5 s by default, adjustable) and marks the cut with *⏩ N s of waiting skipped*; the video card says how much was skipped and step lists still jump to the right moment. A 45-second task typically becomes a 10-second video.
 
+**Voice in recordings.** With **Narration** or **Live conversation** on, what TabHelm says aloud — guide steps, questions, "Done.", a spoken reply — is the video's sound (AAC, so it plays wherever the MP4 does). Each clip sits where it was heard, with silence in between; a clip you stop is cut in the video too. The recording ends after the task's last spoken words rather than at the moment the agent finishes, and *Skip waiting* never cuts a stretch in which the voice is talking. The video card says *with voice* and its player is not muted. Without those features the video is as before: no audio track.
+
 ### History
 
 Every chat is saved on your computer (messages, steps, stats, the page, agent and folder). **History** lists them with search. Opening a chat:
@@ -120,6 +122,18 @@ Every chat is saved on your computer (messages, steps, stats, the page, agent an
 To continue, connect any agent — it gets the whole conversation with your next message. Closing and reopening the panel on a tab restores that tab's chat. 🗑 deletes one chat and **Clear all** deletes every saved chat except the open one (both ask first); up to 200 are kept.
 
 Chrome wipes an extension's storage when the extension is removed, so the host keeps a copy of the panel's data (chats, settings, skills, flags — never secrets) in `~/.tabhelm/state.json`, written a few seconds after every change. An extension that starts with empty storage restores from it, so reinstalling with *Load unpacked* keeps your history.
+
+**Favourites and labels.** In History, **☆** marks a chat as a favourite: favourites are never dropped — not by the 200-chat limit, not by **Clear all** (which says how many stay). **＋ label** gives a chat labels (several with commas, up to 8 per chat); click a label to see only its chats, **×** takes it off. The row above the list filters by *★ Favourites* and by any label in use, with counts, and the search looks through labels too. Stars and labels are saved with the chat and are part of the host's backup.
+
+### System prompts
+
+**Settings → System prompts** shows the texts agents are given before your first message, and lets you change them:
+
+- **Instructions for every agent** — what Claude Code, Codex, Cursor and the others are told with the first message of a chat: how to use the browser tools, what to ask you first, how to answer in the narrow panel. The safety rules are in this text (page content is untrusted; ask before irreversible actions) — if you take them out, nothing else tells the agent.
+- **Built-in agent** — the system prompt of TabHelm's own agent (OpenRouter, Ollama, OpenAI-compatible).
+- **Message suggestions** — how the suggested next message is written.
+
+Only what you change is stored; **Reset**, or emptying the box, brings TabHelm's own text back, so improvements to the defaults still reach you. A change applies to the next chat or the next agent you start. What TabHelm adds for the features you have on (skills, your working folder, guide and voice hints) is still added after your text.
 
 ### Self-analysis (flag)
 
@@ -230,6 +244,7 @@ Only add skills you trust: their text becomes instructions for the agent.
 | **Detailed guide** | In guide mode every step is explained in 2–4 sentences (what the element is, why, what happens next, what to check) and the procedure is introduced before the first step. | — |
 | **Self-analysis** | Diagnose a chat or report on all chats: errors by cause, site knowledge or skills the agent was missing, setup problems and TabHelm bugs; redacted bug report, coding-agent task and exports; optional `tabhelm_diagnose` tool for the agent. See [Self-analysis](#self-analysis-flag). | — |
 | **Voice** | **🎤 Voice → Microphone** records a voice message; **Tab audio** captures what the tab is playing (a video, a call) — the tab keeps playing for you. Text appears live and, on **Stop**, the whole transcript becomes one message in the box to edit and send. Microphone uses Chrome's own recognition (no setup) or the host; tab audio always uses the host: `whisper-cli` + `ffmpeg` + a ggml model, or an OpenAI-compatible transcription API via `TABHELM_TRANSCRIBE_BASE_URL` / `_API_KEY` / `_MODEL` in `~/.tabhelm/env` (e.g. Groq's Whisper). With an OpenRouter key and neither of those, the host uses OpenRouter's Whisper — no extra setup, and the cost shows in the usage details. First microphone use opens a page to grant Chrome access. | whisper.cpp, an API or an OpenRouter key for the host engine |
+| **Message suggestions** | After a reply the empty message box shows, in grey, what you would probably send next — *Open the first result   ⇥ Tab*. **Tab** puts it into the box, where you can edit it before sending; with text already in the box Tab is an ordinary Tab. The suggestion is written by a model through OpenRouter from the last three exchanges of the chat (shortened); one that arrives after you sent something else is dropped. Its cost is in the usage details. The default model is a free one, which shares OpenRouter's free limits with the built-in agent — name another model in the feature's settings. | OpenRouter key (`npm run set-key -- openrouter`) |
 | **Live conversation** | Talk instead of typing. **🎙 Live** next to the message box keeps the microphone on; each sentence you say is, in this order: a **command** — “stop”, “quiet”, in a guide “next” / “back” / “skip” / “pause” / “auto” (also “стоп”, “тихо”, “далі”, “назад”, “пропусти”; a command is the whole sentence, never part of a longer one) — the **answer** to a question card that is open, or a **message** to the agent, which is told to answer in a few spoken sentences; the reply, guide steps and questions are read aloud. While TabHelm speaks the microphone is ignored, unless *Interrupt by speaking* is on (headphones). Approvals and sign-ins are never given by voice. Listening goes through the host to OpenRouter's Whisper (sentences are cut at pauses in the panel) or through Chrome's own recognition; the bar above the message box shows what is happening and what was heard, and the cost is in the usage details. | OpenRouter key (`npm run set-key -- openrouter`) |
 | **Narration** | TabHelm speaks. Every **guide step** is read aloud, and auto-play does the step only after the sentence is over; a short phrase says when a task **needs you**, is **done** or **stopped**; **🔊** under a reply reads it (hover for the price first, click again to stop). Speech comes from OpenRouter (`/audio/speech`; pick the model and voice in the feature's settings — ElevenLabs Flash v2.5 by default, which speaks Ukrainian). Transparent by design: only the text you hear is sent; each piece appears in the steps as *🔊 Spoke “…” · 118 characters · $0.0047*, the chat's total is in the usage details and the Markdown export, and text spoken before is replayed from a cache for free. | OpenRouter key (`npm run set-key -- openrouter`) |
 
@@ -477,6 +492,8 @@ extension/                     Chrome extension (Manifest V3, no build step)
   questions.js                 browser_ask_user: questions made safe to show, answers turned into text for the agent (pure)
   attachments.js               image / text attachments: picking, drop, paste, downscaling
   folder.js                    working folder: picker, typed path, recent folders, auto-approve warning
+  prompts.js                   Settings → System prompts: show, edit, reset
+  suggest.js                   message suggestions: what the model is shown (pure)
   history.js                   saved chats: storage, list, search, delete, opening in the chat's tab
   markdown.js                  Markdown → HTML for agent replies (headings, lists, tables, quotes, code)
   journal-format.js            pure chat-journal functions: replaying a saved chat, Markdown export, hand-over context
@@ -498,6 +515,8 @@ host/                          native host (Node 20+)
   src/memory.js                memory notes across chats · src/passwords.js  1Password CLI hand-off
   src/state.js                 backup of the panel's storage (~/.tabhelm/state.json) for reinstalls
   src/transcribe.js            speech to text: transcription API, whisper.cpp + ffmpeg, or OpenRouter
+  src/prompts.js               system prompts the user can edit: the defaults, and what counts as changed
+  src/suggest.js               message suggestions: one short next message from the last exchanges (OpenRouter)
   src/speech.js                text to speech through OpenRouter: models, voices, prices, one MP3 per piece of text
   src/files.js                 files a task produced: folder before/after, what is offered for download, chunked reads, file_save
   src/tool-server.js           loopback HTTP endpoint with token
@@ -552,6 +571,7 @@ Load `extension/` unpacked in Chrome. After editing extension files press ↻ on
 | `npm run test:builtin` | built-in agent against a mock OpenAI-compatible API (streaming, tool calls, 429 retry, missing key) |
 | `npm run test:speech` | narration and voice input against a mock OpenRouter: text → MP3 with its cost, models and voices, the transcription fallback, the panel's queue (pieces, cache, replacing, stopping) |
 | `npm run test:questions` | `browser_ask_user`: questions capped and cleaned, only offered options accepted, the text the agent reads |
+| `npm run test:chat` | favourites and labels (what is kept, filtered, counted), message suggestions against a mock OpenRouter, editable system prompts (what counts as changed, the preamble always ending where the request begins) |
 | `npm run test:files` | files from a task: what counts as new or changed, what is offered, chunked reads, refusing anything not offered, `file_save` never writing outside the folder or over a file |
 | `npm run test:live` | live conversation: what is a command, spoken answers to question cards, where a sentence starts and ends, replies without Markdown |
 | `TABHELM_RELEASE=../dist/tabhelm-x.y.z npm run e2e -- claude` | the built release |
@@ -584,7 +604,7 @@ Logs: `~/.tabhelm/host.log`. Agents run in `~/.tabhelm/workspace`.
 - Cross-origin iframes are positioned by URL; if a frame navigated elsewhere, clicks fall back to DOM clicks and hover/drag are unavailable. File inputs inside iframes are not supported.
 - Console and network capture starts when the agent first touches a tab.
 - Closing the panel stops the agent; the chat stays in History and continues when you reconnect.
-- Recordings capture only the visible tab and contain no audio.
+- Recordings capture only the visible tab. Their sound is TabHelm's own voice (with Narration or Live conversation on); what the page plays and what you say into the microphone are not recorded.
 - Windows support is new and less tested than Linux/macOS; agents installed by npm (`agent.cmd` and friends) are started through cmd.exe; the folder picker uses a PowerShell dialog, 1Password needs `op.exe` on PATH, tab audio needs `ffmpeg`/`whisper-cli` or a transcription API. The Chrome Web Store version is not published yet (the manifest's `key` field must be removed for the store).
 
 TabHelm is an independent project and is not affiliated with Google, Anthropic, OpenAI, Cursor, Qoder or xAI.

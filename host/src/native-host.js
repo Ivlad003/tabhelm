@@ -10,6 +10,7 @@
 //                pick_folder {tabId, requestId} | folder_info {tabId, requestId, path}   (start may carry folder)
 //                transcribe {tabId, requestId, seq, data, mimeType, language} | transcribe_status {tabId}
 //                speak {tabId, requestId, text, model, voice} | speech_status {tabId}
+//                prompts_default {tabId, requestId} | suggest {tabId, requestId, context, model, prompt}   (start may carry prompts)
 //                read_file {tabId, requestId, id}   (answers: file_chunk {requestId, seq, last, data, size, name | error})
 //   host -> ext: agents {agents} | status {tabId, state} | update {tabId, update} | config {tabId, options}
 //                auth {tabId, agent, methods} | recording_saved {tabId, id, path}
@@ -35,7 +36,9 @@ import { transcribe, transcribeStatus } from './transcribe.js';
 import { speak, speechStatus } from './speech.js';
 import { readOffered, saveGenerated } from './files.js';
 import { startToolServer } from './tool-server.js';
-import { AgentSession, errorDetails } from './session.js';
+import { AgentSession, errorDetails, DEFAULT_PREAMBLE } from './session.js';
+import { DEFAULT_BUILTIN_PROMPT, DEFAULT_SUGGEST_PROMPT, customPrompt } from './prompts.js';
+import { suggestNext } from './suggest.js';
 import { saveState, loadState } from './state.js';
 import { readLogWindow, digestLog } from './log-digest.js';
 
@@ -210,6 +213,8 @@ async function handleMessageNow(msg) {
         }
         session.features = msg.features || {};
         session.featureSettings = msg.featureSettings || {};
+        // Settings → System prompts: only what the user changed; anything else keeps its default.
+        session.prompts = { preamble: customPrompt(msg.prompts?.preamble, DEFAULT_PREAMBLE), builtin: customPrompt(msg.prompts?.builtin, DEFAULT_BUILTIN_PROMPT) };
         session.pageUrl = msg.pageUrl || null;
         session.skills = await loadSkills(tabId, msg.skills, session.folder, msg.inlineSkills);
         sessions.set(tabId, session);
@@ -320,6 +325,21 @@ async function handleMessageNow(msg) {
       case 'speech_status':
         send({ type: 'speech_status', tabId, ...(await speechStatus()) });
         break;
+
+      // Settings → System prompts: the built-in texts, so the panel can show and reset them.
+      case 'prompts_default':
+        send({ type: 'prompts_default', tabId, requestId: msg.requestId, prompts: { preamble: DEFAULT_PREAMBLE, builtin: DEFAULT_BUILTIN_PROMPT, suggest: DEFAULT_SUGGEST_PROMPT } });
+        break;
+
+      // Message suggestions: what the user would probably send next (OpenRouter).
+      case 'suggest': {
+        try {
+          send({ type: 'suggestion', tabId, requestId: msg.requestId, ...(await suggestNext({ context: msg.context, model: msg.model, prompt: msg.prompt })) });
+        } catch (err) {
+          send({ type: 'suggestion', tabId, requestId: msg.requestId, error: err.message });
+        }
+        break;
+      }
 
       // Download of a file the agent produced (offered with a `files` message): sent in chunks.
       case 'read_file': {

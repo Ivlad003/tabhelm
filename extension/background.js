@@ -529,7 +529,9 @@ export async function fromPanel(tabId, msg, port) {
     else autoApproveTabs.delete(tabId);
     const tab = await chrome.tabs.get(tabId).catch(() => null);
     const payload = await hostFeaturePayload();
-    msg = { ...msg, pageUrl: tab?.url || null, features: payload.features, featureSettings: { critic: payload.critic, passwordManager: payload.passwordManager } };
+    // Settings → System prompts: what the user changed goes along; the host keeps its defaults for the rest.
+    const { prompts = {} } = await chrome.storage.local.get('prompts');
+    msg = { ...msg, pageUrl: tab?.url || null, features: payload.features, featureSettings: { critic: payload.critic, passwordManager: payload.passwordManager }, prompts: { preamble: prompts.preamble || '', builtin: prompts.builtin || '' } };
     chatInfo.set(tabId, { task: '', actions: [] });
     chrome.action.setBadgeText({ tabId, text: '' }).catch(() => {});
   }

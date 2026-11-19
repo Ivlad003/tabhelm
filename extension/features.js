@@ -20,6 +20,7 @@ export const FEATURES = [
   { id: 'trimWaits', name: 'Skip waiting in recordings', desc: 'Recordings keep only a moment of each wait (page loading, the agent thinking) and mark the cut with "⏩ N s of waiting skipped", so videos stay short.' },
   { id: 'selfAnalysis', name: 'Self-analysis', desc: 'Finds what went wrong in your chats: errors by cause, site knowledge or skills the agent was missing, setup problems and bugs in TabHelm itself. Diagnose a chat from a failed task, the ＋ menu or /diagnose; see all chats in History → Report; copy a redacted bug report. Analysed on this computer — the agent sees only a redacted summary, and only when you or it asks.' },
   { id: 'voice', name: 'Voice', desc: 'Record a voice message from the microphone, or capture what the tab is playing, with live transcription; the text becomes one message you can edit and send.' },
+  { id: 'suggest', name: 'Message suggestions', desc: 'After a reply, the message box shows what you would probably send next, written from the last exchanges of the chat; Tab puts it into the box, where you can change it before sending. The suggestion comes from a model through OpenRouter with your key — the last messages of the chat are sent to it — and its cost is in the usage details.' },
   { id: 'live', name: 'Live conversation', desc: 'Talk to TabHelm instead of typing: 🎙 Live keeps the microphone on, every sentence you say becomes a message to the agent (or a command — "stop", "next", "back" — or the answer to a question it asked), and the reply is read aloud. Speech goes through OpenRouter with your key; what was heard, what was sent and what it cost is shown.' },
   { id: 'narration', name: 'Narration', desc: 'TabHelm speaks: every guide step (auto-play waits for the end of the sentence), a short phrase when a task needs you or ends, and any reply you press 🔊 on. Speech comes from OpenRouter with your key; each piece is listed in the steps with its length and cost.' },
 ];
@@ -32,6 +33,7 @@ export const DEFAULT_SETTINGS = {
   secrets: { names: [] }, // values live under secret:<name>
   passwordManager: { onePassword: true, chrome: true },
   voice: { engine: 'browser', language: 'auto', chunkSeconds: 8 },
+  suggest: { model: '' },
   live: { engine: 'host', language: 'auto', silenceMs: 900, bargeIn: false },
   narration: { model: 'elevenlabs/eleven-flash-v2.5', voice: '', guide: true, events: true, language: 'auto' },
   trimWaits: { maxPause: 1.5 },

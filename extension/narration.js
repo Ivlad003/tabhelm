@@ -11,6 +11,8 @@ let port;
 let onSpoken = () => {};
 let onError = () => {};
 let onState = () => {};
+let onPlayed = () => {}; // a clip started to sound: { url, at, kind } — the video recorder takes it from here
+let onStopped = () => {}; // …and was cut off before its end: { at }
 let nextRequest = 1;
 const waits = new Map(); // requestId -> resolve
 const cache = new Map(); // model|voice|text -> { url }
@@ -31,11 +33,13 @@ export function phrase(id, language = 'auto') {
   return (PHRASES[lang] || PHRASES.en)[id] || '';
 }
 
-export function initNarration(panelPort, { spoken, error, state } = {}) {
+export function initNarration(panelPort, { spoken, error, state, played, stopped } = {}) {
   port = panelPort;
   onSpoken = spoken || onSpoken;
   onError = error || onError;
   onState = state || onState;
+  onPlayed = played || onPlayed;
+  onStopped = stopped || onStopped;
   getFeatures().then((f) => f.narration && port.postMessage({ type: 'speech_status' }));
   // Headphones plugged in or out: what is being spoken moves to the new output. The
   // events come in a burst, and Live conversation takes the microphone again first.
@@ -199,8 +203,10 @@ function play(item, u) {
     // A clip that never starts or never reports its end (a suspended page, a broken
     // file) must not hold a guide or the queue: it gets a deadline either way.
     let timer = setTimeout(() => reject(new Error('The audio did not start playing.')), START_DEADLINE_MS);
+    let sounding = false;
     const done = (finished) => {
       clearTimeout(timer);
+      if (sounding && !finished) onStopped({ at: Date.now() });
       resolve(finished);
     };
     const failed = (err) => {
@@ -211,6 +217,11 @@ function play(item, u) {
     audio.onended = () => done(true);
     audio.onerror = () => failed(new Error('The audio could not be played.'));
     audio.onplaying = () => {
+      // Once per clip: a restart on another output device is the same clip.
+      if (!sounding) {
+        sounding = true;
+        onPlayed({ url: item.url, at: Date.now(), kind: u.kind });
+      }
       clearTimeout(timer);
       timer = setTimeout(() => done(true), (Number.isFinite(audio.duration) ? audio.duration : 60) * 1000 + 2000);
     };

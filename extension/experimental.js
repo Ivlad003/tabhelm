@@ -520,6 +520,19 @@ const PANELS = {
     port.postMessage({ type: 'transcribe_status' });
   },
 
+  async suggest(panel) {
+    const s = await getSetting('suggest');
+    const model = el('input', { value: s.model || '', placeholder: 'default (a free model)', spellcheck: false });
+    model.onchange = async () => {
+      await setSetting('suggest', { model: model.value.trim() });
+      onChange('suggest');
+    };
+    panel.append(
+      hint('When a task ends, the last few messages of the chat (yours and the agent\'s answers, shortened) are sent to a model through OpenRouter, which writes one short message you might send next. It appears in the empty message box in grey; press Tab to put it in, then edit or send it. Nothing reaches the agent until you send. Needs an OpenRouter key (npm run set-key -- openrouter). The default is a free model, which shares OpenRouter\'s free limits (50 requests a day) with the built-in agent — name a paid model below for more. The wording is in Settings → System prompts.'),
+      field('Model (an OpenRouter model id, e.g. provider/model)', model),
+    );
+  },
+
   async live(panel) {
     const s = await getSetting('live');
     const engine = el('select');
