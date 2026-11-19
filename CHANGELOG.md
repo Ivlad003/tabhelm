@@ -2,6 +2,18 @@
 
 All notable changes to TabHelm. The newest release is at the top; the panel's update banner links here.
 
+## [0.34.0] - 2026-11-19
+
+### Added
+- **Voice in recordings.** With Narration or Live conversation on, what TabHelm says aloud — guide steps, questions, "Done.", a spoken reply — is now the video's sound (AAC, so it plays wherever the MP4 does). Each clip sits where it was heard, with silence in between; a clip you stop is cut in the video too. The recording ends after the task's last spoken words instead of the moment the agent finishes, and *Skip waiting* never cuts a stretch in which the voice is talking. The video card says *with voice* and its player is not muted. What the page plays and what you say into the microphone are still not recorded.
+- **Message suggestions** (Experimental flag): after a reply the empty message box shows, in grey, what you would probably send next. **Tab** puts it into the box, where you can edit it before sending; with text already in the box Tab is an ordinary Tab. The suggestion is written by a model through OpenRouter from the last three exchanges of the chat, and one that arrives after you sent something else is dropped. Its cost is in the usage details.
+- **Favourites and labels in History.** **☆** marks a chat as a favourite; favourites are never dropped — not by the 200-chat limit, not by **Clear all**, which now says how many stay. **＋ label** gives a chat labels (several with commas, up to 8); the row above the list filters by favourites and by label, and the search looks through labels too.
+- **Settings → System prompts.** The texts agents are given before your first message can be read and changed: the instructions for every agent, the built-in agent's system prompt, and the wording of message suggestions. Only what you change is stored; **Reset**, or emptying the box, brings TabHelm's own text back. A change applies to the next chat. The safety rules are part of the first text — if you remove them, nothing else tells the agent.
+- `npm run test:chat` (10 unit tests).
+
+### Fixed
+- The usage details were hidden with agents that report no tokens or cost (Cursor, Grok), so what TabHelm itself spent through OpenRouter — voice, voice input, suggestions — could not be seen. The button now appears as soon as there is any such cost.
+
 ## [0.33.2] - 2026-11-19
 
 ### Fixed
