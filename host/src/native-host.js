@@ -35,7 +35,7 @@ import { transcribe, transcribeStatus } from './transcribe.js';
 import { speak, speechStatus } from './speech.js';
 import { readOffered, saveGenerated } from './files.js';
 import { startToolServer } from './tool-server.js';
-import { AgentSession } from './session.js';
+import { AgentSession, errorDetails } from './session.js';
 import { saveState, loadState } from './state.js';
 import { readLogWindow, digestLog } from './log-digest.js';
 
@@ -235,7 +235,7 @@ async function handleMessageNow(msg) {
           // A prompt cut off because the user stopped or replaced the agent is not an error.
           if (session.disposed || sessions.get(tabId) !== session) return;
           log(`prompt failed for tab ${tabId}: ${err.message || err}${err.data ? ` ${JSON.stringify(err.data).slice(0, 1500)}` : ''}`);
-          send({ type: 'error', tabId, message: err.message || String(err) });
+          send({ type: 'error', tabId, message: err.message || String(err), details: errorDetails(err) || undefined, agent: session.agent?.name });
         });
         break;
       }
@@ -480,8 +480,8 @@ async function handleMessageNow(msg) {
         log(`unknown message type ${msg.type}`);
     }
   } catch (err) {
-    log(`error handling ${msg.type}: ${err.stack || err}`);
-    send({ type: 'error', tabId, message: err.message || String(err) });
+    log(`error handling ${msg.type}: ${err.stack || err}${err.data ? ` ${JSON.stringify(err.data).slice(0, 1500)}` : ''}`);
+    send({ type: 'error', tabId, message: err.message || String(err), details: errorDetails(err) || undefined, agent: sessions.get(tabId)?.agent?.name });
   }
 }
 

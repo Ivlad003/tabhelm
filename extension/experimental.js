@@ -536,7 +536,7 @@ const PANELS = {
     const mic = el('button', { className: 'btn small', type: 'button', textContent: 'Grant microphone access' });
     mic.onclick = () => chrome.tabs.create({ url: chrome.runtime.getURL('permissions.html') });
     panel.append(
-      hint('🎙 Live next to the message box turns it on and off. Each sentence you say is, in this order: a command — “stop”, “quiet”, in a guide “next” / “back” / “skip” / “pause” / “auto” (also “стоп”, “тихо”, “далі”, “назад”, “пропусти”) — the answer to a question card that is open (an option\'s name or number), or a message to the agent, whose reply is read aloud. Approvals are never given by voice. The voice is the one chosen under Narration; both directions need an OpenRouter key (npm run set-key -- openrouter) and show their cost in the usage details. Changes apply the next time Live is turned on.'),
+      hint('🎙 Live next to the message box turns it on and off. Each sentence you say is, in this order: a command — “stop”, “quiet”, in a guide “next” / “back” / “skip” / “pause” / “auto” (also “стоп”, “тихо”, “далі”, “назад”, “пропусти”) — the answer to a question card that is open (an option\'s name or number), or a message to the agent, whose reply is read aloud. Approvals are never given by voice. The voice is the one chosen under Narration; both directions need an OpenRouter key (npm run set-key -- openrouter) and show their cost in the usage details. Only speech goes through OpenRouter: the task itself is done by whichever agent you pick in the agent list (Claude Code, Codex, OpenCode…). Changes apply the next time Live is turned on.'),
       field('Listening', engine), field('Language', language), field('Pause that ends a sentence (ms, OpenRouter engine)', silence), field('Interrupt TabHelm by speaking (use headphones)', barge), mic,
     );
   },
@@ -565,7 +565,7 @@ const PANELS = {
       say(phrase('test', now.language), { kind: 'event', settings: now });
     };
     panel.append(
-      hint('What is spoken is sent as text to OpenRouter and on to the model\'s provider, with your OpenRouter key (npm run set-key -- openrouter in the host folder) — nothing else. Every piece appears in the steps with its length and cost, the chat\'s total is in the usage details, and text spoken before is replayed from a cache for free. For Ukrainian and other languages pick a multilingual model (e.g. ElevenLabs Flash v2.5).'),
+      hint('What is spoken is sent as text to OpenRouter and on to the model\'s provider, with your OpenRouter key (npm run set-key -- openrouter in the host folder) — nothing else. Every piece appears in the steps with its length and cost, the chat\'s total is in the usage details, and text spoken before is replayed from a cache for free. For Ukrainian and other languages pick a multilingual model (e.g. ElevenLabs Flash v2.5). The voice is separate from the agent: only speech goes through OpenRouter, and the task is done by whichever agent you pick in the agent list (Claude Code, Codex, OpenCode…) — you do not need the built-in OpenRouter agent for it.'),
       field('Model', model), field('Voice', voice), el('div', { id: 'narration-price', className: 'hint' }),
       field('Read guide steps aloud (auto-play waits for the voice)', guide), field('Say when a task needs you or ends', events), field('Language of those phrases', language),
       test, el('div', { id: 'narration-status-line', className: 'hint' }),

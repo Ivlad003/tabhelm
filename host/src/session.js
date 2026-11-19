@@ -43,6 +43,17 @@ User request:
 
 const MAX_TEXT = 4000;
 
+// The real cause of an agent's error. Agents answer over JSON-RPC, where the
+// message is often just "Internal error" and what went wrong sits in `data`
+// (not signed in, over its usage limit, a model it does not have).
+export function errorDetails(err) {
+  const d = err?.data;
+  let text = typeof d === 'string' ? d : d && typeof d === 'object' ? d.details ?? d.message ?? d.error?.message ?? d.error ?? d : '';
+  if (text && typeof text !== 'string') text = JSON.stringify(text);
+  text = String(text || '').replace(/\s+/g, ' ').trim();
+  return text && !String(err?.message || '').includes(text) ? text.slice(0, 500) : '';
+}
+
 // Session settings shown in the panel. Agents also expose modes (plan,
 // bypassPermissions, ...) but those change the permission model, so they stay hidden.
 const PANEL_CATEGORIES = ['model', 'thought_level'];
@@ -154,7 +165,8 @@ export class AgentSession {
         });
         return;
       }
-      throw new Error(err?.message || String(err));
+      // The cause travels with the error (see errorDetails).
+      throw Object.assign(new Error(err?.message || String(err)), { data: err?.data });
     }
     this.emit({ type: 'status', state: 'ready', agent: { id: agent.id, name: agent.name }, skills: (this.skills || []).map((s) => ({ name: s.name })) });
     this.emitConfig();

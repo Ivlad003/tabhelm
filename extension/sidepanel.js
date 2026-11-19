@@ -170,6 +170,15 @@ chrome.tabs.onRemoved.addListener((id) => {
 
 let versionWarned = false;
 
+// An agent's error as the chat shows it: its message plus the cause the agent
+// gave, or — for a bare "Internal error" — where to look.
+function errorNotice(msg) {
+  const message = String(msg.message || 'Error');
+  if (msg.details) return `${message} — ${msg.details}`;
+  if (/^internal error$/i.test(message.trim())) return `${message} — ${msg.agent || 'the agent'} gave no details. Send the message again; if it repeats, check in a terminal that the agent is signed in and within its usage limits, and see ~/.tabhelm/host.log.`;
+  return message;
+}
+
 function onMessage(msg) {
   if (msg.requestId != null && hostWaits.has(`${msg.type}:${msg.requestId}`)) {
     hostWaits.get(`${msg.type}:${msg.requestId}`)(msg);
@@ -286,7 +295,7 @@ function onMessage(msg) {
       else endTurn(null, null, msg.stopReason || 'end_turn');
       break;
     case 'error':
-      notice(msg.message, true);
+      notice(errorNotice(msg), true);
       endTurn(null, busy ? msg.message : null);
       if (!connected) setStatus('error', 'Error');
       // Most likely the agent failed to start: the next task starts a turn of its
