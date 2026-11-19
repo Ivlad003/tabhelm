@@ -157,6 +157,10 @@ export function mdEntry(e, st, time = (ts) => new Date(ts).toLocaleTimeString())
     case 'notice':
       if (e.error) out.push('', `> ⚠️ ${t} · ${e.text || ''}`);
       break;
+    // Narration: what was sent to be spoken (the text itself is already in the chat).
+    case 'speech':
+      out.push(`- ${t} 🔊 Spoke ${e.chars || 0} characters${e.model ? ` (${e.model})` : ''}${e.cost != null ? ` · ${fmtCost({ amount: e.cost, currency: 'USD' })}` : ''}`);
+      break;
   }
 }
 

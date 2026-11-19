@@ -5,6 +5,7 @@ import { FEATURES, getFeatures, setFeature, getSetting, setSetting } from './fea
 import { CATEGORIES } from './policy.js';
 import { syncAlarms } from './scheduler.js';
 import { listScripts, saveScript } from './scripts-lib.js';
+import { say, phrase } from './narration.js';
 
 const $ = (id) => document.getElementById(id);
 let port;
@@ -46,7 +47,14 @@ export function handleExperimentalMessage(msg) {
   }
   if (msg.type === 'transcribe_status') {
     const line = $('voice-status-line');
-    if (line) line.textContent = msg.ready ? `Host engine ready: ${msg.api ? `API ${msg.apiBase}` : `whisper.cpp (${msg.whisperModel})`}.` : 'Host engine not set up (needed for tab audio).';
+    const engine = msg.engine || (msg.api ? 'api' : msg.whisperModel ? 'whisper' : null);
+    const where = { api: `API ${msg.apiBase}`, whisper: `whisper.cpp (${msg.whisperModel}) — audio stays on this computer`, openrouter: `OpenRouter (${msg.openrouterModel}) — audio is sent with your OpenRouter key` }[engine];
+    if (line) line.textContent = where ? `Host engine ready: ${where}.` : 'Host engine not set up (needed for tab audio).';
+    return true;
+  }
+  if (msg.type === 'speech_status') {
+    speechStatus = msg;
+    fillNarration();
     return true;
   }
   if (msg.type === 'critic_status') {
@@ -506,12 +514,86 @@ const PANELS = {
     const mic = el('button', { className: 'btn small', type: 'button', textContent: 'Grant microphone access' });
     mic.onclick = () => chrome.tabs.create({ url: chrome.runtime.getURL('permissions.html') });
     panel.append(
-      hint('Microphone: Chrome\'s own recognition transcribes live without any setup (needs internet; auto language uses the panel language). Tab audio always goes through the host: install whisper-cli + ffmpeg and a ggml model, or set TABHELM_TRANSCRIBE_BASE_URL / _API_KEY / _MODEL in ~/.tabhelm/env (e.g. Groq or OpenAI Whisper).'),
+      hint('Microphone: Chrome\'s own recognition transcribes live without any setup (needs internet; auto language uses the panel language). Tab audio always goes through the host. With an OpenRouter key (npm run set-key -- openrouter) the host needs nothing else: audio goes to OpenRouter\'s Whisper and its cost is shown in the usage details. To keep audio on this computer install whisper-cli + ffmpeg and a ggml model; for another API set TABHELM_TRANSCRIBE_BASE_URL / _API_KEY / _MODEL in ~/.tabhelm/env.'),
       field('Engine for the microphone', engine), field('Language', language), field('Chunk length for the host engine (seconds)', chunk), mic, el('div', { id: 'voice-status-line', className: 'hint' }),
     );
     port.postMessage({ type: 'transcribe_status' });
   },
+
+  async live(panel) {
+    const s = await getSetting('live');
+    const engine = el('select');
+    for (const [v, n] of [['host', 'OpenRouter Whisper through the host (cost shown; a second or so per sentence)'], ['browser', 'Chrome speech recognition (instant, free; audio goes to Chrome\'s service)']]) engine.append(new Option(n, v, false, s.engine === v));
+    const language = el('select');
+    for (const [v, n] of [['auto', 'Auto'], ['uk-UA', 'Українська'], ['en-US', 'English'], ['de-DE', 'Deutsch'], ['pl-PL', 'Polski'], ['es-ES', 'Español'], ['fr-FR', 'Français']]) language.append(new Option(n, v, false, s.language === v));
+    const silence = el('input', { type: 'number', min: 400, max: 3000, step: 100, value: s.silenceMs || 900 });
+    const barge = el('input', { type: 'checkbox', checked: Boolean(s.bargeIn) });
+    const save = async () => {
+      await setSetting('live', { engine: engine.value, language: language.value, silenceMs: Math.min(3000, Math.max(400, Number(silence.value) || 900)), bargeIn: barge.checked });
+      onChange('live');
+    };
+    engine.onchange = language.onchange = silence.onchange = barge.onchange = save;
+    const mic = el('button', { className: 'btn small', type: 'button', textContent: 'Grant microphone access' });
+    mic.onclick = () => chrome.tabs.create({ url: chrome.runtime.getURL('permissions.html') });
+    panel.append(
+      hint('🎙 Live next to the message box turns it on and off. Each sentence you say is, in this order: a command — “stop”, “quiet”, in a guide “next” / “back” / “skip” / “pause” / “auto” (also “стоп”, “тихо”, “далі”, “назад”, “пропусти”) — the answer to a question card that is open (an option\'s name or number), or a message to the agent, whose reply is read aloud. Approvals are never given by voice. The voice is the one chosen under Narration; both directions need an OpenRouter key (npm run set-key -- openrouter) and show their cost in the usage details. Changes apply the next time Live is turned on.'),
+      field('Listening', engine), field('Language', language), field('Pause that ends a sentence (ms, OpenRouter engine)', silence), field('Interrupt TabHelm by speaking (use headphones)', barge), mic,
+    );
+  },
+
+  async narration(panel) {
+    const s = await getSetting('narration');
+    const model = el('select', { id: 'narration-model' });
+    const voice = el('select', { id: 'narration-voice' });
+    const language = el('select');
+    for (const [v, n] of [['auto', 'Auto (the browser\'s language)'], ['uk', 'Українська'], ['en', 'English']]) language.append(new Option(n, v, false, s.language === v));
+    const guide = el('input', { type: 'checkbox', checked: s.guide !== false });
+    const events = el('input', { type: 'checkbox', checked: s.events !== false });
+    const save = async () => {
+      await setSetting('narration', { model: model.value || s.model, voice: voice.value, guide: guide.checked, events: events.checked, language: language.value });
+      onChange('narration');
+    };
+    model.onchange = async () => {
+      voice.value = '';
+      await save();
+      fillNarration();
+    };
+    voice.onchange = language.onchange = guide.onchange = events.onchange = save;
+    const test = el('button', { className: 'btn small', type: 'button', textContent: 'Test the voice' });
+    test.onclick = async () => {
+      const now = { ...(await getSetting('narration')) };
+      say(phrase('test', now.language), { kind: 'event', settings: now });
+    };
+    panel.append(
+      hint('What is spoken is sent as text to OpenRouter and on to the model\'s provider, with your OpenRouter key (npm run set-key -- openrouter in the host folder) — nothing else. Every piece appears in the steps with its length and cost, the chat\'s total is in the usage details, and text spoken before is replayed from a cache for free. For Ukrainian and other languages pick a multilingual model (e.g. ElevenLabs Flash v2.5).'),
+      field('Model', model), field('Voice', voice), el('div', { id: 'narration-price', className: 'hint' }),
+      field('Read guide steps aloud (auto-play waits for the voice)', guide), field('Say when a task needs you or ends', events), field('Language of those phrases', language),
+      test, el('div', { id: 'narration-status-line', className: 'hint' }),
+    );
+    fillNarration();
+    port.postMessage({ type: 'speech_status' });
+  },
 };
+
+// Narration: models, voices and prices from the host (OpenRouter's catalogue).
+let speechStatus = null;
+async function fillNarration() {
+  const model = $('narration-model');
+  const voice = $('narration-voice');
+  if (!model || !voice) return;
+  const s = await getSetting('narration');
+  const models = speechStatus?.models || [];
+  const per1k = (m) => (m.free ? 'free' : m.perChar != null ? `$${(m.perChar * 1000).toFixed(m.perChar * 1000 < 0.01 ? 4 : 3)} per 1,000 characters` : 'priced by tokens or duration');
+  // The saved model stays selectable while the catalogue is loading or unreachable.
+  const list = models.some((m) => m.id === s.model) ? models : [{ id: s.model, name: s.model, voices: [] }, ...models];
+  model.replaceChildren(...list.map((m) => new Option(m.perChar != null || m.free ? `${m.name} — ${per1k(m)}` : m.name, m.id, false, m.id === s.model)));
+  const chosen = models.find((m) => m.id === s.model);
+  voice.replaceChildren(new Option(chosen?.voices.length ? `Default (${chosen.voices[0]})` : 'Default', '', false, !s.voice), ...(chosen?.voices || []).map((v) => new Option(v, v, false, v === s.voice)));
+  const price = $('narration-price');
+  if (price) price.textContent = chosen ? `Price: ${per1k(chosen)}${chosen.perChar != null ? ` — a 120-character guide step costs about $${(chosen.perChar * 120).toFixed(4)}` : ''}.` : '';
+  const line = $('narration-status-line');
+  if (line) line.textContent = !speechStatus ? 'Asking the host…' : !speechStatus.ready ? 'No OpenRouter key yet: run "npm run set-key -- openrouter" in the host folder (https://openrouter.ai/keys).' : speechStatus.error ? `OpenRouter key found, but the model list could not be loaded: ${speechStatus.error}` : `Ready: OpenRouter key found, ${models.length} speech models.`;
+}
 
 function renderMemoryList() {
   const list = $('memory-list');

@@ -590,12 +590,16 @@ export function guideTour(steps, active, total, opts = {}) {
     cd.className = 'step';
     cd.style.marginTop = '6px';
     let left = Math.round(opts.pauseMs / 1000);
-    cd.textContent = target ? `Auto-play: clicking in ${left} s` : `Auto-play: next step in ${left} s`;
-    const tick = setInterval(() => {
-      left -= 1;
-      if (left <= 0 || !host.isConnected) return clearInterval(tick);
+    // With narration the step is done when the voice has finished, not on a countdown.
+    if (opts.narrated) cd.textContent = target ? 'Auto-play: clicking after the voice' : 'Auto-play: next step after the voice';
+    else {
       cd.textContent = target ? `Auto-play: clicking in ${left} s` : `Auto-play: next step in ${left} s`;
-    }, 1000);
+      const tick = setInterval(() => {
+        left -= 1;
+        if (left <= 0 || !host.isConnected) return clearInterval(tick);
+        cd.textContent = target ? `Auto-play: clicking in ${left} s` : `Auto-play: next step in ${left} s`;
+      }, 1000);
+    }
     autoLine = cd;
   }
   bubble.append(head, body, row, ...(autoLine ? [autoLine] : []));

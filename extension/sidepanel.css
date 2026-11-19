@@ -1175,6 +1175,63 @@ input[type='checkbox'] {
   border-color: var(--accent);
 }
 
+/* Questions from the agent (browser_ask_user) */
+.ask-q {
+  margin: 0 0 8px;
+}
+
+.ask-q-text {
+  margin-bottom: 4px;
+}
+
+.ask-q-header {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 0 6px;
+  border-radius: var(--th-radius-s);
+  background: var(--th-accent-soft);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.ask-opts {
+  display: grid;
+  gap: 4px;
+}
+
+.ask-opt {
+  display: grid;
+  gap: 1px;
+  text-align: left;
+  font: inherit;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--th-radius-s);
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.ask-opt:hover:not(:disabled),
+.ask-opt[aria-pressed='true'] {
+  border-color: var(--accent);
+}
+
+.ask-opt[aria-pressed='true'] {
+  background: var(--th-accent-soft);
+  font-weight: 600;
+}
+
+.ask-opt:disabled {
+  cursor: default;
+}
+
+.ask-opt-desc {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--muted);
+}
+
 .card .note {
   font: inherit;
   font-size: 12px;
@@ -1227,7 +1284,9 @@ input[type='checkbox'] {
 
 /* ---- Voice ---- */
 #voice-menu[hidden],
-#voice-stop[hidden] {
+#voice-stop[hidden],
+#narration-stop[hidden],
+.msg-copy[hidden] {
   display: none;
 }
 
@@ -1243,9 +1302,32 @@ input[type='checkbox'] {
   display: none;
 }
 
-#voice-status {
+#voice-status,
+#live-status {
   color: var(--muted);
   margin-left: 4px;
+}
+
+/* ---- Live conversation ---- */
+#live-toggle[hidden] {
+  display: none;
+}
+
+#live-toggle[aria-pressed='true'] {
+  border-color: var(--accent);
+  background: var(--th-accent-soft);
+  font-weight: 600;
+}
+
+#live-bar[data-state='speaking'] .rec-dot,
+#live-bar[data-state='thinking'] .rec-dot {
+  animation: none;
+  opacity: 0.4;
+}
+
+#live-text {
+  margin-top: 2px;
+  color: var(--muted);
 }
 
 #voice-text {

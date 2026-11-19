@@ -17,7 +17,10 @@
     "test:flags": "node scripts/flags-test.js",
     "test:monkey": "node scripts/monkey.js",
     "test:selfanalysis": "node --test scripts/selfanalysis/",
-    "test:agents": "node --test scripts/agents.test.js scripts/windows-path.test.js"
+    "test:agents": "node --test scripts/agents.test.js scripts/windows-path.test.js",
+    "test:speech": "node --test scripts/speech.test.js",
+    "test:questions": "node --test scripts/questions.test.js",
+    "test:live": "node --test scripts/live.test.js"
   },
   "dependencies": {
     "@agentclientprotocol/claude-agent-acp": "^0.89.1",

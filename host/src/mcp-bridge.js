@@ -182,8 +182,30 @@ const tools = {
     },
   },
   browser_wait_for_user: {
-    description: 'Get the result of a browser_guide, browser_request_human or browser_request_login that answered it is still waiting for the user (the guide is still on the page, the request is still open). Call it again while it says so.',
+    description: 'Get the result of a browser_guide, browser_ask_user, browser_request_human or browser_request_login that answered it is still waiting for the user (the guide is still on the page, the request is still open). Call it again while it says so.',
     inputSchema: {},
+  },
+  browser_ask_user: {
+    description:
+      'Ask the user one or several questions on a card in the TabHelm panel and wait for the answers. Use it when the task depends on a choice or a detail only the user can give — which of several items, a missing value, a preference, "is this the right one?" — instead of guessing or stopping with a question in plain text. Give each question 2–8 short options when you can name them (the user can also type their own answer unless other:false); a question without options is answered in free text. Ask everything you need in one call. Do not ask what you can find out from the page. Returns each question with its answer; if the user takes long it answers that the questions are still open — then call browser_wait_for_user.',
+    inputSchema: {
+      questions: z
+        .array(
+          z.object({
+            question: z.string().describe('The question, in the user\'s language'),
+            header: z.string().optional().describe('Very short label for it (1–3 words), e.g. "Plan" or "Delivery"'),
+            options: z
+              .array(z.object({ label: z.string().describe('Short answer (1–6 words)'), description: z.string().optional().describe('What choosing it means, if not obvious') }))
+              .max(8)
+              .optional()
+              .describe('Answers to choose from; omit for a free-text question'),
+            multiple: z.boolean().optional().describe('The user may pick several options (default: one)'),
+            other: z.boolean().optional().describe('false: only the listed options, no typed answer (default: a typed answer is allowed)'),
+          }),
+        )
+        .min(1)
+        .max(5),
+    },
   },
   skill_save: {
     description:
@@ -284,7 +306,7 @@ const tabIdParam = z
   .optional()
   .describe('Act on this tab instead of the current one (ids from browser_tabs list or browser_search_tabs)');
 for (const [name, def] of Object.entries(tools)) {
-  if (name.startsWith('browser_') && !['browser_tabs', 'browser_search_tabs', 'browser_wait_for_user'].includes(name)) def.inputSchema = { ...def.inputSchema, tabId: tabIdParam };
+  if (name.startsWith('browser_') && !['browser_tabs', 'browser_search_tabs', 'browser_wait_for_user', 'browser_ask_user'].includes(name)) def.inputSchema = { ...def.inputSchema, tabId: tabIdParam };
 }
 
 // Tools behind a feature flag are offered only when it is on for this session
@@ -310,7 +332,7 @@ const FLAG_OF = {
 // Calls that wait for the user answer within TABHELM_TOOL_WAIT seconds (set by
 // the host when the agent's MCP client gives up on long calls; 0 = no limit).
 const toolWait = Number(process.env.TABHELM_TOOL_WAIT) || 0;
-const WAITS_FOR_USER = new Set(['browser_guide', 'browser_request_human', 'browser_request_login', 'browser_wait_for_user']);
+const WAITS_FOR_USER = new Set(['browser_guide', 'browser_ask_user', 'browser_request_human', 'browser_request_login', 'browser_wait_for_user']);
 const featuresEnv = process.env.TABHELM_FEATURES;
 const featuresOn = new Set((featuresEnv || '').split(',').filter(Boolean));
 for (const [name, def] of Object.entries(tools)) {

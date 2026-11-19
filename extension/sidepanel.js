@@ -9,6 +9,9 @@ import { initSelfAnalysis, runDiagnose, openReport } from './selfanalysis-ui.js'
 import { COMPLAINT_RE } from './taxonomy.js';
 import { getFeatures, getSetting } from './features.js';
 import { initVoice, handleVoiceMessage, stop as stopVoice } from './voice.js';
+import { formatAnswers } from './questions.js';
+import { initNarration, handleNarrationMessage, narrationSettings, say, hush, speaking, phrase, estimateCost, forceNarration, plainSpeech } from './narration.js';
+import { initLive, handleLiveMessage, startLive, stopLive, liveOn, setLiveMuted, parseCommand, matchAnswer } from './live.js';
 import { initAttachments, takeAttachments, hasAttachments, chip, addQuote, addImageUrl, addElements, addFiles, removeTextAttachment } from './attachments.js';
 import { pickElements } from './page-scripts.js';
 import { scriptMatches } from './scripts-lib.js';
@@ -173,7 +176,7 @@ function onMessage(msg) {
     hostWaits.delete(`${msg.type}:${msg.requestId}`);
     return;
   }
-  if (handleVoiceMessage(msg) || handleSettingsMessage(msg) || handleFolderMessage(msg)) return;
+  if (handleLiveMessage(msg) || handleVoiceMessage(msg) || handleNarrationMessage(msg) || handleSettingsMessage(msg) || handleFolderMessage(msg)) return;
   switch (msg.type) {
     case 'agents':
       hostTest = Boolean(msg.test);
@@ -761,6 +764,8 @@ function describeAction(tool, a = {}, detail) {
       return `Read skill file ${a.name}/${a.path}`;
     case 'browser_wait_for_user':
       return 'Wait for you';
+    case 'browser_ask_user':
+      return `Asked you: ${truncate((a.questions || [a])[0]?.question || '', 50)}${detail ? ` → ${truncate(detail, 50)}` : ''}`;
     default:
       return tool;
   }
@@ -794,6 +799,7 @@ function addConfirm(msg) {
   }
   card.append(title, detail, options);
   scrollDown();
+  announce('needsYou');
 }
 
 function addPermission(msg) {
@@ -819,6 +825,7 @@ function addPermission(msg) {
   }
   card.append(title, options);
   scrollDown();
+  announce('needsYou');
 }
 
 // ---------- Controls ----------
@@ -908,6 +915,7 @@ els.newChat.onclick = () => {
   flushJournal();
   if (busy) stop();
   stopVoice(true);
+  hush();
   stopRecording(true);
   journal = [];
   turnSeq = 0;
@@ -1188,6 +1196,7 @@ async function sendNow(text, attachments, { silent = false, recorded = false, tu
   port.postMessage({
     type: 'prompt',
     text,
+    live: liveOn(), // spoken, and the answer is read aloud: the agent keeps it short
     context: await context,
     attachments: attachments.map(({ kind, name, mimeType, data, text: body }) => ({ kind, name, mimeType, data, text: body })),
   });
@@ -1202,6 +1211,7 @@ function endTurn(note, failure = null, stopReason = null) {
   // A task stopped by New chat or by opening another chat was closed already.
   if (note && (busy || turn)) notice(note);
   lastTurnHadNoActions = !turn || turn.actions.length === 0;
+  const replyText = turn?.text.trim() || '';
   if (turn) {
     const stats = turnStats(turn);
     showStats(stats);
@@ -1230,6 +1240,12 @@ function endTurn(note, failure = null, stopReason = null) {
   thoughtEl = null;
   if (connected) setStatus('ready', connectedAgent?.name || 'Connected');
   syncControls();
+  // Narration: how the task ended (a task you stopped yourself needs no announcement).
+  // In a live conversation the answer itself is read aloud.
+  if (wasBusy && stopReason !== 'cancelled') {
+    if (liveOn() && replyText && !failure) speakReply(replyText);
+    else announce(failure ? 'failed' : awaitingPlan && lastTurnHadNoActions ? 'needsYou' : 'done');
+  }
   if (failure && wasBusy) offerContinue(failure);
   else if (awaitingPlan && wasBusy && !failure && lastTurnHadNoActions) offerPlanStart();
   awaitingPlan = false;
@@ -1322,9 +1338,37 @@ function showGuideStep(msg) {
   );
   record('ask', { kind: 'guide', message: g.title.textContent });
   scrollDown();
+  narrateGuideStep(msg);
+}
+
+// Narration: the step is read aloud. The background is told when the voice
+// starts and stops (by the id of this showing of the step), so auto-play does
+// the step only after the sentence is over.
+let guideSpoken = null; // { key, speechId, active }
+async function narrateGuideStep(msg) {
+  const settings = await narrationSettings();
+  if (!settings.on || settings.guide === false || !msg.text) return;
+  const hold = (id, state) => port.postMessage({ type: 'guide_speech', id, state });
+  const key = `${msg.number}:${msg.index}:${msg.text}`;
+  if (guideSpoken?.key === key) {
+    // The same step shown again (Auto ⇄ Pause, a failed automatic click): it is not
+    // repeated, and a sentence still being spoken holds this showing too.
+    if (guideSpoken.active) {
+      guideSpoken.speechId = msg.speechId;
+      hold(msg.speechId, 'start');
+    }
+    return;
+  }
+  const mine = (guideSpoken = { key, speechId: msg.speechId, active: true });
+  hold(mine.speechId, 'start');
+  await say(msg.text, { kind: 'guide', settings });
+  mine.active = false;
+  hold(mine.speechId, 'end');
 }
 
 function finishGuideCard(msg) {
+  guideSpoken = null;
+  hush('guide');
   if (!guideCard) return;
   const g = guideCard;
   guideCard = null;
@@ -1332,6 +1376,92 @@ function finishGuideCard(msg) {
   const label = msg.stopped ? 'Stopped' : msg.replaced ? 'Replaced by a newer request' : msg.back ? 'Back to the agent' : `Finished${msg.results ? ` (${msg.results.filter((r) => r === 'skipped').length} skipped)` : ''}`;
   g.options.replaceChildren(Object.assign(document.createElement('span'), { textContent: `→ ${label}` }));
   record('ask', { kind: 'guide', answer: label });
+}
+
+// Questions from the agent (browser_ask_user): every question with its options
+// as buttons and, unless the agent said otherwise, a field for your own answer.
+// One question with one choice is answered by the click itself; otherwise you
+// pick, type and press Send answers. `openQuestions` lets a spoken answer
+// (Live conversation) pick an option too.
+let openQuestions = null; // { id, questions, pick(index, label), submit(), close() }
+function questionsCard(msg, card, title, options, reply) {
+  const questions = msg.questions || [];
+  const answers = questions.map(() => ({ choices: [], other: '' }));
+  const quick = questions.length === 1 && !questions[0].multiple;
+  card.classList.add('questions');
+  title.textContent = `${connectedAgent?.name || 'The agent'} asks${questions.length > 1 ? ` (${questions.length} questions)` : ''}:`;
+  const sendBtn = Object.assign(document.createElement('button'), { className: 'btn primary', textContent: 'Send answers', disabled: true });
+  const refresh = () => (sendBtn.disabled = !answers.some((a) => a.choices.length || a.other.trim()));
+  const submit = () => {
+    if (sendBtn.disabled) return false;
+    reply({ done: true, answers }, formatAnswers(questions, answers).summary);
+    return true;
+  };
+  sendBtn.onclick = submit;
+  const buttons = questions.map(() => new Map()); // per question: label -> button
+  const pick = (i, label) => {
+    const q = questions[i];
+    const a = answers[i];
+    if (!q || !buttons[i].has(label)) return false;
+    if (q.multiple) a.choices = a.choices.includes(label) ? a.choices.filter((c) => c !== label) : [...a.choices, label];
+    else a.choices = a.choices[0] === label ? [] : [label];
+    for (const [l, b] of buttons[i]) b.setAttribute('aria-pressed', String(a.choices.includes(l)));
+    refresh();
+    if (quick && a.choices.length) submit();
+    return true;
+  };
+  const blocks = questions.map((q, i) => {
+    const block = Object.assign(document.createElement('div'), { className: 'ask-q' });
+    const text = Object.assign(document.createElement('div'), { className: 'ask-q-text' });
+    if (q.header) text.append(Object.assign(document.createElement('span'), { className: 'ask-q-header', textContent: q.header }));
+    text.append(q.question);
+    block.append(text);
+    if (q.options.length) {
+      const list = Object.assign(document.createElement('div'), { className: 'ask-opts' });
+      for (const o of q.options) {
+        const b = Object.assign(document.createElement('button'), { type: 'button', className: 'ask-opt' });
+        b.setAttribute('aria-pressed', 'false');
+        b.append(Object.assign(document.createElement('span'), { className: 'ask-opt-label', textContent: o.label }));
+        if (o.description) b.append(Object.assign(document.createElement('span'), { className: 'ask-opt-desc', textContent: o.description }));
+        b.onclick = () => pick(i, o.label);
+        buttons[i].set(o.label, b);
+        list.append(b);
+      }
+      block.append(list);
+      if (q.multiple) block.append(Object.assign(document.createElement('div'), { className: 'hint', textContent: 'You can pick several.' }));
+    }
+    if (q.other) {
+      const own = Object.assign(document.createElement('input'), { className: 'note', placeholder: q.options.length ? 'Or your own answer…' : 'Your answer…' });
+      own.oninput = () => {
+        answers[i].other = own.value;
+        refresh();
+      };
+      own.onkeydown = (e) => {
+        if (e.key === 'Enter' && (questions.length === 1 || i === questions.length - 1)) submit();
+      };
+      block.append(own);
+    }
+    return block;
+  });
+  const skip = Object.assign(document.createElement('button'), { className: 'btn', textContent: 'Skip' });
+  skip.title = 'Close without answering: the agent goes on with its best judgement';
+  const close = () => reply({ done: false }, 'Closed without an answer');
+  skip.onclick = close;
+  options.append(sendBtn, skip);
+  card.append(title, ...blocks, options);
+  // A spoken answer in the user's own words (Live conversation).
+  const other = (i, value, sendNow = false) => {
+    const own = blocks[i]?.querySelector('input.note');
+    if (!own) return false;
+    own.value = answers[i].other = value;
+    refresh();
+    if (quick && sendNow) submit();
+    return true;
+  };
+  openQuestions = { id: msg.id, questions, pick, other, submit, close };
+  record('ask', { kind: 'questions', message: questions.map((q) => q.question).join(' / ') });
+  // Read aloud; in a live conversation with the options, since the answer may be spoken too.
+  announce(null, questions.map((q) => (liveOn() && q.options.length ? `${q.question} ${q.options.map((o) => o.label).join(', ')}.` : q.question)).join(' ').slice(0, 500));
 }
 
 // Requests from the agent that the panel answers (Take over / Password manager flags).
@@ -1345,7 +1475,9 @@ async function addAsk(msg) {
   options.className = 'options';
   const settled = (label) => {
     askCards.delete(msg.id);
+    if (openQuestions?.id === msg.id) openQuestions = null;
     card.classList.add('resolved');
+    for (const control of card.querySelectorAll('button, input')) control.disabled = true;
     options.replaceChildren(Object.assign(document.createElement('span'), { textContent: `→ ${label}` }));
     record('ask', { kind: msg.kind, answer: label });
   };
@@ -1354,8 +1486,12 @@ async function addAsk(msg) {
     settled(label);
   };
   askCards.set(msg.id, settled); // settled from the extension side (e.g. replaced by a newer request)
+  // Narration reads a question itself; other requests get the short "I need your answer."
+  if (msg.kind !== 'questions') announce('needsYou');
 
-  if (msg.kind === 'human') {
+  if (msg.kind === 'questions') {
+    questionsCard(msg, card, title, options, reply);
+  } else if (msg.kind === 'human') {
     title.textContent = `${connectedAgent?.name || 'The agent'} needs you: ${msg.message}`;
     const note = Object.assign(document.createElement('input'), { className: 'note', placeholder: 'Optional note for the agent' });
     const done = Object.assign(document.createElement('button'), { className: 'btn primary', textContent: "Done, continue" });
@@ -1491,6 +1627,10 @@ function renderUsagePopup() {
   } else items.push(Object.assign(document.createElement('p'), { className: 'hint', textContent: 'No token counts reported yet.' }));
   if (totals.cost) items.push(row('Cost', fmtCost(totals.cost)));
   else if (usage.cost != null) items.push(row('Cost (session)', fmtCost({ amount: usage.cost, currency: usage.currency })));
+  // Speech is billed by OpenRouter separately from the agent's tokens.
+  const speech = speechTotals();
+  if (speech.narration.chars) items.push(row('Narration', `${speech.narration.chars.toLocaleString()} characters${speech.narration.priced ? ` · ${fmtCost({ amount: speech.narration.cost, currency: 'USD' })}` : ''}`, 'Text sent to OpenRouter to be spoken; repeats come from a cache and are not counted'));
+  if (speech.voice.priced) items.push(row('Voice input', fmtCost({ amount: speech.voice.cost, currency: 'USD' }), 'Audio transcribed through OpenRouter'));
   const last = journal.filter((e) => e.type === 'agent' && e.stats).pop();
   if (last) {
     items.push(section('Last task'));
@@ -1531,6 +1671,7 @@ function agentMessage(markdown) {
   tools.append(
     mk('Copy', 'Copy as Markdown (links as [text](url))', () => copyText(el.markdown)),
     mk('Text', 'Copy as plain text with links written out; pastes as rich text with links into docs and mail', () => copyRich(plainTextWithLinks(body), body.innerHTML)),
+    readAloudButton(body),
   );
   el.append(body, tools);
   el.markdown = markdown;
@@ -1540,6 +1681,59 @@ function agentMessage(markdown) {
   };
   el.setMarkdown(markdown);
   return el;
+}
+
+// ---------- Narration (flag) ----------
+
+const READ_ALOUD_MAX = 6000; // characters of one reply read aloud
+
+// What is read aloud of a reply: its text without code blocks and tables.
+function speechTextOf(body) {
+  const clone = body.cloneNode(true);
+  for (const skip of clone.querySelectorAll('pre, table')) skip.remove();
+  return clone.textContent.replace(/\s+/g, ' ').trim();
+}
+
+// 🔊 under a reply (shown with the Narration flag): reads it aloud, a second click stops.
+function readAloudButton(body) {
+  const b = Object.assign(document.createElement('button'), { type: 'button', className: 'msg-copy', textContent: '🔊', hidden: true });
+  b.dataset.narration = '';
+  getFeatures().then((f) => (b.hidden = !f.narration));
+  // The price is known before anything is sent.
+  b.onmouseenter = async () => {
+    const chars = Math.min(READ_ALOUD_MAX, speechTextOf(body).length);
+    const cost = estimateCost(chars, (await narrationSettings()).model);
+    b.title = `Read aloud · ${chars.toLocaleString()} characters${cost != null ? ` ≈ ${fmtCost({ amount: cost, currency: 'USD' })}` : ''} (sent to OpenRouter)`;
+  };
+  b.onclick = async () => {
+    if (b.textContent === '■') return hush('reply');
+    const text = speechTextOf(body);
+    if (!text) return;
+    if (text.length > READ_ALOUD_MAX) notice(`Long reply: reading the first ${READ_ALOUD_MAX.toLocaleString()} characters.`);
+    b.textContent = '■';
+    await say(text.slice(0, READ_ALOUD_MAX), { kind: 'reply' });
+    b.textContent = '🔊';
+  };
+  return b;
+}
+
+// A short phrase for the moments a task needs you or ends — or `text` itself (a question the agent asks).
+async function announce(id, text = '') {
+  if (replaying || (!id && !text)) return;
+  const settings = await narrationSettings();
+  if (!settings.on || settings.events === false) return;
+  // A reply you asked to hear is not cut off by "Done."
+  if (speaking('reply')) return;
+  say(text || phrase(id, settings.language), { kind: 'event', settings });
+}
+
+// Speech sent to OpenRouter in this chat: narration and voice input.
+function speechTotals() {
+  const sum = (type) => {
+    const list = journal.filter((e) => e.type === type);
+    return { chars: list.reduce((a, e) => a + (e.chars || 0), 0), cost: list.reduce((a, e) => a + (e.cost || 0), 0), priced: list.some((e) => e.cost != null) };
+  };
+  return { narration: sum('speech'), voice: sum('voice') };
 }
 
 function plainTextWithLinks(body) {
@@ -1614,6 +1808,10 @@ function syncControls() {
     $('report-open').hidden = !f.selfAnalysis;
     for (const el of document.querySelectorAll('[data-self-analysis]')) el.hidden = !f.selfAnalysis;
     for (const b of document.querySelectorAll('[data-voice]')) b.hidden = !f.voice;
+    for (const b of document.querySelectorAll('[data-narration]')) b.hidden = !f.narration;
+    $('live-toggle').hidden = !f.live;
+    if (!f.live && liveOn()) setLive(false);
+    if (!f.narration && !liveOn()) hush();
   });
   for (const select of document.querySelectorAll('#config select, #config-extra select')) select.disabled = busy;
 }
@@ -1968,15 +2166,155 @@ addEventListener('error', (e) => recordPanelError('window', e.error || e.message
 addEventListener('unhandledrejection', (e) => recordPanelError('promise', e.reason));
 // Voice: the transcript becomes one message in the box; the user edits and sends it.
 initVoice(port, {
-  text(text, source) {
+  text(text, source, cost) {
     if (!text) return notice('Nothing was transcribed.', true);
     const prefix = source === 'tab' ? '[Transcript of the tab audio]\n' : '';
     els.input.value = `${els.input.value.trim() ? `${els.input.value.trim()}\n\n` : ''}${prefix}${text}`;
     els.input.focus();
-    record('voice', { source, chars: text.length });
+    record('voice', { source, chars: text.length, ...(cost != null ? { cost } : {}) });
   },
   error: (text) => notice(text, true),
   info: (text) => notice(text),
+});
+// Narration: every piece sent to be spoken is a step with its length and cost.
+initNarration(port, {
+  spoken({ kind, text, chars, cost, model, cached, finished }) {
+    if (!chars && !finished) return; // stopped before anything was sent or heard
+    const price = cached ? 'from cache' : `${chars.toLocaleString()} characters${cost != null ? ` · ${fmtCost({ amount: cost, currency: 'USD' })}` : ''}`;
+    const line = `🔊 Spoke “${truncate(text, 60)}” · ${price}`;
+    // During a task it is one of its steps; otherwise a small line of its own.
+    if (activity) addToActivity(actionRow(line, true), false);
+    else {
+      add('div', 'stats').textContent = line;
+      scrollDown();
+    }
+    if (chars) record('speech', { kind, chars, model, ...(cost != null ? { cost } : {}) });
+    if (!$('usage-popup').hidden) renderUsagePopup();
+  },
+  error: (text) => notice(text, true),
+  state(on) {
+    $('narration-stop').hidden = !on;
+    // Live conversation: while TabHelm speaks the microphone would hear its own voice.
+    if (!liveOn() || liveBargeIn) return;
+    clearTimeout(unmuteTimer);
+    if (on) setLiveMuted(true);
+    else unmuteTimer = setTimeout(() => setLiveMuted(false), 350);
+  },
+});
+$('narration-stop').onclick = () => hush();
+
+// ---------- Live conversation (flag) ----------
+// 🎙 Live keeps the microphone on. Every sentence heard is, in this order: a
+// command ("stop", "quiet", in a guide "next" / "back" / "skip"), the answer to
+// a question card that is open, or a message to the agent — whose reply is
+// then read aloud.
+
+const LIVE_REPLY_MAX = 1200; // characters of a reply read aloud
+const LIVE_STATUS = { listening: 'Listening…', hearing: 'Hearing you…', thinking: 'Transcribing…', speaking: 'Speaking — the microphone is ignored meanwhile' };
+let liveBargeIn = false;
+let unmuteTimer = null;
+
+function speakReply(markdown) {
+  const text = plainSpeech(markdown);
+  if (!text) return announce('done');
+  say(text.slice(0, LIVE_REPLY_MAX), { kind: 'reply' });
+}
+
+async function setLive(on) {
+  if (on === liveOn()) return;
+  if (!on) {
+    stopLive();
+    hush();
+    return;
+  }
+  liveBargeIn = Boolean((await getSetting('live')).bargeIn);
+  forceNarration(true); // guide steps, questions and replies are spoken while Live is on
+  try {
+    await startLive();
+  } catch (err) {
+    forceNarration(false);
+    notice(err.message, true);
+  }
+}
+$('live-toggle').onclick = () => setLive(!liveOn());
+
+const liveLine = (text) => {
+  add('div', 'stats').textContent = text;
+  scrollDown();
+};
+
+function runLiveCommand(cmd, said) {
+  const did = (what) => liveLine(`🎙 “${truncate(said, 40)}” → ${what}`);
+  if (cmd.type === 'liveOff') {
+    did('Live conversation off');
+    return setLive(false);
+  }
+  hush();
+  if (cmd.type === 'quiet') return did('voice stopped');
+  if (cmd.type === 'guide') {
+    port.postMessage({ type: 'guide_action', action: cmd.action });
+    return did({ done: 'next step', back: 'previous step', skipped: 'step skipped', pause: 'auto-play paused', auto: 'auto-play' }[cmd.action]);
+  }
+  if (guideCard) {
+    port.postMessage({ type: 'guide_action', action: 'stop' });
+    return did('guide stopped');
+  }
+  if (busy) {
+    stop();
+    return did('task stopped');
+  }
+  did('nothing is running');
+}
+
+function onHeard(text) {
+  $('live-text').textContent = `“${text}”`;
+  // An option that happens to be called "Stop" or "Next" is an answer, not a command.
+  const answer = openQuestions ? matchAnswer(text, openQuestions.questions) : null;
+  const cmd = answer?.picks ? null : parseCommand(text, { guide: Boolean(guideCard) });
+  if (cmd) return runLiveCommand(cmd, text);
+  if (openQuestions) {
+    const q = openQuestions;
+    const m = answer;
+    if (!m) return liveLine(`🎙 “${truncate(text, 60)}” — say the name or the number of an option, or answer on the card.`);
+    if (m.skip) return q.close();
+    if (m.submit) return void (q.submit() || liveLine('🎙 Nothing is chosen yet.'));
+    if (m.picks) return m.picks.forEach((p) => q.pick(p.index, p.label));
+    // Your own words answer a question without options at once; next to options they
+    // are only filled in, so a misheard sentence is not sent as your answer.
+    const free = !q.questions[m.index].options.length;
+    q.other(m.index, m.other, free);
+    if (!free || q.questions.length > 1) liveLine('🎙 Filled in as your own answer — say “send” to confirm, or name an option.');
+    return;
+  }
+  // Approvals and sign-ins are answered by a click: a spoken "yes" must not approve anything, nor interrupt the agent.
+  if (els.log.querySelector('.card.ask:not(.resolved):not(.guide):not(.questions)') && text.split(/\s+/).length <= 3) {
+    return liveLine(`🎙 “${truncate(text, 40)}” — this request is answered by a click on its card, not by voice.`);
+  }
+  els.input.value = els.input.value.trim() ? `${els.input.value.trim()} ${text}` : text;
+  send();
+}
+
+initLive(port, {
+  state(state, interim) {
+    const on = state !== 'off';
+    $('live-bar').hidden = !on;
+    $('live-bar').dataset.state = state;
+    $('live-toggle').setAttribute('aria-pressed', String(on));
+    $('live-status').textContent = LIVE_STATUS[state] || '';
+    if (interim || !on) $('live-text').textContent = interim || '';
+    if (!on) {
+      clearTimeout(unmuteTimer);
+      forceNarration(false);
+    }
+    // Interrupt by voice (a setting, for headphones): starting to talk silences TabHelm.
+    if (state === 'hearing' && liveBargeIn) hush();
+  },
+  utterance(text, cost) {
+    // What was transcribed is recorded with its cost, also when nothing usable was heard.
+    if (text || cost != null) record('voice', { source: 'live', chars: text.length, ...(cost != null ? { cost } : {}) });
+    if (text) onHeard(text);
+  },
+  error: (text) => notice(text, true),
 });
 // Changing the folder restarts the agent there; the conversation is handed over.
 initFolder(port, tabId, {

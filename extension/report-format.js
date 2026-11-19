@@ -768,7 +768,7 @@ function stepLine(e, t0) {
   const parts = [Number.isFinite(t) && Number.isFinite(t0) ? `+${Math.max(0, Math.round((t - t0) / 1000))}s` : '+?s'];
   parts.push(typeof e?.type === 'string' && TYPE_RE.test(e.type) ? e.type : '?');
   if (e?.type === 'action') parts.push(tool(e.tool) || '?', `{${argKeys(e.args).join(', ')}}`);
-  if (e?.type === 'ask' && ['guide', 'human', 'login'].includes(e.kind)) parts.push(e.kind);
+  if (e?.type === 'ask' && ['guide', 'human', 'login', 'questions'].includes(e.kind)) parts.push(e.kind);
   const result = isObj(e) ? stepResult(e) : null;
   if (result) parts.push(result);
   return parts.join(' ');

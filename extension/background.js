@@ -1,4 +1,4 @@
-import { runTool, releaseChat, startRecording, stopRecording, ensureGroup, groupInfo, chatForGroupTab, chatDebugState, previewTarget, markWorking, setGuideAction, runScript, focusVisibleTab } from './browser-tools.js';
+import { runTool, releaseChat, startRecording, stopRecording, ensureGroup, groupInfo, chatForGroupTab, chatDebugState, previewTarget, markWorking, setGuideAction, setGuideSpeech, runScript, focusVisibleTab } from './browser-tools.js';
 import { listScripts, scriptMatches } from './scripts-lib.js';
 import { checkPolicy, pauseChat, resumeChat, isPaused, READ_ONLY } from './policy.js';
 import { getFeatures, getSetting, hostFeaturePayload } from './features.js';
@@ -440,6 +440,11 @@ export async function fromPanel(tabId, msg, port) {
   }
   if (msg.type === 'guide_action') {
     setGuideAction(tabId, msg.action);
+    return;
+  }
+  // Narration: the panel started or finished reading a guide step aloud.
+  if (msg.type === 'guide_speech') {
+    setGuideSpeech(tabId, msg.id, msg.state);
     return;
   }
   if (msg.type === 'pause') {

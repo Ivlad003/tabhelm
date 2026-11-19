@@ -138,6 +138,10 @@ Ask to be shown instead of served — *"guide me through enabling two-factor aut
 
 Each step carries its action — click, **type** a value, **select** an option, tick a box — so in manual mode a typing step completes when the value changes, not on the first click into the field. **Auto-play.** Turn on **Settings → Page → Auto-play guides** and every guide plays by itself — the agent does each step (clicking, typing, choosing) after a pause (*Pause before each automatic step*, 3 s by default), with no prompts. With the setting off, guides wait for you and **▶ Auto** (on the page or in the panel) plays just that one; **⏸ Pause** hands control back at any time. Recorded, this makes a narrated demo video. A long guide does not time out the agent: Cursor, Codex and the built-in agents end a tool call after about a minute, so for them `browser_guide` answers after 40 s that the guide is still on the page, and the agent then picks up the result with `browser_wait_for_user`. Requests for your help and sign-in requests work the same way.
 
+### Questions from the agent
+
+When a task depends on something only you can decide — which of several items, a missing value, a preference — the agent asks on a card in the chat (`browser_ask_user`) instead of guessing or stopping with a question in plain text. A card holds up to five questions; each has its options as buttons (one or several can be picked, as the agent set it) and a field for your own answer. One question with one choice is answered by the click itself; otherwise pick, type and press **Send answers**. **Skip** closes the card and the agent goes on with its best judgement, saying what it assumed. The answers go back to the agent as text and stay in the chat and its export. With **Narration** on the question is read aloud; in a **Live conversation** you can answer by voice — an option's name or number.
+
 ### Picking elements
 
 **＋ → Pick element**: hover outlines the element under the mouse, a click picks it (the page does not receive the click). **＋ → Select area**: drag a rectangle; every button, link, field, heading, cell or text element inside it is picked (up to 60). Esc cancels. The picked elements go into your next message as one chip with, for each, its ref (the agent can click or read it right away), a unique CSS selector, its text, link and a short HTML excerpt — e.g. *“why is this disabled?”*, *“extract these rows”*, *“write a script that hides these”*.
@@ -215,7 +219,9 @@ Only add skills you trust: their text becomes instructions for the agent.
 | **Notifications** | Badge on the chat's tab (✓ done, ! stopped, ? needs you) and a system notification; clicking it opens the tab. | — |
 | **Detailed guide** | In guide mode every step is explained in 2–4 sentences (what the element is, why, what happens next, what to check) and the procedure is introduced before the first step. | — |
 | **Self-analysis** | Diagnose a chat or report on all chats: errors by cause, site knowledge or skills the agent was missing, setup problems and TabHelm bugs; redacted bug report, coding-agent task and exports; optional `tabhelm_diagnose` tool for the agent. See [Self-analysis](#self-analysis-flag). | — |
-| **Voice** | **🎤 Voice → Microphone** records a voice message; **Tab audio** captures what the tab is playing (a video, a call) — the tab keeps playing for you. Text appears live and, on **Stop**, the whole transcript becomes one message in the box to edit and send. Microphone uses Chrome's own recognition (no setup) or the host; tab audio always uses the host: `whisper-cli` + `ffmpeg` + a ggml model, or an OpenAI-compatible transcription API via `TABHELM_TRANSCRIBE_BASE_URL` / `_API_KEY` / `_MODEL` in `~/.tabhelm/env` (e.g. Groq's Whisper). First microphone use opens a page to grant Chrome access. | whisper.cpp or an API for the host engine |
+| **Voice** | **🎤 Voice → Microphone** records a voice message; **Tab audio** captures what the tab is playing (a video, a call) — the tab keeps playing for you. Text appears live and, on **Stop**, the whole transcript becomes one message in the box to edit and send. Microphone uses Chrome's own recognition (no setup) or the host; tab audio always uses the host: `whisper-cli` + `ffmpeg` + a ggml model, or an OpenAI-compatible transcription API via `TABHELM_TRANSCRIBE_BASE_URL` / `_API_KEY` / `_MODEL` in `~/.tabhelm/env` (e.g. Groq's Whisper). With an OpenRouter key and neither of those, the host uses OpenRouter's Whisper — no extra setup, and the cost shows in the usage details. First microphone use opens a page to grant Chrome access. | whisper.cpp, an API or an OpenRouter key for the host engine |
+| **Live conversation** | Talk instead of typing. **🎙 Live** next to the message box keeps the microphone on; each sentence you say is, in this order: a **command** — “stop”, “quiet”, in a guide “next” / “back” / “skip” / “pause” / “auto” (also “стоп”, “тихо”, “далі”, “назад”, “пропусти”; a command is the whole sentence, never part of a longer one) — the **answer** to a question card that is open, or a **message** to the agent, which is told to answer in a few spoken sentences; the reply, guide steps and questions are read aloud. While TabHelm speaks the microphone is ignored, unless *Interrupt by speaking* is on (headphones). Approvals and sign-ins are never given by voice. Listening goes through the host to OpenRouter's Whisper (sentences are cut at pauses in the panel) or through Chrome's own recognition; the bar above the message box shows what is happening and what was heard, and the cost is in the usage details. | OpenRouter key (`npm run set-key -- openrouter`) |
+| **Narration** | TabHelm speaks. Every **guide step** is read aloud, and auto-play does the step only after the sentence is over; a short phrase says when a task **needs you**, is **done** or **stopped**; **🔊** under a reply reads it (hover for the price first, click again to stop). Speech comes from OpenRouter (`/audio/speech`; pick the model and voice in the feature's settings — ElevenLabs Flash v2.5 by default, which speaks Ukrainian). Transparent by design: only the text you hear is sent; each piece appears in the steps as *🔊 Spoke “…” · 118 characters · $0.0047*, the chat's total is in the usage details and the Markdown export, and text spoken before is replayed from a cache for free. | OpenRouter key (`npm run set-key -- openrouter`) |
 
 Security notes: the critic, site rules and the sensitive gate run in the extension before a tool executes, so they also cover agents that auto-approve their own tools. Secrets live in this browser profile's extension storage. Scheduled runs are unattended by design — give them narrow tasks.
 
@@ -456,6 +462,9 @@ extension/                     Chrome extension (Manifest V3, no build step)
   policy.js                    action policy: site rules, sensitive gate, critic bridge, secrets, pause
   scheduler.js                 scheduled tasks (chrome.alarms, background runs)
   voice.js                     voice messages / tab audio with live transcription · permissions.html  microphone grant
+  narration.js                 narration: one voice at a time, pieces of text → MP3 from the host, cache, cost report
+  live.js                      live conversation: microphone, cutting speech into sentences, commands, spoken answers to questions
+  questions.js                 browser_ask_user: questions made safe to show, answers turned into text for the agent (pure)
   attachments.js               image / text attachments: picking, drop, paste, downscaling
   folder.js                    working folder: picker, typed path, recent folders, auto-approve warning
   history.js                   saved chats: storage, list, search, delete, opening in the chat's tab
@@ -478,7 +487,8 @@ host/                          native host (Node 20+)
   src/critic.js                action critic (second model) · src/llm.js  OpenAI-compatible helper
   src/memory.js                memory notes across chats · src/passwords.js  1Password CLI hand-off
   src/state.js                 backup of the panel's storage (~/.tabhelm/state.json) for reinstalls
-  src/transcribe.js            speech to text: transcription API or whisper.cpp + ffmpeg
+  src/transcribe.js            speech to text: transcription API, whisper.cpp + ffmpeg, or OpenRouter
+  src/speech.js                text to speech through OpenRouter: models, voices, prices, one MP3 per piece of text
   src/tool-server.js           loopback HTTP endpoint with token
   src/log-digest.js            redacted host.log digest for the self-analysis (errors, crashes, relay, agent sign-in)
   src/mcp-bridge.js            stdio MCP server spawned by agents (browser_*, skill_*, memory_* tool definitions)
@@ -529,6 +539,9 @@ Load `extension/` unpacked in Chrome. After editing extension files press ↻ on
 | `npm run test:flags` | every experimental feature with the built-in agent against a scripted mock model and a fake microphone (35 checks, including Diagnose, `/report`, the agent's self-check and a redaction canary) |
 | `npm run test:selfanalysis` | self-analysis unit tests: error taxonomy, redaction, host-log digest, analyzer detectors and golden reports, every renderer with canary values that must never appear in output |
 | `npm run test:builtin` | built-in agent against a mock OpenAI-compatible API (streaming, tool calls, 429 retry, missing key) |
+| `npm run test:speech` | narration and voice input against a mock OpenRouter: text → MP3 with its cost, models and voices, the transcription fallback, the panel's queue (pieces, cache, replacing, stopping) |
+| `npm run test:questions` | `browser_ask_user`: questions capped and cleaned, only offered options accepted, the text the agent reads |
+| `npm run test:live` | live conversation: what is a command, spoken answers to question cards, where a sentence starts and ends, replies without Markdown |
 | `TABHELM_RELEASE=../dist/tabhelm-x.y.z npm run e2e -- claude` | the built release |
 
 **Build:** `npm run build` (repo root) writes `dist/`: the unpacked release, `tabhelm-extension[-x.y.z].zip` and `tabhelm[-x.y.z].tar.gz` (without `node_modules`; the Claude/Codex adapters bundle agent binaries, ~750 MB installed).

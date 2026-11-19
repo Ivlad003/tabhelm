@@ -151,6 +151,7 @@ async function sendChunk(blob, me) {
     return;
   }
   if (reply.text) me.finals[seq] = reply.text;
+  if (reply.cost != null) me.cost = (me.cost || 0) + reply.cost; // OpenRouter reports what each chunk cost
   if (me === state) render();
   else me.flushing?.(); // chunk arrived after Stop: deliver the final text now
 }
@@ -234,7 +235,7 @@ export function stop(discard = false) {
     if (delivered) return;
     delivered = true;
     s.flushing = null;
-    onText(s.finals.filter(Boolean).join(' ').trim(), s.source);
+    onText(s.finals.filter(Boolean).join(' ').trim(), s.source, s.cost ?? null);
   };
   if (s.pending > 0 || lastChunk) {
     // Wait for the last chunk(s) to be transcribed (at most 15 s), then deliver once.

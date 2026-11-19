@@ -4,10 +4,11 @@
 // chrome.scripting; mouse and keyboard go through CDP Input.* (trusted events).
 
 import { cdp, attach, detach, dialogs, consoleLogs, requests, fileChoosers, dragData, screencastListeners } from './cdp.js';
-import { getFeatures, setFeature } from './features.js';
+import { getFeatures, setFeature, getSetting } from './features.js';
 import { listScripts, scriptMatches, saveScript } from './scripts-lib.js';
 import { topFrame } from './redact.js';
 import { diagnoseTool } from './selfanalysis-data.js';
+import { normalizeQuestions, formatAnswers } from './questions.js';
 import * as P from './page-scripts.js';
 
 const chats = new Map(); // chatTabId -> { chatTabId, current, owned: Set, notes: [] }
@@ -656,6 +657,7 @@ async function runToolInner(chatTabId, tool, args, ui) {
   } else if (tool === 'skill_save') result = await saveSkill(args, ui);
   else if (tool === 'tabhelm_diagnose') result = await diagnoseTool(chatTabId, args, ui);
   else if (tool === 'browser_wait_for_user') result = await waitForUser(c, args);
+  else if (tool === 'browser_ask_user') result = await askUser(chatTabId, args, ui);
   else if (tool === 'browser_search_tabs') result = await searchTabs(c, args);
   else if (tool === 'browser_handle_dialog') result = await handleDialog(await targetTab(c, args.tabId, ui), args);
   else {
@@ -729,6 +731,22 @@ async function collectUserWait(c, run, waitSec) {
   return outcome.result;
 }
 
+// browser_ask_user: questions with options, answered on a card in the panel.
+// It needs no page, so it also works on pages the agent cannot control.
+async function askUser(chatTabId, args, ui) {
+  const questions = normalizeQuestions(args);
+  const many = questions.length > 1;
+  return waitingForUser(chatTabId, 'questions', args.waitSec, ui, async (run) => {
+    run.describe = () => `The user has not answered your ${many ? 'questions' : 'question'} yet ("${questions[0].question.slice(0, 80)}"); ${many ? 'they are' : 'it is'} still open in the TabHelm panel.`;
+    const reply = await ui.ask(chatTabId, 'questions', { questions, message: questions[0].question });
+    if (!reply) throw new Error('No one can answer: the TabHelm panel of this chat is not open (a scheduled run cannot ask). Go on with your best judgement and say what you assumed.');
+    if (reply.replaced) return { content: text('These questions were replaced by a newer request.'), label: 'replaced' };
+    if (!reply.done) return { content: text('The user closed the questions without answering. Do not ask the same thing again: go on with your best judgement and say what you assumed, or stop and explain what you need.'), label: 'closed without an answer' };
+    const out = formatAnswers(questions, reply.answers);
+    return { content: text(out.text), label: out.label };
+  });
+}
+
 async function guideTour(chatTabId, defaultTab, args, ui, run) {
   const c = chatState(chatTabId);
   const steps = (args.steps?.length ? args.steps : [{ ref: args.ref, text: args.text }]).map((st, i) => ({
@@ -753,6 +771,8 @@ async function guideTour(chatTabId, defaultTab, args, ui, run) {
   const { guidePause = 3, guideAutoPlay = false } = await chrome.storage.local.get(['guidePause', 'guideAutoPlay']);
   const pauseMs = Math.max(1, Number(args.pause || guidePause) || 3) * 1000;
   let auto = Boolean(guideAutoPlay);
+  // Narration: the panel reads each step aloud, and auto-play waits for the end of the sentence.
+  const narrated = Boolean((await getFeatures()).narration && (await getSetting('narration')).guide !== false);
   run.describe = () => {
     const where = steps.length > 1 ? `step ${i + 1} of ${steps.length}` : 'its step';
     const how = auto
@@ -780,12 +800,15 @@ async function guideTour(chatTabId, defaultTab, args, ui, run) {
       ref = parsed.ref;
     }
     const sameFrame = steps.filter((st) => st.tabId === tabId && (st.ref ? parseRef(st.ref).frameId === frameId : true)).map((st) => ({ index: st.index, ref: st.ref ? parseRef(st.ref).ref : null, text: st.text, action: st.action, canBack: single && startNumber > 1 }));
-    const shown = await inject(tabId, P.guideTour, [sameFrame, i, steps.length, { auto, pauseMs }], frameId).catch(() => null);
+    const shown = await inject(tabId, P.guideTour, [sameFrame, i, steps.length, { auto, pauseMs, narrated }], frameId).catch(() => null);
     label = shown?.label || '';
     shownTab = tabId;
     shownFrame = frameId;
     c.guideAction = null;
-    ui.guideProgress?.(chatTabId, { index: i, total: steps.length, text: step.text, target: label, found: Boolean(shown?.found), tabId, tabTitle: tab.title, number: single ? startNumber : i + 1, auto, action: step.action, value: step.value });
+    // Every showing of a step has its own id: the panel answers with it when it starts and stops speaking.
+    const speechId = ++guideSpeechSeq;
+    c.guideSpeech = null;
+    ui.guideProgress?.(chatTabId, { index: i, total: steps.length, text: step.text, target: label, found: Boolean(shown?.found), tabId, tabTitle: tab.title, number: single ? startNumber : i + 1, auto, action: step.action, value: step.value, speechId });
 
     let status = 'waiting';
     const shownAt = Date.now();
@@ -795,7 +818,7 @@ async function guideTour(chatTabId, defaultTab, args, ui, run) {
         status = 'replaced';
         break;
       }
-      if (auto && Date.now() - shownAt >= pauseMs && !c.guideAction) {
+      if (auto && Date.now() - shownAt >= pauseMs && !c.guideAction && !stillSpeaking(c, speechId, shownAt)) {
         status = 'autoplay';
         break;
       }
@@ -966,6 +989,26 @@ export function singleTabMode() {
 export function setGuideAction(chatTabId, action) {
   const c = chats.get(chatTabId);
   if (c) c.guideAction = action;
+}
+
+// Narration: the panel reports when it starts and stops reading a guide step
+// aloud. Auto-play holds the step until the sentence is over (plus a beat), but
+// never longer than SPEECH_HOLD_MS — a panel that went away must not stall the guide.
+let guideSpeechSeq = 0;
+const SPEECH_HOLD_MS = 90_000;
+const SPEECH_BEAT_MS = 400;
+
+export function setGuideSpeech(chatTabId, id, state) {
+  const c = chats.get(chatTabId);
+  if (!c) return;
+  if (state === 'start') c.guideSpeech = { id, busy: true, endedAt: 0 };
+  else if (c.guideSpeech?.id === id) c.guideSpeech = { id, busy: false, endedAt: Date.now() };
+}
+
+function stillSpeaking(c, speechId, shownAt) {
+  const s = c.guideSpeech;
+  if (!s || s.id !== speechId || Date.now() - shownAt > SPEECH_HOLD_MS) return false;
+  return s.busy || Date.now() - s.endedAt < SPEECH_BEAT_MS;
 }
 
 // skill_save: a skill written by the agent (e.g. from this chat) goes into the

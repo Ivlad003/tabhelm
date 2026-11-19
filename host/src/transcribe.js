@@ -1,9 +1,11 @@
-// Speech to text for the Voice feature. Two engines, chosen by what is set up:
-//   1. an OpenAI-compatible /v1/audio/transcriptions API
+// Speech to text for the Voice feature. Three engines, the first one set up wins:
+//   1. an OpenAI-compatible /v1/audio/transcriptions API you point it at
 //      (TABHELM_TRANSCRIBE_BASE_URL, TABHELM_TRANSCRIBE_API_KEY, TABHELM_TRANSCRIBE_MODEL in ~/.tabhelm/env;
 //       e.g. https://api.groq.com/openai/v1 with whisper-large-v3, or https://api.openai.com/v1 with whisper-1)
 //   2. whisper.cpp on this machine (`whisper-cli`, model from TABHELM_WHISPER_MODEL or the default ggml path);
-//      audio is converted to 16 kHz WAV with ffmpeg first.
+//      audio is converted to 16 kHz WAV with ffmpeg first. Audio stays on this computer.
+//   3. OpenRouter's /audio/transcriptions with the key the built-in agent already uses
+//      (OPENROUTER_API_KEY; model from TABHELM_TRANSCRIBE_MODEL or Whisper large v3 turbo) — no extra setup.
 // Chunks arrive as base64 webm/opus from the panel; each is transcribed on its own.
 
 import { execFile } from 'node:child_process';
@@ -12,6 +14,9 @@ import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { loadEnvFile, readEnvFile } from './env.js';
+import { openRouterBase, openRouterHeaders, openRouterKey } from './speech.js';
+
+export const OPENROUTER_TRANSCRIBE_MODEL = 'openai/whisper-large-v3-turbo';
 
 loadEnvFile();
 const run = promisify(execFile);
@@ -30,7 +35,11 @@ export async function transcribeStatus() {
   const api = Boolean(env('TABHELM_TRANSCRIBE_BASE_URL'));
   const whisper = (await has('whisper-cli')) && (await has('ffmpeg'));
   const model = env('TABHELM_WHISPER_MODEL') || defaultWhisperModel();
-  return { api, apiBase: env('TABHELM_TRANSCRIBE_BASE_URL') || null, whisper, whisperModel: whisper && existsSync(model) ? model : null, ready: api || (whisper && existsSync(model)) };
+  const whisperModel = whisper && existsSync(model) ? model : null;
+  const openrouter = Boolean(openRouterKey());
+  // Which engine a chunk goes to, in the order of the header comment.
+  const engine = api ? 'api' : whisperModel ? 'whisper' : openrouter ? 'openrouter' : null;
+  return { api, apiBase: env('TABHELM_TRANSCRIBE_BASE_URL') || null, whisper, whisperModel, openrouter, openrouterModel: env('TABHELM_TRANSCRIBE_MODEL') || OPENROUTER_TRANSCRIBE_MODEL, engine, ready: Boolean(engine) };
 }
 
 function defaultWhisperModel() {
@@ -42,23 +51,27 @@ export async function transcribe({ data, mimeType = 'audio/webm', language = '' 
   const buffer = Buffer.from(data, 'base64');
   if (buffer.length < 2000) return { text: '' }; // silence / empty chunk
   const status = await transcribeStatus();
-  if (status.api) return transcribeApi(buffer, mimeType, language);
-  if (status.whisper && status.whisperModel) return transcribeWhisper(buffer, mimeType, language, status.whisperModel);
+  if (status.engine === 'api') {
+    const key = env('TABHELM_TRANSCRIBE_API_KEY') || env('OPENAI_API_KEY') || env('GROQ_API_KEY');
+    return transcribeApi(buffer, mimeType, language, { base: env('TABHELM_TRANSCRIBE_BASE_URL'), headers: key ? { authorization: `Bearer ${key}` } : {}, model: env('TABHELM_TRANSCRIBE_MODEL') || 'whisper-1' });
+  }
+  if (status.engine === 'whisper') return transcribeWhisper(buffer, mimeType, language, status.whisperModel);
+  if (status.engine === 'openrouter') return transcribeApi(buffer, mimeType, language, { base: openRouterBase(), headers: openRouterHeaders(), model: status.openrouterModel });
   throw new Error('No transcription engine: set TABHELM_TRANSCRIBE_BASE_URL (+ key, model) in ~/.tabhelm/env, or install whisper-cli + ffmpeg and a ggml model.');
 }
 
-async function transcribeApi(buffer, mimeType, language) {
-  const base = env('TABHELM_TRANSCRIBE_BASE_URL').replace(/\/$/, '');
-  const key = env('TABHELM_TRANSCRIBE_API_KEY') || env('OPENAI_API_KEY') || env('GROQ_API_KEY');
+// OpenAI-style multipart upload; OpenRouter accepts the same form and adds what the request cost.
+async function transcribeApi(buffer, mimeType, language, { base, headers, model }) {
   const form = new FormData();
   form.append('file', new Blob([buffer], { type: mimeType }), `chunk.${mimeType.includes('ogg') ? 'ogg' : 'webm'}`);
-  form.append('model', env('TABHELM_TRANSCRIBE_MODEL') || 'whisper-1');
+  form.append('model', model);
   form.append('response_format', 'json');
   if (language && language !== 'auto') form.append('language', language.split('-')[0]);
-  const res = await fetch(`${base}/audio/transcriptions`, { method: 'POST', headers: key ? { authorization: `Bearer ${key}` } : {}, body: form, signal: AbortSignal.timeout(60_000) });
+  const res = await fetch(`${base.replace(/\/$/, '')}/audio/transcriptions`, { method: 'POST', headers, body: form, signal: AbortSignal.timeout(60_000) });
   if (!res.ok) throw new Error(`transcription API HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);
   const json = await res.json();
-  return { text: (json.text || '').trim() };
+  const cost = Number(json.usage?.cost);
+  return { text: (json.text || '').trim(), model, ...(Number.isFinite(cost) ? { cost } : {}) };
 }
 
 async function transcribeWhisper(buffer, mimeType, language, model) {

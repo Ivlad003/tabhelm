@@ -9,6 +9,7 @@
 //                set_skills {tabId, skills} | skill_preview {tabId, requestId, url} | delete_recording {tabId, id, path}
 //                pick_folder {tabId, requestId} | folder_info {tabId, requestId, path}   (start may carry folder)
 //                transcribe {tabId, requestId, seq, data, mimeType, language} | transcribe_status {tabId}
+//                speak {tabId, requestId, text, model, voice} | speech_status {tabId}
 //   host -> ext: agents {agents} | status {tabId, state} | update {tabId, update} | config {tabId, options}
 //                auth {tabId, agent, methods} | recording_saved {tabId, id, path}
 //                skill_info {tabId, requestId, name, description | error}
@@ -29,6 +30,7 @@ import { loadMemory, addNote, deleteNote, clearMemory, runMemoryTool } from './m
 import { onePasswordAvailable, onePasswordItems, onePasswordCredential } from './passwords.js';
 import { parseSkill } from './skills.js';
 import { transcribe, transcribeStatus } from './transcribe.js';
+import { speak, speechStatus } from './speech.js';
 import { startToolServer } from './tool-server.js';
 import { AgentSession } from './session.js';
 import { saveState, loadState } from './state.js';
@@ -211,7 +213,7 @@ async function handleMessageNow(msg) {
 
       case 'prompt': {
         const session = requireSession(tabId);
-        session.prompt(msg.text, msg.context, msg.attachments).catch((err) => {
+        session.prompt(msg.text, msg.context, msg.attachments, { live: Boolean(msg.live) }).catch((err) => {
           // A prompt cut off because the user stopped or replaced the agent is not an error.
           if (session.disposed || sessions.get(tabId) !== session) return;
           log(`prompt failed for tab ${tabId}: ${err.message || err}${err.data ? ` ${JSON.stringify(err.data).slice(0, 1500)}` : ''}`);
@@ -277,8 +279,8 @@ async function handleMessageNow(msg) {
       // Voice feature: transcribe one audio chunk; status for Settings.
       case 'transcribe': {
         try {
-          const { text } = await transcribe({ data: msg.data, mimeType: msg.mimeType, language: msg.language });
-          send({ type: 'transcript', tabId, requestId: msg.requestId, seq: msg.seq, text });
+          const { text, cost } = await transcribe({ data: msg.data, mimeType: msg.mimeType, language: msg.language });
+          send({ type: 'transcript', tabId, requestId: msg.requestId, seq: msg.seq, text, cost });
         } catch (err) {
           send({ type: 'transcript', tabId, requestId: msg.requestId, seq: msg.seq, error: err.message });
         }
@@ -286,6 +288,19 @@ async function handleMessageNow(msg) {
       }
       case 'transcribe_status':
         send({ type: 'transcribe_status', tabId, ...(await transcribeStatus()) });
+        break;
+
+      // Narration feature: one piece of text → MP3 (OpenRouter); models, voices and prices for Settings.
+      case 'speak': {
+        try {
+          send({ type: 'speech', tabId, requestId: msg.requestId, ...(await speak({ text: msg.text, model: msg.model, voice: msg.voice })) });
+        } catch (err) {
+          send({ type: 'speech', tabId, requestId: msg.requestId, error: err.message });
+        }
+        break;
+      }
+      case 'speech_status':
+        send({ type: 'speech_status', tabId, ...(await speechStatus()) });
         break;
 
       // Memory view in Settings.
