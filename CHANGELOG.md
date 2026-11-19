@@ -2,6 +2,17 @@
 
 All notable changes to TabHelm. The newest release is at the top; the panel's update banner links here.
 
+## [0.32.0] - 2026-11-19
+
+### Added
+- **Questions from the agent.** When a task depends on something only you can decide — which of several items, a missing value, a preference — the agent now asks on a card in the chat (`browser_ask_user`) instead of guessing or stopping with a question in plain text. A card holds up to five questions; each has its options as buttons (one or several) and a field for your own answer. One question with one choice is answered by the click itself; otherwise pick, type and press **Send answers**. **Skip** closes the card and the agent goes on with its best judgement. If you take long, the agent is told the questions are still open and collects the answers with `browser_wait_for_user`. Scheduled runs cannot ask.
+- **Narration** (Experimental flag): TabHelm speaks. Every guide step is read aloud, and auto-play does the step only after the sentence is over; a short phrase says when a task needs you, is done or stopped; questions from the agent are read out; **🔊** under a reply reads it (hover for the price, click again to stop). Speech comes from OpenRouter with the key the built-in agent uses (`npm run set-key -- openrouter`); pick the model and voice in the feature's settings (ElevenLabs Flash v2.5 by default, which speaks Ukrainian). Only the text you hear is sent. Each piece shows in the steps as *🔊 Spoke “…” · 118 characters · $0.0047*, the chat's total is in the usage details and the Markdown export, and text spoken before is replayed from a cache for free.
+- **Live conversation** (Experimental flag): talk instead of typing. **🎙 Live** next to the message box keeps the microphone on. Each sentence you say is a command (“stop”, “quiet”; in a guide “next”, “back”, “skip”, “pause”, “auto” — also “стоп”, “тихо”, “далі”, “назад”, “пропусти”), the answer to an open question card (an option's name or number), or a message to the agent, whose reply is read aloud. A command is the whole sentence, never part of a longer one. While TabHelm speaks the microphone is ignored, unless *Interrupt TabHelm by speaking* is on (use headphones). Approvals and sign-ins are never given by voice. Listening goes through the host to OpenRouter's Whisper, or through Chrome's own recognition.
+- `npm run test:speech`, `test:questions` and `test:live` (27 unit tests against a mock OpenRouter).
+
+### Changed
+- **Voice: tab audio and the host engine work with just an OpenRouter key.** If you have not set up a transcription API or whisper.cpp, the host now sends audio to OpenRouter's Whisper and shows what it cost. An API you configured or a local whisper.cpp still comes first, so audio that stayed on your computer still does.
+
 ## [0.31.4] - 2026-11-11
 
 ### Fixed
