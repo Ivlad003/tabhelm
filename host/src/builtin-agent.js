@@ -22,6 +22,8 @@ const READ_ONLY = new Set([
   'browser_snapshot', 'browser_find', 'browser_get_text', 'browser_screenshot',
   'browser_wait', 'browser_console', 'browser_network', 'browser_tabs',
   'skill_list', 'skill_read', 'skill_read_file',
+  // Asking the user a question is not an action that needs their permission first.
+  'browser_ask_user', 'browser_wait_for_user',
 ]);
 
 const SYSTEM_PROMPT = `You are TabHelm's built-in browser agent. You operate the user's real Chrome tab through the browser_* tools.

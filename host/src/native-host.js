@@ -10,10 +10,12 @@
 //                pick_folder {tabId, requestId} | folder_info {tabId, requestId, path}   (start may carry folder)
 //                transcribe {tabId, requestId, seq, data, mimeType, language} | transcribe_status {tabId}
 //                speak {tabId, requestId, text, model, voice} | speech_status {tabId}
+//                read_file {tabId, requestId, id}   (answers: file_chunk {requestId, seq, last, data, size, name | error})
 //   host -> ext: agents {agents} | status {tabId, state} | update {tabId, update} | config {tabId, options}
 //                auth {tabId, agent, methods} | recording_saved {tabId, id, path}
 //                skill_info {tabId, requestId, name, description | error}
 //                permission {tabId, id, ...} | done {tabId} | error {tabId, message}
+//                files {tabId, files: [{id, name, path, size, created, outside}], more, root}   (after a task)
 //                tool_call {id, tabId, tool, args}
 
 import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync } from 'node:fs';
@@ -31,6 +33,7 @@ import { onePasswordAvailable, onePasswordItems, onePasswordCredential } from '.
 import { parseSkill } from './skills.js';
 import { transcribe, transcribeStatus } from './transcribe.js';
 import { speak, speechStatus } from './speech.js';
+import { readOffered, saveGenerated } from './files.js';
 import { startToolServer } from './tool-server.js';
 import { AgentSession } from './session.js';
 import { saveState, loadState } from './state.js';
@@ -113,6 +116,21 @@ const toolServer = await startToolServer({
         }
       }
       send({ type: 'tool_activity', tabId, tool, args, label: args.text || args.query, ok: result.ok, error: result.error });
+      return result;
+    }
+    // file_save: text from the agent becomes a file in its folder; the panel offers it for download after the turn.
+    if (tool === 'file_save') {
+      const session = sessions.get(tabId);
+      let result;
+      try {
+        const saved = saveGenerated(tabId, session?.folder || workspace, args);
+        if (session) session.touched.add(saved.path);
+        result = { ok: true, content: [{ type: 'text', text: `Saved ${saved.name} (${saved.size} bytes) at ${saved.path}. The user gets a Download button for it in the TabHelm panel when your turn ends; name the file in your answer.` }], label: saved.name };
+      } catch (err) {
+        result = { ok: false, error: err.message };
+      }
+      // The step shows the name only: the content can be large and is in the file.
+      send({ type: 'tool_activity', tabId, tool, args: { name: String(args?.name || '').slice(0, 120) }, label: result.label, ok: result.ok, error: result.error });
       return result;
     }
     // skill_* tools are answered here (skill_save goes to the extension's storage); everything else runs in the extension.
@@ -302,6 +320,19 @@ async function handleMessageNow(msg) {
       case 'speech_status':
         send({ type: 'speech_status', tabId, ...(await speechStatus()) });
         break;
+
+      // Download of a file the agent produced (offered with a `files` message): sent in chunks.
+      case 'read_file': {
+        try {
+          for (const chunk of readOffered(tabId, msg.id)) {
+            send({ type: 'file_chunk', tabId, requestId: msg.requestId, ...chunk });
+            await new Promise((next) => setImmediate(next)); // other messages get their turn between chunks
+          }
+        } catch (err) {
+          send({ type: 'file_chunk', tabId, requestId: msg.requestId, error: err.message });
+        }
+        break;
+      }
 
       // Memory view in Settings.
       case 'memory_list':

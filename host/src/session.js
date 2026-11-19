@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import * as acp from '@agentclientprotocol/sdk';
 import { skillsPreamble } from './skills.js';
 import { memoryPreamble } from './memory.js';
+import { snapshotDir, changedFiles, editedPaths, describeFiles } from './files.js';
 
 const bridgePath = fileURLToPath(new URL('./mcp-bridge.js', import.meta.url));
 // MCP clients of Cursor, Codex and the built-in agents end a tool call after
@@ -59,6 +60,9 @@ export class AgentSession {
     this.busy = false;
     this.skills = [];
     this.skillsChanged = false;
+    // Files the agent reports editing (also outside its folder), for the download card.
+    this.touched = new Set();
+    this.toolKinds = new Map(); // toolCallId -> kind (updates often omit it)
   }
 
   setSkills(skills) {
@@ -276,6 +280,12 @@ export class AgentSession {
     // with a restart), so its hints wait too.
     const hasTools = (flag) => Boolean(this.features?.[flag] && this.toolFeatures?.[flag]);
     if (this.firstPrompt) skills = this.folderPreamble() + skillsPreamble(this.skills) + (hasTools('memory') ? memoryPreamble(this.pageUrl) : '');
+    // Results that are files: the panel offers whatever appears in the agent's folder for download.
+    if (this.firstPrompt) {
+      skills += this.agent.builtin
+        ? 'When the user asks for a result as a file (a table as CSV, notes as Markdown, JSON, a script), save it with file_save and name the file in your answer: the user gets a Download button for it.\n'
+        : `When the user asks for a result as a file (a table as CSV, a report, a script), write it into your working directory${this.folder ? '' : ` (${this.workspace})`} and name the file in your answer: files you create or change there get a Download button in the panel when your turn ends. file_save does the same for plain text if you have no file tools.\n`;
+    }
     // Plan preview: the agent proposes a plan and waits for Start.
     if (this.features?.planPreview && !context?.includes('[plan approved]') && !/^\[plan approved\]/.test(text)) {
       skills += '[TabHelm plan preview] Before acting: reply with a short numbered plan of the steps you intend to take (3–8 lines) and then STOP without using any tools. The user will press Start to approve it, after which you will receive "[plan approved] proceed" and can act.\n\n';
@@ -302,14 +312,43 @@ export class AgentSession {
     const body = text + listed + (notes.length ? `\n\n${notes.join('\n\n')}` : '');
     const fullText = this.firstPrompt ? BROWSER_PREAMBLE.replace('User request:\n', `${skills}${history}User request:\n`) + body : skills + history + body;
     this.firstPrompt = false;
+    // The agent's folder as it is now: what is new or different afterwards is what it produced.
+    const root = this.folder || this.workspace;
+    this.touched.clear();
+    let before = null;
+    try {
+      before = snapshotDir(root);
+    } catch (err) {
+      this.log(`files before the task: ${err.message}`);
+    }
     try {
       const result = await this.connection.prompt({
         sessionId: this.sessionId,
         prompt: [{ type: 'text', text: fullText }, ...blocks],
       });
+      this.reportFiles(root, before);
       this.emit({ type: 'done', stopReason: result.stopReason, usage: result.usage || null });
+    } catch (err) {
+      // A task that failed or was stopped may still have left files worth having.
+      if (!this.disposed) this.reportFiles(root, before);
+      throw err;
     } finally {
       this.busy = false;
+    }
+  }
+
+  // Files created or changed while the agent worked on this message go to the
+  // panel as a card with Download buttons.
+  reportFiles(root, before) {
+    try {
+      const after = snapshotDir(root);
+      // A folder too big to compare is not guessed at: only what the agent reported counts.
+      const changed = !before || before.truncated || after.truncated ? [] : changedFiles(before, after);
+      const { files, more } = describeFiles(this.tabId, root, changed, [...this.touched]);
+      this.touched.clear();
+      if (files.length) this.emit({ type: 'files', files, more, root });
+    } catch (err) {
+      this.log(`files after the task: ${err.message}`);
     }
   }
 
@@ -356,6 +395,8 @@ export class AgentSession {
         break;
       case 'tool_call':
       case 'tool_call_update':
+        if (update.kind) this.toolKinds.set(update.toolCallId, update.kind);
+        for (const path of editedPaths(update, update.kind || this.toolKinds.get(update.toolCallId))) this.touched.add(path);
         this.emit({
           type: 'update',
           update: {

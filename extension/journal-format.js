@@ -46,6 +46,8 @@ export function replayOp(e) {
       return e.error ? { kind: 'notice', text: e.text || '', error: true } : null;
     case 'video':
       return { kind: 'notice', text: `🎥 Recording saved: ${e.path || ''}` };
+    case 'files':
+      return { kind: 'notice', text: `📄 Files from the task: ${(e.files || []).map((f) => f.path || f.name).join(', ')}${e.root ? ` (in ${e.root})` : ''}` };
     case 'agent_connected':
       return { kind: 'notice', text: `${e.agent || 'Agent'} connected` };
     case 'agent_switch':
@@ -156,6 +158,9 @@ export function mdEntry(e, st, time = (ts) => new Date(ts).toLocaleTimeString())
       break;
     case 'notice':
       if (e.error) out.push('', `> ⚠️ ${t} · ${e.text || ''}`);
+      break;
+    case 'files':
+      out.push(`- ${t} 📄 Files from the task${e.root ? ` in \`${e.root}\`` : ''}: ${(e.files || []).map((f) => `\`${f.path || f.name}\` (${f.created ? 'new' : 'changed'}, ${f.size ?? 0} bytes)`).join(', ')}${e.more ? ` and ${e.more} more` : ''}`);
       break;
     // Narration: what was sent to be spoken (the text itself is already in the chat).
     case 'speech':

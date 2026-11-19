@@ -20,7 +20,8 @@
     "test:agents": "node --test scripts/agents.test.js scripts/windows-path.test.js",
     "test:speech": "node --test scripts/speech.test.js",
     "test:questions": "node --test scripts/questions.test.js",
-    "test:live": "node --test scripts/live.test.js"
+    "test:live": "node --test scripts/live.test.js",
+    "test:files": "node --test scripts/files.test.js"
   },
   "dependencies": {
     "@agentclientprotocol/claude-agent-acp": "^0.89.1",

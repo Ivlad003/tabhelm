@@ -212,6 +212,11 @@ const tools = {
       'Save a reusable skill for TabHelm (shown in Settings, runnable with /name). Use it when the user asks to turn this chat, a guide or a procedure into a skill. Body: Markdown instructions another agent can follow — goal, site, exact steps with element names, checks, pitfalls.',
     inputSchema: { name: z.string().describe('Short kebab-case name'), description: z.string().describe('One sentence: when to use it'), body: z.string().describe('Markdown instructions') },
   },
+  file_save: {
+    description:
+      'Save text as a file the user can download from the TabHelm panel: a table as CSV, notes or a report as Markdown, JSON, HTML, a script. Use it when the user asks for a result as a file, or when the result is too long or too structured for a chat answer. The file is written into your working folder (an existing file of the same name is kept; yours gets a number) and gets a Download button when your turn ends. Name the file in your answer.',
+    inputSchema: { name: z.string().describe('File name with extension, e.g. prices.csv or summary.md'), content: z.string().describe('The whole text of the file') },
+  },
   skill_read_file: {
     description: "Read another file of a skill (e.g. references/forms.md) by its path relative to the skill's folder.",
     inputSchema: { name: z.string(), path: z.string() },

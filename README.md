@@ -138,6 +138,16 @@ Ask to be shown instead of served — *"guide me through enabling two-factor aut
 
 Each step carries its action — click, **type** a value, **select** an option, tick a box — so in manual mode a typing step completes when the value changes, not on the first click into the field. **Auto-play.** Turn on **Settings → Page → Auto-play guides** and every guide plays by itself — the agent does each step (clicking, typing, choosing) after a pause (*Pause before each automatic step*, 3 s by default), with no prompts. With the setting off, guides wait for you and **▶ Auto** (on the page or in the panel) plays just that one; **⏸ Pause** hands control back at any time. Recorded, this makes a narrated demo video. A long guide does not time out the agent: Cursor, Codex and the built-in agents end a tool call after about a minute, so for them `browser_guide` answers after 40 s that the guide is still on the page, and the agent then picks up the result with `browser_wait_for_user`. Requests for your help and sign-in requests work the same way.
 
+### Files from a task
+
+Ask for a result as a file — *"make a CSV of this table"*, *"write the summary to a Markdown file"*, *"save that script"* — and when the task ends the chat shows a card **Files from this task**: every file the agent created or changed, with its size and a **Download** button that saves it through Chrome like any download (hover a name to see where it is on disk). What counts:
+
+- files that are new or different in the agent's folder after the task — `~/.tabhelm/workspace` by default, or your working folder. The folder is compared before and after, so files written by a script the agent ran count too. Dot-folders, `node_modules` and the like are left out; in a folder with more than 5,000 files only the edits the agent reports are listed;
+- files the agent reports editing anywhere else;
+- files saved with the `file_save` tool, which every agent has — also the built-in one (OpenRouter, Ollama), which has no file tools of its own. It writes plain text into the agent's folder and never overwrites a file that was already there.
+
+Only files offered on a card can be downloaded: the panel asks the host for them by id, never by path. That matters with a [remote host](#remote-host-relay), where this is also how the files reach your computer. Up to 40 files are listed per task and one download can be up to 200 MB. The list stays in the chat's history and export; the buttons work while the host is running.
+
 ### Questions from the agent
 
 When a task depends on something only you can decide — which of several items, a missing value, a preference — the agent asks on a card in the chat (`browser_ask_user`) instead of guessing or stopping with a question in plain text. A card holds up to five questions; each has its options as buttons (one or several can be picked, as the agent set it) and a field for your own answer. One question with one choice is answered by the click itself; otherwise pick, type and press **Send answers**. **Skip** closes the card and the agent goes on with its best judgement, saying what it assumed. The answers go back to the agent as text and stay in the chat and its export. With **Narration** on the question is read aloud; in a **Live conversation** you can answer by voice — an option's name or number.
@@ -489,6 +499,7 @@ host/                          native host (Node 20+)
   src/state.js                 backup of the panel's storage (~/.tabhelm/state.json) for reinstalls
   src/transcribe.js            speech to text: transcription API, whisper.cpp + ffmpeg, or OpenRouter
   src/speech.js                text to speech through OpenRouter: models, voices, prices, one MP3 per piece of text
+  src/files.js                 files a task produced: folder before/after, what is offered for download, chunked reads, file_save
   src/tool-server.js           loopback HTTP endpoint with token
   src/log-digest.js            redacted host.log digest for the self-analysis (errors, crashes, relay, agent sign-in)
   src/mcp-bridge.js            stdio MCP server spawned by agents (browser_*, skill_*, memory_* tool definitions)
@@ -541,6 +552,7 @@ Load `extension/` unpacked in Chrome. After editing extension files press ↻ on
 | `npm run test:builtin` | built-in agent against a mock OpenAI-compatible API (streaming, tool calls, 429 retry, missing key) |
 | `npm run test:speech` | narration and voice input against a mock OpenRouter: text → MP3 with its cost, models and voices, the transcription fallback, the panel's queue (pieces, cache, replacing, stopping) |
 | `npm run test:questions` | `browser_ask_user`: questions capped and cleaned, only offered options accepted, the text the agent reads |
+| `npm run test:files` | files from a task: what counts as new or changed, what is offered, chunked reads, refusing anything not offered, `file_save` never writing outside the folder or over a file |
 | `npm run test:live` | live conversation: what is a command, spoken answers to question cards, where a sentence starts and ends, replies without Markdown |
 | `TABHELM_RELEASE=../dist/tabhelm-x.y.z npm run e2e -- claude` | the built release |
 

@@ -1175,6 +1175,35 @@ input[type='checkbox'] {
   border-color: var(--accent);
 }
 
+/* Files from a task (download card) */
+.card.files {
+  border-color: var(--border);
+}
+
+.file-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+}
+
+.file-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--th-font-mono);
+  font-size: 12px;
+}
+
+.file-info {
+  flex: none;
+  font-size: 11px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
 /* Questions from the agent (browser_ask_user) */
 .ask-q {
   margin: 0 0 8px;

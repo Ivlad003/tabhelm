@@ -268,6 +268,12 @@ function onMessage(msg) {
     case 'recording_deleted':
       finishDelete(msg.id);
       break;
+    case 'files':
+      addFilesCard(msg);
+      break;
+    case 'file_chunk':
+      fileDownloads.get(msg.requestId)?.(msg);
+      break;
     case 'usage':
       if (msg.cost) Object.assign(usage, { cost: msg.cost.amount, currency: msg.cost.currency || 'USD' });
       if (msg.size) usage.context = { used: msg.used, size: msg.size };
@@ -764,6 +770,8 @@ function describeAction(tool, a = {}, detail) {
       return `Read skill file ${a.name}/${a.path}`;
     case 'browser_wait_for_user':
       return 'Wait for you';
+    case 'file_save':
+      return `Save file ${truncate(detail || a.name || '', 50)}`;
     case 'browser_ask_user':
       return `Asked you: ${truncate((a.questions || [a])[0]?.question || '', 50)}${detail ? ` → ${truncate(detail, 50)}` : ''}`;
     default:
@@ -2016,6 +2024,76 @@ function finishDelete(id) {
   entry.card.remove();
   record('video_deleted', { path: entry.path });
   notice(entry.path ? `Recording deleted: ${entry.path}` : 'Recording removed.');
+}
+
+// ---------- Files from a task ----------
+// When a task ends the host lists the files the agent created or changed in its
+// folder (and files it reported editing elsewhere, or saved with file_save).
+// Each has a Download button: the host sends the file in chunks, the panel puts
+// it together and saves it through Chrome like any download.
+
+const fileDownloads = new Map(); // requestId -> handler of the next chunk
+let nextFileReq = 1;
+const fmtSize = (n) => (n < 1024 ? `${n} B` : n < 1024 * 1024 ? `${(n / 1024).toFixed(n < 10240 ? 1 : 0)} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`);
+
+function addFilesCard({ files = [], more = 0, root = '' }) {
+  if (!files.length) return;
+  breakActivity();
+  agentBubble = null;
+  const card = add('div', 'card files');
+  const total = files.length + more;
+  card.append(Object.assign(document.createElement('div'), { className: 'title', textContent: total === 1 ? 'File from this task' : `Files from this task (${total})` }));
+  for (const file of files) {
+    const row = Object.assign(document.createElement('div'), { className: 'file-row' });
+    const name = Object.assign(document.createElement('span'), { className: 'file-name', textContent: file.path || file.name });
+    // Where it is on the computer the agent ran on.
+    name.title = file.outside ? file.path : `${root}${root && !/[\\/]$/.test(root) ? '/' : ''}${file.path}`;
+    const info = Object.assign(document.createElement('span'), { className: 'file-info', textContent: `${file.created ? 'new' : 'changed'} · ${fmtSize(file.size || 0)}` });
+    const get = Object.assign(document.createElement('button'), { type: 'button', className: 'btn small', textContent: 'Download' });
+    get.onclick = () => downloadFile(file, get);
+    row.append(name, info, get);
+    card.append(row);
+  }
+  const where = [more ? `${more} more not listed.` : '', root ? `Folder: ${root}` : ''].filter(Boolean).join(' ');
+  if (where) card.append(Object.assign(document.createElement('div'), { className: 'hint', textContent: where }));
+  record('files', { root, more, files: files.map(({ name, path, size, created }) => ({ name, path, size, created })) });
+  scrollDown();
+}
+
+function downloadFile(file, button) {
+  const requestId = `file-${nextFileReq++}`;
+  const label = button.textContent;
+  const parts = [];
+  let received = 0;
+  let timer = null;
+  const finish = (error) => {
+    clearTimeout(timer);
+    fileDownloads.delete(requestId);
+    button.disabled = false;
+    button.textContent = error ? label : 'Saved ✓';
+    if (error) notice(`Could not download ${file.name}: ${error}`, true);
+    else setTimeout(() => (button.textContent = label), 2000);
+  };
+  // A host that stops answering must not leave the button busy for good.
+  const waitMore = () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => finish('no answer from the host'), 30_000);
+  };
+  button.disabled = true;
+  button.textContent = '…';
+  fileDownloads.set(requestId, (msg) => {
+    if (msg.error) return finish(msg.error);
+    waitMore();
+    const bytes = Uint8Array.from(atob(msg.data || ''), (c) => c.charCodeAt(0));
+    parts[msg.seq] = bytes;
+    received += bytes.length;
+    if (msg.size) button.textContent = `${Math.min(100, Math.round((received / msg.size) * 100))}%`;
+    if (!msg.last) return;
+    download(msg.name || file.name, new Blob(parts), 'application/octet-stream');
+    finish(null);
+  });
+  waitMore();
+  port.postMessage({ type: 'read_file', requestId, id: file.id });
 }
 
 function blobToBase64(blob) {

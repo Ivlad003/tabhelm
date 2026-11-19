@@ -329,6 +329,7 @@ const VERBS = {
   browser_guide: 'Guide you',
   browser_wait_for_user: 'Wait for you',
   browser_ask_user: 'Ask you a question',
+  file_save: 'Save a file',
   memory_save: 'Remember a note',
   memory_search: 'Search memory',
   skill_list: 'List skills',
